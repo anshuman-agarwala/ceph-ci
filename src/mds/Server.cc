@@ -4003,7 +4003,7 @@ Server::rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn)
     if (srcdnl->is_primary())
       auth_pin_freeze = srcdnl->get_inode();
     else if (srcdnl->is_referent())
-      auth_pin_freeze = srcdnl->get_ref_inode();
+      auth_pin_freeze = srcdnl->get_referent_inode();
   }
   if (!mds->locker->acquire_locks(mdr, lov, auth_pin_freeze))
     return std::make_pair(nullptr, nullptr);
@@ -5039,7 +5039,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
         if (dnl->is_remote())
           dn->link_remote(dnl, in);
         else if (dnl->is_referent())
-	  dn->link_remote(dnl, in, dnl->get_ref_inode());
+	  dn->link_remote(dnl, in, dnl->get_referent_inode());
       } else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
 	dout(10) << "skipping bad remote ino on " << *dn << dendl;
 	continue;
@@ -7587,7 +7587,7 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
   } else {
     if (dnl->is_referent()) {
       ceph_assert(straydn);
-      CInode *ref_in = dnl->get_ref_inode();
+      CInode *ref_in = dnl->get_referent_inode();
       ceph_assert(ref_in->is_auth());
 
       straydn->push_projected_linkage(ref_in);
@@ -8102,7 +8102,7 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
       return;
     dout(10) << " straydn is " << *straydn << dendl;
   } else if (dnl->is_referent()) {
-    straydn = prepare_stray_dentry(mdr, dnl->get_ref_inode());
+    straydn = prepare_stray_dentry(mdr, dnl->get_referent_inode());
     if (!straydn)
       return;
     dout(10) << " referent straydn is " << *straydn << dendl;
@@ -8218,7 +8218,7 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   CInode *in = dnl->get_inode();
-  CInode *ref_in = dnl->get_ref_inode();
+  CInode *ref_in = dnl->get_referent_inode();
   if (dnl->is_referent())
     ceph_assert(ref_in->is_auth());
 
@@ -8352,7 +8352,7 @@ void Server::_unlink_local_finish(const MDRequestRef& mdr,
     if (dn->get_linkage()->is_primary())
       strayin = dn->get_linkage()->get_inode();
     else
-      strayin = dn->get_linkage()->get_ref_inode();
+      strayin = dn->get_linkage()->get_referent_inode();
     hadrealm = strayin->snaprealm ? true : false;
     strayin->early_pop_projected_snaprealm();
   }
@@ -8953,7 +8953,7 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
       return;
     dout(10) << " straydn is " << *straydn << dendl;
   } else if (destdnl->is_referent() && linkmerge) {
-    straydn = prepare_stray_dentry(mdr, destdnl->get_ref_inode());
+    straydn = prepare_stray_dentry(mdr, destdnl->get_referent_inode());
     if (!straydn)
       return;
     dout(10) << " linkmerge referent straydn is " << *straydn << dendl;
@@ -9004,7 +9004,7 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
       if (srcdnl->is_primary())
 	auth_pin_freeze = srci;
       else if (srcdnl->is_referent())
-	auth_pin_freeze = srcdnl->get_ref_inode();
+	auth_pin_freeze = srcdnl->get_referent_inode();
     }
     if (!mds->locker->acquire_locks(mdr, lov, auth_pin_freeze))
       return;
@@ -9215,7 +9215,7 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
     } else if (srcdnl->is_referent() && !mdr->more()->is_ambiguous_auth) {
       dout(10) << " preparing ambiguous auth for src_refi" << dendl;
       ceph_assert(mdr->more()->is_remote_frozen_authpin);
-      ceph_assert(mdr->more()->rename_inode == srcdnl->get_ref_inode());
+      ceph_assert(mdr->more()->rename_inode == srcdnl->get_referent_inode());
       _rename_prepare_witness(mdr, last, witnesses, srctrace, desttrace, straydn);
       return;
     }
@@ -9398,8 +9398,8 @@ version_t Server::_rename_prepare_import(const MDRequestRef& mdr, CDentry *srcdn
 
   // hack: force back to !auth and clean, temporarily
   if (srcdnl->is_referent()) {
-    srcdnl->get_ref_inode()->state_clear(CInode::STATE_AUTH);
-    srcdnl->get_ref_inode()->mark_clean();
+    srcdnl->get_referent_inode()->state_clear(CInode::STATE_AUTH);
+    srcdnl->get_referent_inode()->mark_clean();
   } else {
     srcdnl->get_inode()->state_clear(CInode::STATE_AUTH);
     srcdnl->get_inode()->mark_clean();
@@ -9524,7 +9524,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       }
     }
   } else if (linkmerge && destdnl->is_referent()) {
-      CInode *oldrefi = destdnl->get_ref_inode();
+      CInode *oldrefi = destdnl->get_referent_inode();
       dout(10) << " linkmerge and destdnl is referent. oldrefi " << oldrefi << dendl;
       ceph_assert(straydn && oldrefi);  // moving referent inode to straydn.
       // link--, and move.
@@ -9565,7 +9565,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       }
     }
   } else if (srcdnl->is_referent()) { // link referent
-    CInode *srcrefi = srcdnl->get_ref_inode();
+    CInode *srcrefi = srcdnl->get_referent_inode();
     if (!linkmerge) {
       // destdn
       if (destdn->is_auth()) {
@@ -9614,7 +9614,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       pi.inode->update_backtrace();
       // Remove referent inode from primary link on linkmerge
       if (linkmerge && destdnl->is_referent()) {
-        CInode *oldrefi = destdnl->get_ref_inode();
+        CInode *oldrefi = destdnl->get_referent_inode();
         pi.inode->remove_referent_ino(oldrefi->ino());
         dout(20) << "_unlink_local referent inodes " << pi.inode->get_referent_inodes() << dendl;
       }
@@ -9687,7 +9687,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       mdcache->predirty_journal_parents(mdr, metablob, oldin, straydn->get_dir(),
 					PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
     } else if (linkmerge && destdnl->is_referent()) {
-      CInode *oldrefi = destdnl->get_ref_inode();
+      CInode *oldrefi = destdnl->get_referent_inode();
       ceph_assert(straydn);
       ceph_assert(oldrefi);
       mdcache->predirty_journal_parents(mdr, metablob, oldrefi, straydn->get_dir(),
@@ -9754,7 +9754,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       }
     }
   } else if (linkmerge && destdnl->is_referent()) {
-    CInode *oldrefi = destdnl->get_ref_inode();
+    CInode *oldrefi = destdnl->get_referent_inode();
     ceph_assert(straydn);
     ceph_assert(oldrefi);
     if (destdn->is_auth()) {
@@ -9854,7 +9854,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
   // make stray inode first track the straydn
   if (straydn && straydn->is_auth()) {
     if (linkmerge) {
-      CInode *oldrefi = destdnl->get_ref_inode();
+      CInode *oldrefi = destdnl->get_referent_inode();
       ceph_assert(oldrefi->first <= straydn->first);
       oldrefi->first = straydn->first;
     } else {
@@ -9943,7 +9943,7 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
   CInode *in = srcdnl->get_inode();
   ceph_assert(in);
   bool srcdn_was_referent = srcdnl->is_referent();
-  CInode *src_refin = srcdnl->get_ref_inode();
+  CInode *src_refin = srcdnl->get_referent_inode();
   if (srcdn_was_referent)
     ceph_assert(src_refin);
 
@@ -9987,11 +9987,11 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
 
         // finish cap imports
         finish_force_open_sessions(mdr->more()->imported_session_map);
-        if (mdr->more()->cap_imports.count(destdnl->get_ref_inode())) {
-	  mdcache->migrator->finish_import_inode_caps(destdnl->get_ref_inode(),
+        if (mdr->more()->cap_imports.count(destdnl->get_referent_inode())) {
+	  mdcache->migrator->finish_import_inode_caps(destdnl->get_referent_inode(),
                                                       mdr->more()->srcdn_auth_mds, true,
 						      mdr->more()->imported_session_map,
-						      mdr->more()->cap_imports[destdnl->get_ref_inode()],
+						      mdr->more()->cap_imports[destdnl->get_referent_inode()],
 						      imported_caps);
         }
 
@@ -10002,11 +10002,11 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
          * remote xlocks previously but now they're local and
          * we're going to try and unpin when we xlock_finish. */
 
-        for (auto i = mdr->locks.lower_bound(&destdnl->get_ref_inode()->versionlock);
+        for (auto i = mdr->locks.lower_bound(&destdnl->get_referent_inode()->versionlock);
              i !=  mdr->locks.end();
 	     ++i) {
           SimpleLock *lock = i->lock;
-	  if (lock->get_parent() != destdnl->get_ref_inode())
+	  if (lock->get_parent() != destdnl->get_referent_inode())
 	    break;
 	  if (i->is_xlock() && !lock->is_locallock())
 	    mds->locker->xlock_import(lock);
@@ -10042,7 +10042,7 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
     if (linkmerge) {
       if (destdnl->is_referent()) {
         dout(10) << "merging primary onto referent link" << dendl;
-        CInode *oldrefi = destdnl->get_ref_inode();
+        CInode *oldrefi = destdnl->get_referent_inode();
         ceph_assert(straydn);
         ceph_assert(oldrefi);
         dout(10) << "linkmerge referent straydn is " << *straydn << dendl;
@@ -10228,7 +10228,7 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
   if (srcdnl->is_primary())
     mdr->pin(srci);
   if (srcdnl->is_referent())
-    mdr->pin(srcdnl->get_ref_inode());
+    mdr->pin(srcdnl->get_referent_inode());
 
   // stray?
   bool linkmerge = srcdnl->get_inode() == destdnl->get_inode();
@@ -10307,8 +10307,8 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
 	gather.set_finisher(new C_MDS_PeerRenameSessionsFlushed(this, mdr));
 	gather.activate();
       }
-    } else if (srcdnl->is_referent() && !srcdnl->get_ref_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
-      CInode *src_refi = srcdnl->get_ref_inode();
+    } else if (srcdnl->is_referent() && !srcdnl->get_referent_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+      CInode *src_refi = srcdnl->get_referent_inode();
       int allowance = 1; // 1 for the mdr auth_pin, no link lock and snap lock on referent inode
       dout(10) << " freezing src_refi " << *src_refi << " with allowance " << allowance << dendl;
       bool frozen_inode = src_refi->freeze_inode(allowance);
@@ -10381,7 +10381,7 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
     mdr->set_ambiguous_auth(srcdnl->get_inode());
   } else if (srcdnl->is_referent() && srcdn->authority() != destdn->authority()) {
     // set ambiguous auth for src_refi on witnesses
-    mdr->set_ambiguous_auth(srcdnl->get_ref_inode());
+    mdr->set_ambiguous_auth(srcdnl->get_referent_inode());
   }
 
   // TODO - rollback on referent inode
@@ -10523,24 +10523,24 @@ void Server::_logged_peer_rename(const MDRequestRef& mdr,
       map<client_t,entity_inst_t> exported_client_map;
       map<client_t, client_metadata_t> exported_client_metadata_map;
       bufferlist inodebl;
-      mdcache->migrator->encode_export_inode(srcdnl->get_ref_inode(), inodebl,
+      mdcache->migrator->encode_export_inode(srcdnl->get_referent_inode(), inodebl,
 					     exported_client_map,
 					     exported_client_metadata_map);
 
       encode(exported_client_map, reply->inode_export, mds->mdsmap->get_up_features());
       encode(exported_client_metadata_map, reply->inode_export);
       reply->inode_export.claim_append(inodebl);
-      reply->inode_export_v = srcdnl->get_ref_inode()->get_version();
+      reply->inode_export_v = srcdnl->get_referent_inode()->get_version();
     }
 
     // remove mdr auth pin
-    mdr->auth_unpin(srcdnl->get_ref_inode());
+    mdr->auth_unpin(srcdnl->get_referent_inode());
     mdr->more()->is_inode_exporter = true;
 
-    if (srcdnl->get_ref_inode()->is_dirty())
-      srcdnl->get_ref_inode()->mark_clean();
+    if (srcdnl->get_referent_inode()->is_dirty())
+      srcdnl->get_referent_inode()->mark_clean();
 
-    dout(10) << " exported srcrefi " << *srcdnl->get_ref_inode() << dendl;
+    dout(10) << " exported srcrefi " << *srcdnl->get_referent_inode() << dendl;
   }
 
   // apply
@@ -10573,7 +10573,7 @@ void Server::_commit_peer_rename(const MDRequestRef& mdr, int r,
 
   CInode *in = NULL;
   if (destdn->get_linkage()->is_referent())
-    in = destdn->get_linkage()->get_ref_inode();
+    in = destdn->get_linkage()->get_referent_inode();
   else
     in = destdn->get_linkage()->get_inode();
 
