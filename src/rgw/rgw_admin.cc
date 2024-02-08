@@ -1153,6 +1153,8 @@ BIIndexType get_bi_index_type(const string& type_str) {
     return BIIndexType::Instance;
   if (type_str == "olh")
     return BIIndexType::OLH;
+  if (type_str == "resharddeleted")
+    return BIIndexType::ReshardDeleted;
 
   return BIIndexType::Invalid;
 }
