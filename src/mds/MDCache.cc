@@ -11279,7 +11279,7 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
 
 // UNLINK
 
-void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestRef& mdr)
+void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestRef& mdr, bool ignore_rmdir_witness)
 {
   dout(10) << __func__ << " " << *dn << dendl;
   // share unlink news with replicas
@@ -11295,7 +11295,7 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestR
        it != replicas.end();
        ++it) {
     // don't tell (rmdir) witnesses; they already know
-    if (mdr.get() && mdr->more()->witnessed.count(*it))
+    if (ignore_rmdir_witness && mdr.get() && mdr->more()->witnessed.count(*it))
       continue;
 
     if (mds->mdsmap->get_state(*it) < MDSMap::STATE_REJOIN ||
