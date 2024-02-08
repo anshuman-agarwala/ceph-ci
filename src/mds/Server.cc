@@ -7478,14 +7478,15 @@ class C_MDS_link_remote_finish : public ServerLogContext {
   bool inc;
   CDentry *dn;
   CInode *targeti;
+  CInode *referenti;
   version_t dpv;
 public:
-  C_MDS_link_remote_finish(Server *s, const MDRequestRef& r, bool i, CDentry *d, CInode *ti) :
-    ServerLogContext(s, r), inc(i), dn(d), targeti(ti),
+  C_MDS_link_remote_finish(Server *s, const MDRequestRef& r, bool i, CDentry *d, CInode *ti, CInode *ri) :
+    ServerLogContext(s, r), inc(i), dn(d), targeti(ti), referenti(ri),
     dpv(d->get_projected_version()) {}
   void finish(int r) override {
     ceph_assert(r == 0);
-    server->_link_remote_finish(mdr, inc, dn, targeti, dpv);
+    server->_link_remote_finish(mdr, inc, dn, targeti, referenti, dpv);
   }
 };
 
@@ -7545,11 +7546,27 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
     mdcache->add_uncommitted_leader(mdr->reqid, mdr->ls, mdr->more()->witnessed);
   }
 
+  CInode *newi = nullptr;
   if (inc) {
-    dn->pre_dirty();
+    version_t dnpv = dn->pre_dirty();
+    // create inode.
+    newi = prepare_new_inode(mdr, dn->get_dir(), 0, targeti->inode->mode);
+    ceph_assert(newi);
+
+    auto _inode = newi->_get_inode();
+    _inode->version = dnpv;
+    _inode->update_backtrace();
+
+    //TODO
+    //pi.inode->add_referent_ino(newi->ino());
+    //dout(20) << "_link_local " << " referent_inodes " << pi.inode->get_referent_inodes() << " referent ino " << newi->ino() << dendl;
+
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);
     le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type()); // new remote
-    dn->push_projected_linkage(targeti->ino(), targeti->d_type());
+
+    // journal allocated referent inode.
+    journal_allocated_inos(mdr, &le->metablob);
+    dn->push_projected_linkage(newi, targeti->ino());
   } else {
     dn->pre_dirty();
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
@@ -7559,11 +7576,11 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
   }
 
   journal_and_reply(mdr, (inc ? targeti : nullptr), dn, le,
-		    new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti));
+		    new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti, newi));
 }
 
 void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
-				 CDentry *dn, CInode *targeti,
+				 CDentry *dn, CInode *targeti, CInode *referenti,
 				 version_t dpv)
 {
   dout(10) << "_link_remote_finish "
@@ -7581,6 +7598,11 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
     if (!dnl->get_inode())
       dn->link_remote(dnl, targeti);
     dn->mark_dirty(dpv, mdr->ls);
+
+    ceph_assert(referenti);
+    // dirty referent inode
+    referenti->mark_dirty(mdr->ls);
+    referenti->mark_dirty_parent(mdr->ls, true);
   } else {
     // unlink main dentry
     dn->get_dir()->unlink_inode(dn);
