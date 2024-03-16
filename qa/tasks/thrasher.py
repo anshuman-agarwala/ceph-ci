@@ -45,3 +45,4 @@ class ThrasherGreenlet(Thrasher, Greenlet):
         self._should_stop_event.wait(seconds)
         if self.is_stopped and raise_stopped:
             raise self.Stopped()
+        return not self.is_stopped
