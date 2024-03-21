@@ -259,7 +259,7 @@ CURL *rgw_http_req_data::get_easy_handle() const
   return **curl_handle;
 }
 
-static RGWCurlHandles *handles;
+extern RGWCurlHandles *handles;
 
 static RGWCurlHandle *do_curl_easy_init()
 {
