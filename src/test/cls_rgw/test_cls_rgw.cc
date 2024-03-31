@@ -1401,6 +1401,7 @@ TEST_F(cls_rgw, reshardlog_list)
 
   // record a log in prepare
   cls_rgw_obj_key obj2 = str_int("obj2", 0);
+  entries.clear();
   index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj2, loc);
   ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
   ASSERT_FALSE(is_truncated);
@@ -1412,4 +1413,20 @@ TEST_F(cls_rgw, reshardlog_list)
   ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
   ASSERT_FALSE(is_truncated);
   ASSERT_EQ(1u, entries.size());
+
+  // record a log in deleting obj
+  entries.clear();
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, obj1, loc);
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, 1, obj1, meta);
+  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
+  ASSERT_FALSE(is_truncated);
+  ASSERT_EQ(2u, entries.size());
+
+  // overwrite the log writen
+  entries.clear();
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, obj2, loc);
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, 1, obj2, meta);
+  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
+  ASSERT_FALSE(is_truncated);
+  ASSERT_EQ(2u, entries.size());
 }
