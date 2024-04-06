@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import base64
+import ipaddress
 import json
-import re
+import logging
 import time
 from urllib.parse import urlparse
 
@@ -16,6 +17,8 @@ from ..settings import Settings
 from ..tools import configure_cors
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission
+
+logger = logging.getLogger('controllers.multi_cluster')
 
 
 @APIRouter('/multi-cluster', Scope.CONFIG_OPT)
@@ -96,7 +99,7 @@ class MultiCluster(RESTController):
             # add prometheus targets
             prometheus_url = self._proxy('GET', url, 'api/multi-cluster/get_prometheus_api_url',
                                          token=cluster_token)
-            
+
             prometheus_access_info = self._proxy('GET', url,
                                                  'ui-api/multi-cluster/get_prometheus_access_info',
                                                  token=cluster_token)
@@ -236,12 +239,23 @@ class MultiCluster(RESTController):
             cluster_token = self.check_cluster_connection(url, payload, username,
                                                           ssl_verify, ssl_certificate)
 
-        if username and cluster_token:
+            prometheus_url = self._proxy('GET', url, 'api/multi-cluster/get_prometheus_api_url',
+                                         token=cluster_token)
+
+            prometheus_access_info = self._proxy('GET', url,
+                                                 'ui-api/multi-cluster/get_prometheus_access_info',  # noqa E501 #pylint: disable=line-too-long
+                                                 token=cluster_token)
+
+        if username and cluster_token and prometheus_url and prometheus_access_info:
             if "config" in multicluster_config:
                 for _, cluster_details in multicluster_config["config"].items():
                     for cluster in cluster_details:
                         if cluster["url"] == url and cluster["user"] == username:
                             cluster['token'] = cluster_token
+                            cluster['prometheus_access_info'] = prometheus_access_info
+                            _remove_prometheus_targets(cluster['prometheus_url'])
+                            time.sleep(5)
+                            _set_prometheus_targets(prometheus_url)
             Settings.MULTICLUSTER_CONFIG = multicluster_config
         return True
 
@@ -273,16 +287,9 @@ class MultiCluster(RESTController):
                     cluster_token = value[0]['token']
                     cluster_ssl_certificate = value[0]['ssl_certificate']
                     cluster_ssl_verify = value[0]['ssl_verify']
-                    orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
-                    try:
-                        if orch_backend == 'cephadm':
-                            cmd = {
-                                'prefix': 'orch prometheus remove-target',
-                                'url': value[0]['prometheus_url'].replace('http://', '').replace('https://', '')  # noqa E501 #pylint: disable=line-too-long
-                            }
-                            mgr.mon_command(cmd)
-                    except KeyError:
-                        pass
+                    cluster_prometheus_url = value[0]['prometheus_url']
+
+                    _remove_prometheus_targets(cluster_prometheus_url)
 
                     managed_by_clusters_content = self._proxy('GET', cluster_url,
                                                               'api/settings/MANAGED_BY_CLUSTERS',
@@ -356,8 +363,12 @@ class MultiCluster(RESTController):
         prometheus_url = Settings.PROMETHEUS_API_HOST
         if prometheus_url is not None:
             # check if is url is already in IP format
-            pattern = r'^(?:https?|http):\/\/(?:\d{1,3}\.){3}\d{1,3}:\d+$'
-            valid_ip_url = bool(re.match(pattern, prometheus_url))
+            try:
+                url_parts = urlparse(prometheus_url)
+                ipaddress.ip_address(url_parts.hostname)
+                valid_ip_url = True
+            except ValueError:
+                valid_ip_url = False
             if not valid_ip_url:
                 parsed_url = urlparse(prometheus_url)
                 hostname = parsed_url.hostname
@@ -376,7 +387,7 @@ class MultiClusterUi(RESTController):
     @UpdatePermission
     def set_cors_endpoint(self, url: str):
         configure_cors(url)
-    
+
     @Endpoint('GET')
     @ReadPermission
     def get_prometheus_access_info(self):
@@ -388,11 +399,11 @@ class MultiClusterUi(RESTController):
             cmd = {
                 'prefix': 'orch prometheus get-credentials',
             }
-            ret, out, _ = mgr.mon_command(cmd)
-            if ret == 0 and out is not None:
-                access_info = json.loads(out)
-                user = access_info['user']
-                password = access_info['password']
+            ret_status, out, _ = mgr.mon_command(cmd)
+            if ret_status == 0 and out is not None:
+                prom_access_info = json.loads(out)
+                user = prom_access_info['user']
+                password = prom_access_info['password']
 
             cert_cmd = {
                 'prefix': 'orch prometheus get-prometheus-cert',
@@ -407,13 +418,30 @@ class MultiClusterUi(RESTController):
                 'password': password,
                 'certificate': prometheus_cert
             }
+        return None
 
 
 def _set_prometheus_targets(prometheus_url: str):
     orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
-    if orch_backend == 'cephadm':
-        cmd = {
-            'prefix': 'orch prometheus set-target',
-            'url': prometheus_url.replace('http://', '').replace('https://', '')
-        }
-        mgr.mon_command(cmd)
+    try:
+        if orch_backend == 'cephadm':
+            cmd = {
+                'prefix': 'orch prometheus set-target',
+                'url': prometheus_url.replace('http://', '').replace('https://', '')
+            }
+            mgr.mon_command(cmd)
+    except KeyError:
+        logger.exception('Failed to set prometheus targets')
+
+
+def _remove_prometheus_targets(prometheus_url: str):
+    orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+    try:
+        if orch_backend == 'cephadm':
+            cmd = {
+                'prefix': 'orch prometheus remove-target',
+                'url': prometheus_url.replace('http://', '').replace('https://', '')
+            }
+            mgr.mon_command(cmd)
+    except KeyError:
+        logger.exception('Failed to remove prometheus targets')

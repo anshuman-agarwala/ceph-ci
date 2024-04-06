@@ -739,11 +739,12 @@ class TestMonitoring:
 
                 scrape_configs:
                   - job_name: 'ceph'
-                    honor_labels: true
                     relabel_configs:
                     - source_labels: [__address__]
                       target_label: cluster
                       replacement: fsid
+                    honor_labels: true
+                    relabel_configs:
                     - source_labels: [instance]
                       target_label: instance
                       replacement: 'ceph_cluster'
@@ -751,27 +752,27 @@ class TestMonitoring:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=mgr-prometheus
 
                   - job_name: 'node'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=node-exporter
-                    relabel_configs:
-                    - source_labels: [__address__]
-                      target_label: cluster
-                      replacement: fsid
 
                   - job_name: 'haproxy'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=haproxy
-                    relabel_configs:
-                    - source_labels: [__address__]
-                      target_label: cluster
-                      replacement: fsid
 
                   - job_name: 'ceph-exporter'
-                    honor_labels: true
                     relabel_configs:
                     - source_labels: [__address__]
                       target_label: cluster
                       replacement: fsid
+                    honor_labels: true
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
 
@@ -779,18 +780,6 @@ class TestMonitoring:
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
 
-                  - job_name: 'federate'
-                    scrape_interval: 15s
-                    honor_labels: true
-                    metrics_path: '/federate'
-                    params:
-                      'match[]':
-                        - '{job="ceph"}'
-                        - '{job="node"}'
-                        - '{job="haproxy"}'
-                        - '{job="ceph-exporter"}'
-                    static_configs:
-                    - targets: []
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -881,6 +870,8 @@ class TestMonitoring:
                 global:
                   scrape_interval: 10s
                   evaluation_interval: 10s
+                  external_labels:
+                    cluster: fsid
 
                 rule_files:
                   - /etc/prometheus/alerting/*
@@ -903,6 +894,10 @@ class TestMonitoring:
 
                 scrape_configs:
                   - job_name: 'ceph'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     scheme: https
                     tls_config:
                       ca_file: mgr_prometheus_cert.pem
@@ -920,6 +915,10 @@ class TestMonitoring:
                         ca_file: root_cert.pem
 
                   - job_name: 'node'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     scheme: https
                     tls_config:
                       ca_file: root_cert.pem
@@ -932,6 +931,10 @@ class TestMonitoring:
                         ca_file: root_cert.pem
 
                   - job_name: 'haproxy'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     scheme: https
                     tls_config:
                       ca_file: root_cert.pem
@@ -944,6 +947,10 @@ class TestMonitoring:
                         ca_file: root_cert.pem
 
                   - job_name: 'ceph-exporter'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     honor_labels: true
                     scheme: https
                     tls_config:
