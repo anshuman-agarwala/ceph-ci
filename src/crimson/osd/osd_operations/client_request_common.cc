@@ -73,10 +73,15 @@ CommonClientRequest::do_recover_missing(
       !pg->is_degraded_or_backfilling_object(soid)) {
     return seastar::now();
   }
-  logger().debug("{} need to wait for recovery, {}", __func__, soid);
+  logger().debug("{} need to wait for recovery, {} version {}",
+                 __func__, soid, ver);
   if (pg->get_recovery_backend()->is_recovering(soid)) {
+    logger().debug("{} object {} version {}, already recovering",
+                   __func__, soid, ver);
     return pg->get_recovery_backend()->get_recovering(soid).wait_for_recovered();
   } else {
+    logger().debug("{} object {} version {}, starting recovery",
+                   __func__, soid, ver);
     auto [op, fut] =
       pg->get_shard_services().start_operation<UrgentRecovery>(
         soid, ver, pg, pg->get_shard_services(), pg->get_osdmap_epoch());
