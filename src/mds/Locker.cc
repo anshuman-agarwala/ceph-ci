@@ -218,6 +218,37 @@ struct MarkEventOnDestruct {
   }
 };
 
+/*
+ * Try to detect the possible deadlock between requests, and
+ * will try to break the newer request.
+ */
+void Locker::detect_dead_locks(const MDRequestRef& mdr, int lock_type)
+{
+  bool any_waiter = false;
+  bool order_messy = false;
+
+  dout(15) << "detect_dead_locks " << *mdr << dendl;
+  for (auto it = mdr->locks.begin(); it != mdr->locks.end(); ) {
+    SimpleLock *lock = it->lock;
+
+    if (lock->is_waiter_for(SimpleLock::WAIT_ALL)) {
+      any_waiter = true;
+    }
+    if (lock->get_type() > lock_type) {
+      dout(1) << " detected messy lock order, locks: " << mdr->locks << dendl;
+      order_messy = true;
+    }
+    dout(15) << " lock " << *lock << " any_waiter " << any_waiter << " order_messy " << order_messy << dendl;
+
+    if (order_messy && any_waiter) {
+      dout(1) << " detected possible deadlocks; dropping all locks" << dendl;
+      drop_locks(mdr.get(), NULL);
+      mdr->drop_local_auth_pins();
+      break;
+    }
+  }
+}
+
 /* If this function returns false, the mdr has been placed
  * on the appropriate wait list */
 bool Locker::acquire_locks(MDRequestRef& mdr,
@@ -510,6 +541,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       if (mdr->locking && lock != mdr->locking)
 	cancel_locking(mdr.get(), &issue_set);
       if (!xlock_start(lock, mdr)) {
+        detect_dead_locks(mdr, lock->get_type());
 	marker.message = "failed to xlock, waiting";
 	goto out;
       }
@@ -547,6 +579,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	} else {
 	  if (!wrlock_start(p, mdr)) {
 	    ceph_assert(!p.is_remote_wrlock());
+            detect_dead_locks(mdr, lock->get_type());
 	    marker.message = "failed to wrlock, waiting";
 	    goto out;
 	  }
@@ -578,6 +611,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       }
 
       if (!rdlock_start(lock, mdr)) {
+        detect_dead_locks(mdr, lock->get_type());
 	marker.message = "failed to rdlock, waiting";
 	goto out;
       }
