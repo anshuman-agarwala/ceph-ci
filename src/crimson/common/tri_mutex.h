@@ -51,7 +51,8 @@ public:
 /// independent of the conventional reader/writer lock usage. Here, what we
 /// mean is that we can pipeline reads, and we can pipeline writes, but we
 /// cannot allow a read while writes are in progress or a write while reads are
-/// in progress. Any rmw operation is therefore exclusive.
+/// in progress. Any rmw operation is therefore exclusive. Note that multiple
+/// writers are allowed by tri_mutex.
 ///
 /// tri_mutex is based on seastar::shared_mutex, but instead of two kinds of
 /// waiters, tri_mutex keeps track of three kinds of lock users:
