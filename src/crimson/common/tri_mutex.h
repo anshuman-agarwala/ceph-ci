@@ -27,22 +27,15 @@ public:
 // promote from read to excl
 class excl_lock_from_read {
 public:
-  seastar::future<> lock();
-  void unlock();
+  void promote();
+  void demote();
 };
 
 // promote from write to excl
 class excl_lock_from_write {
 public:
-  seastar::future<> lock();
-  void unlock();
-};
-
-// promote from excl to excl
-class excl_lock_from_excl {
-public:
-  seastar::future<> lock();
-  void unlock();
+  void promote();
+  void demote();
 };
 
 /// shared/exclusive mutual exclusion
@@ -52,7 +45,8 @@ public:
 /// mean is that we can pipeline reads, and we can pipeline writes, but we
 /// cannot allow a read while writes are in progress or a write while reads are
 /// in progress. Any rmw operation is therefore exclusive. Note that multiple
-/// writers are allowed by tri_mutex.
+/// writers are allowed by tri_mutex. And lock is only allowed to be promoted
+/// atomically upon the first lock().
 ///
 /// tri_mutex is based on seastar::shared_mutex, but instead of two kinds of
 /// waiters, tri_mutex keeps track of three kinds of lock users:
@@ -63,8 +57,7 @@ class tri_mutex : private read_lock,
                           write_lock,
                           excl_lock,
                           excl_lock_from_read,
-                          excl_lock_from_write,
-                          excl_lock_from_excl
+                          excl_lock_from_write
 {
 public:
   tri_mutex() = default;
@@ -83,9 +76,6 @@ public:
     return *this;
   }
   excl_lock_from_write& excl_from_write() {
-    return *this;
-  }
-  excl_lock_from_excl& excl_from_excl() {
     return *this;
   }
 
