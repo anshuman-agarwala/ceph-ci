@@ -3,8 +3,14 @@
 
 #pragma once
 
+#include <concepts>
+
 #include <seastar/core/future.hh>
 #include <seastar/core/circular_buffer.hh>
+
+template <typename Lock>
+concept TriMutexSyncLock = std::is_void_v<
+  std::invoke_result_t<decltype(&Lock::lock), Lock> >;
 
 class read_lock {
 public:
@@ -27,21 +33,14 @@ public:
 // promote from read to excl
 class excl_lock_from_read {
 public:
-  seastar::future<> lock();
+  void lock();
   void unlock();
 };
 
 // promote from write to excl
 class excl_lock_from_write {
 public:
-  seastar::future<> lock();
-  void unlock();
-};
-
-// promote from excl to excl
-class excl_lock_from_excl {
-public:
-  seastar::future<> lock();
+  void lock();
   void unlock();
 };
 
@@ -58,12 +57,14 @@ public:
 /// - readers
 /// - writers
 /// - exclusive users
+///
+/// For lock promotion, a read or a write lock is only allowed to be promoted
+/// atomically upon the first locking.
 class tri_mutex : private read_lock,
                           write_lock,
                           excl_lock,
                           excl_lock_from_read,
-                          excl_lock_from_write,
-                          excl_lock_from_excl
+                          excl_lock_from_write
 {
 public:
   tri_mutex() = default;
@@ -82,9 +83,6 @@ public:
     return *this;
   }
   excl_lock_from_write& excl_from_write() {
-    return *this;
-  }
-  excl_lock_from_excl& excl_from_excl() {
     return *this;
   }
 
