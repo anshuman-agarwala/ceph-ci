@@ -8165,6 +8165,62 @@ class TestMisc(TestVolumesHelper):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    def test_dangling_symlink(self):
+        """
+        Tests for the presence of any dangling symlink, if yes,
+        will remove it.
+        """
+        subvolume = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+
+        # snapshot group
+        self._fs_cmd("subvolumegroup", "snapshot", "create", self.volname, group, snapshot)
+
+        # insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 15)
+
+        # disable "capped" clones
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', False)
+
+        # clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone, '--target_group_name', group)
+
+        # list snapshot info
+        result = json.loads(self._fs_cmd("subvolume", "snapshot", "info", self.volname, subvolume, snapshot, "--group_name", group))
+
+        # verify snapshot info
+        self.assertEqual(result['has_pending_clones'], "yes")
+
+        # remove clone
+        self._fs_cmd("subvolume", "rm", self.volname, clone, group, "--force")
+
+        # list snapshot info
+        result = json.loads(self._fs_cmd("subvolume", "snapshot", "info", self.volname, subvolume, snapshot, "--group_name", group))
+
+        # verify snapshot info
+        self.assertEqual(result['has_pending_clones'], "no")
+
+        # remove snapshot
+        self._fs_cmd("subvolumegroup", "snapshot", "rm", self.volname, group, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, group,)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+
 class TestPerModuleFinsherThread(TestVolumesHelper):
     """
     Per module finisher thread tests related to mgr/volume cmds.
