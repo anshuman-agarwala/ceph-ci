@@ -172,7 +172,7 @@ class MetadataManager(object):
                 metadata_dict[option] = self.config.get(section,option)
         return metadata_dict
 
-    def list_all_keys_with_specified_values_from_section(self, section, value):
+    def keys_with_value_from_section(self, section, value):
         keys = []
         if self.config.has_section(section):
             options = self.config.options(section)
