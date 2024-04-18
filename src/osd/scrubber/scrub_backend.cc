@@ -376,7 +376,7 @@ void ScrubBackend::repair_object(const hobject_t& soid,
   try {
     bufferlist bv;
     if (po.attrs.count(OI_ATTR)) {
-      bv = po.attrs.find(OI_ATTR)->second;
+      bv.push_back(po.attrs.find(OI_ATTR)->second);
     }
     auto bliter = bv.cbegin();
     decode(oi, bliter);
@@ -634,8 +634,9 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
                        &shard_info_wrapper::set_snapset_missing,
                        "candidate had a missing snapset key"sv,
                        errstream)) {
-      const bufferlist& ss_bl = k->second;
+      bufferlist ss_bl;
       SnapSet snapset;
+      ss_bl.push_back(k->second);
       try {
         auto bliter = ss_bl.cbegin();
         decode(snapset, bliter);
@@ -670,8 +671,9 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
                        &shard_info_wrapper::set_hinfo_missing,
                        "candidate had a missing hinfo key"sv,
                        errstream)) {
-      const bufferlist& hk_bl = k->second;
+      bufferlist hk_bl;
       ECUtil::HashInfo hi;
+      hk_bl.push_back(k->second);
       try {
         auto bliter = hk_bl.cbegin();
         decode(hi, bliter);
@@ -702,8 +704,10 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
       return shard_as_auth_t{errstream.str()};
     }
 
+    bufferlist bl;
+    bl.push_back(k->second);
     try {
-      auto bliter = k->second.cbegin();
+      auto bliter = bl.cbegin();
       decode(oi, bliter);
     } catch (...) {
       // invalid object info, probably corrupt
@@ -1228,11 +1232,13 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
     auto can_attr = candidate.attrs.find(OI_ATTR);
     ceph_assert(can_attr != candidate.attrs.end());
-    const bufferlist& can_bl = can_attr->second;
+    bufferlist can_bl;
+    can_bl.push_back(can_attr->second);
 
     auto auth_attr = auth.attrs.find(OI_ATTR);
     ceph_assert(auth_attr != auth.attrs.end());
-    const bufferlist& auth_bl = auth_attr->second;
+    bufferlist auth_bl;
+    auth_bl.push_back(auth_attr->second);
 
     if (!can_bl.contents_equal(auth_bl)) {
       fmt::format_to(std::back_inserter(out),
@@ -1248,11 +1254,13 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
       auto can_attr = candidate.attrs.find(SS_ATTR);
       ceph_assert(can_attr != candidate.attrs.end());
-      const bufferlist& can_bl = can_attr->second;
+      bufferlist can_bl;
+      can_bl.push_back(can_attr->second);
 
       auto auth_attr = auth.attrs.find(SS_ATTR);
       ceph_assert(auth_attr != auth.attrs.end());
-      const bufferlist& auth_bl = auth_attr->second;
+      bufferlist auth_bl;
+      auth_bl.push_back(auth_attr->second);
 
       if (!can_bl.contents_equal(auth_bl)) {
         fmt::format_to(std::back_inserter(out),
@@ -1271,11 +1279,13 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
       auto can_hi = candidate.attrs.find(ECUtil::get_hinfo_key());
       ceph_assert(can_hi != candidate.attrs.end());
-      const bufferlist& can_bl = can_hi->second;
+      bufferlist can_bl;
+      can_bl.push_back(can_hi->second);
 
       auto auth_hi = auth.attrs.find(ECUtil::get_hinfo_key());
       ceph_assert(auth_hi != auth.attrs.end());
-      const bufferlist& auth_bl = auth_hi->second;
+      bufferlist auth_bl;
+      auth_bl.push_back(auth_hi->second);
 
       if (!can_bl.contents_equal(auth_bl)) {
         fmt::format_to(std::back_inserter(out),
@@ -1341,7 +1351,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 		     sep(error),
 		     k);
       obj_result.set_attr_name_mismatch();
-    } else if (!cand->second.contents_equal(v)) {
+    } else if (cand->second.cmp(v)) {
       fmt::format_to(std::back_inserter(out),
 		     "{}attr value mismatch '{}'",
 		     sep(error),
@@ -1453,8 +1463,10 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
       this_chunk->m_error_counts.shallow_errors++;
       soid_error.set_info_missing();
     } else {
+      bufferlist bv;
+      bv.push_back(p->second.attrs[OI_ATTR]);
       try {
-        oi = object_info_t(std::as_const(p->second.attrs[OI_ATTR]));
+        oi = object_info_t(bv);
       } catch (ceph::buffer::error& e) {
         oi = std::nullopt;
         clog.error() << m_mode_desc << " " << m_pg_id << " " << soid
@@ -1580,11 +1592,13 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
         snapset = std::nullopt;
         head_error.set_snapset_missing();
       } else {
-        auto blp = p->second.attrs[SS_ATTR].cbegin();
+        bufferlist bl;
+        bl.push_back(p->second.attrs[SS_ATTR]);
+        auto blp = bl.cbegin();
         try {
           snapset = SnapSet();  // Initialize optional<> before decoding into it
           decode(*snapset, blp);
-          head_error.ss_bl.append(p->second.attrs[SS_ATTR]);
+          head_error.ss_bl.push_back(p->second.attrs[SS_ATTR]);
         } catch (ceph::buffer::error& e) {
           snapset = std::nullopt;
           clog.error() << m_mode_desc << " " << m_pg_id << " " << soid
@@ -1775,11 +1789,13 @@ std::vector<snap_mapper_fix_t> ScrubBackend::scan_snaps(
 
     if (hoid.is_head()) {
       // parse the SnapSet
+      bufferlist bl;
       if (o.attrs.find(SS_ATTR) == o.attrs.end()) {
 	// no snaps for this head
 	continue;
       }
-      auto p = o.attrs[SS_ATTR].cbegin();
+      bl.push_back(o.attrs[SS_ATTR]);
+      auto p = bl.cbegin();
       try {
 	decode(snapset, p);
       } catch (...) {

@@ -1687,8 +1687,10 @@ int ECBackend::objects_get_attrs(
   const hobject_t &hoid,
   map<string, bufferlist, less<>> *out)
 {
-  // call from parents -- get raw attrs, without any filtering for hinfo
-  int r = PGBackend::objects_get_attrs(hoid, out);
+  int r = store->getattrs(
+    ch,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    *out);
   if (r < 0)
     return r;
 
@@ -1772,7 +1774,11 @@ int ECBackend::be_deep_scrub(
     return -EINPROGRESS;
   }
 
-  ECUtil::HashInfoRef hinfo = unstable_hashinfo_registry.get_hash_info(poid, false, o.attrs, o.size);
+  std::map<std::string, ceph::buffer::list, std::less<void>> attrs_bl;
+  for (const auto& [key, bp] : o.attrs) {
+    attrs_bl[key].push_back(bp);
+  }
+  ECUtil::HashInfoRef hinfo = unstable_hashinfo_registry.get_hash_info(poid, false, attrs_bl, o.size);
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;

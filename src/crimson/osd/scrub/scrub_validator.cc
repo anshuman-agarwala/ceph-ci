@@ -96,9 +96,11 @@ shard_evaluation_t evaluate_object_shard(
     if (xiter == obj.attrs.end()) {
       ret.shard_info.set_info_missing();
     } else {
+      bufferlist bl;
+      bl.push_back(xiter->second);
       ret.object_info = object_info_t{};
       try {
-	auto bliter = xiter->second.cbegin();
+	auto bliter = bl.cbegin();
 	::decode(*(ret.object_info), bliter);
       } catch (...) {
 	ret.shard_info.set_info_corrupted();
@@ -118,9 +120,11 @@ shard_evaluation_t evaluate_object_shard(
     if (xiter == obj.attrs.end()) {
       ret.shard_info.set_snapset_missing();
     } else {
+      bufferlist bl;
+      bl.push_back(xiter->second);
       ret.snapset = SnapSet{};
       try {
-	auto bliter = xiter->second.cbegin();
+	auto bliter = bl.cbegin();
 	::decode(*(ret.snapset), bliter);
       } catch (...) {
 	ret.shard_info.set_snapset_corrupted();
@@ -134,9 +138,11 @@ shard_evaluation_t evaluate_object_shard(
     if (xiter == obj.attrs.end()) {
       ret.shard_info.set_hinfo_missing();
     } else {
+      bufferlist bl;
+      bl.push_back(xiter->second);
       ret.hinfo = ECUtil::HashInfo{};
       try {
-	auto bliter = xiter->second.cbegin();
+	auto bliter = bl.cbegin();
 	decode(*(ret.hinfo), bliter);
       } catch (...) {
 	ret.shard_info.set_hinfo_corrupted();
