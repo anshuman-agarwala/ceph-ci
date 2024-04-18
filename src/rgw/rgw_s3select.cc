@@ -518,7 +518,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
 {
   int status = 0;
   
-  m_s3_csv_object.set_external_system_functions(fp_s3select_continue,
+  m_s3_json_object.set_external_system_functions(fp_s3select_continue,
 						fp_s3select_result_format,
 						fp_result_header_format,
 						fp_debug_mesg);
