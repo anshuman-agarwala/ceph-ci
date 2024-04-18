@@ -173,6 +173,7 @@ void aws_response_handler::init_success_response()
 
 void aws_response_handler::send_continuation_response()
 {
+  m_fp_chunk_encoding();
   set_continue_buffer();
   continue_result.resize(header_crc_size, '\0');
   get_buffer()->clear();
@@ -203,6 +204,7 @@ void aws_response_handler::init_stats_response()
 
 void aws_response_handler::init_end_response()
 {
+  m_fp_chunk_encoding();
   sql_result.resize(header_crc_size, '\0');
   get_buffer()->clear();
   header_size = create_header_end();
@@ -214,7 +216,7 @@ void aws_response_handler::init_end_response()
 
 void aws_response_handler::send_error_response(const char* error_message)
 {
-  //currently not in use. need to change the s3-test, this error-response raises a boto3 exception
+  m_fp_chunk_encoding();
   error_result.resize(header_crc_size, '\0');
   get_buffer()->clear();
   header_size = create_error_header_records(error_message);
@@ -230,6 +232,7 @@ void aws_response_handler::send_success_response()
 #ifdef PAYLOAD_TAG
   sql_result.append(END_PAYLOAD_LINE);
 #endif
+  m_fp_chunk_encoding();
   int buff_len = create_message(m_success_header_size);
   s->formatter->write_bin_data(sql_result.data(), buff_len);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -254,6 +257,7 @@ void aws_response_handler::send_error_response_rgw_formatter(const char* error_c
 
 void aws_response_handler::send_progress_response()
 {
+  m_fp_chunk_encoding();
   std::string progress_payload = fmt::format("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Progress><BytesScanned>{}</BytesScanned><BytesProcessed>{}</BytesProcessed><BytesReturned>{}</BytesReturned></Progress>"
                                  , get_processed_size(), get_processed_size(), get_total_bytes_returned());
   sql_result.append(progress_payload);
@@ -264,6 +268,7 @@ void aws_response_handler::send_progress_response()
 
 void aws_response_handler::send_stats_response()
 {
+  m_fp_chunk_encoding();
   std::string stats_payload = fmt::format("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>{}</BytesScanned><BytesProcessed>{}</BytesProcessed><BytesReturned>{}</BytesReturned></Stats>"
                                           , get_processed_size(), get_processed_size(), get_total_bytes_returned());
   sql_result.append(stats_payload);
@@ -304,12 +309,12 @@ RGWSelectObj_ObjStore_S3::RGWSelectObj_ObjStore_S3():
     return 0;
   };
   fp_s3select_result_format = [this](std::string& result) {
-    fp_chunked_transfer_encoding();
+    //fp_chunked_transfer_encoding();
     m_aws_response_handler.send_success_response();
     return 0;
   };
   fp_s3select_continue = [this](std::string& result) {
-    fp_chunked_transfer_encoding();
+    //fp_chunked_transfer_encoding();
     m_aws_response_handler.send_continuation_response();
     return 0;
   };
@@ -447,7 +452,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
     if (status < 0) {
       //error flow(processing-time)
       std::string error_msg = std::string(s3select_processTime_error) + " : " + m_s3_csv_object.get_error_description().data() ;
-      fp_chunked_transfer_encoding();
+      //fp_chunked_transfer_encoding();
       m_aws_response_handler.send_error_response(error_msg.data());
       
       ldpp_dout(this, 10) << "s3-select query: failed to process query; {" << m_s3_csv_object.get_error_description() << "}" << dendl;
@@ -460,7 +465,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
   }
   ldpp_dout(this, 10) << "s3-select: complete chunk processing : chunk length = " << input_length << dendl;
   if (enable_progress == true) {
-    fp_chunked_transfer_encoding();
+    //fp_chunked_transfer_encoding();
     m_aws_response_handler.init_progress_response();
     m_aws_response_handler.send_progress_response();
   }
@@ -493,7 +498,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_parquet(const char* query)
   }
   if (s3select_syntax.get_error_description().empty() == false) {
     //the SQL statement failed the syntax parser
-    fp_chunked_transfer_encoding();
+    //fp_chunked_transfer_encoding();
     m_aws_response_handler.send_error_response(m_s3_parquet_object.get_error_description().c_str());
 
     ldpp_dout(this, 10) << "s3-select query: failed to prase query; {" << s3select_syntax.get_error_description() << "}" << dendl;
@@ -504,7 +509,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_parquet(const char* query)
     status = m_s3_parquet_object.run_s3select_on_object(m_aws_response_handler.get_sql_result());
     if (status < 0) {
 
-      fp_chunked_transfer_encoding();
+      //fp_chunked_transfer_encoding();
       m_aws_response_handler.send_error_response(m_s3_parquet_object.get_error_description().c_str());
 
       return -1;
@@ -576,7 +581,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
     ldpp_dout(this, 10) << "s3-select query: failed to process query; {" << m_s3_json_object.get_error_description() << "}" << dendl;
     return -EINVAL;
   }
-  fp_chunked_transfer_encoding();
+  //fp_chunked_transfer_encoding();
 
   if (length_post_processing-length_before_processing != 0) {
     m_aws_response_handler.send_success_response();
@@ -1007,7 +1012,7 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
       }
   }
   if (!m_aws_response_handler.is_set()) {
-    m_aws_response_handler.set(s, this);
+    m_aws_response_handler.set(s, this, fp_chunked_transfer_encoding);
   }
   if (len == 0 && s->obj_size != 0) {
     return 0;
