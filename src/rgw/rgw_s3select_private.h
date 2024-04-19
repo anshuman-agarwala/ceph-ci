@@ -152,7 +152,9 @@ public:
 
   void init_stats_response();
 
-  void send_error_response(const char* error_message);
+  void send_error_response(const char* error_code,
+                           const char* error_message,
+                           const char* resource_id);
 
   void send_success_response();
 
