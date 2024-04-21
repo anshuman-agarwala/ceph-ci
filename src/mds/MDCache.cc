@@ -9890,7 +9890,7 @@ void MDCache::request_drop_foreign_locks(const MDRequestRef& mdr)
 
   for (auto it = mdr->locks.begin(); it != mdr->locks.end(); ) {
     SimpleLock *lock = it->lock;
-    if (it->is_xlock() && !lock->get_parent()->is_auth()) {
+    if (!lock->is_locallock() && it->is_xlock() && !lock->get_parent()->is_auth()) {
       dout(10) << "request_drop_foreign_locks forgetting lock " << *lock
 	       << " on " << lock->get_parent() << dendl;
       lock->put_xlock();
