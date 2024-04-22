@@ -995,6 +995,12 @@ int RGWSelectObj_ObjStore_S3::json_processing(bufferlist& bl, off_t ofs, off_t l
 
 int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_t len)
 {
+  if(s->cct->_conf->rgw_s3select_disable == true)
+  {//TODO should apply all flows.
+      ldpp_dout(this, 10) << "s3select : is disabled by rgw_s3select_disable configuration parameter" << dendl;
+      return -ENOENT;
+  }
+
   if (m_scan_range_ind == false){
     m_object_size_for_processing = s->obj_size;
   }
