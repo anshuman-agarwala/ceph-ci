@@ -472,6 +472,11 @@ class CephadmServe:
         for k in ['CEPHADM_STRAY_HOST',
                   'CEPHADM_STRAY_DAEMON']:
             self.mgr.remove_health_warning(k)
+        # clear recently removed daemons that were removed more than 60 seconds ago
+        self.mgr.recently_removed_daemons = {
+            d: t for (d, t) in self.mgr.recently_removed_daemons.items()
+            if ((datetime_now() - t).total_seconds() < 60)
+        }
         if self.mgr.warn_on_stray_hosts or self.mgr.warn_on_stray_daemons:
             ls = self.mgr.list_servers()
             self.log.debug(ls)
@@ -510,6 +515,11 @@ class CephadmServe:
                         # and don't have a way to check if the daemon is part of iscsi service
                         # we assume that all tcmu-runner daemons are managed by cephadm
                         managed.append(name)
+                    # Don't mark daemons we just removed in the last minute as stray.
+                    # It may take some time for the mgr to become aware the daemon
+                    # had been removed.
+                    if name in self.mgr.recently_removed_daemons:
+                        continue
                     if host not in self.mgr.inventory:
                         missing_names.append(name)
                         host_num_daemons += 1
@@ -1514,6 +1524,7 @@ class CephadmServe:
                                                             daemon_type)].post_remove(daemon, is_failed_deploy=False))
                     self.mgr._kick_serve_loop()
 
+            self.mgr.recently_removed_daemons[name] = datetime_now()
             return "Removed {} from host '{}'".format(name, host)
 
     async def _run_cephadm_json(self,
