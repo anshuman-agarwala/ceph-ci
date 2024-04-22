@@ -291,6 +291,11 @@ private:
   void set_mirror_group_status_update(cls::rbd::MirrorGroupStatusState state,
                                       const std::string &desc);
 
+  void create_regular_group_snapshot(const std::string &remote_snap_name,
+                                     const std::string &remote_snap_id,
+                                     std::vector<cls::rbd::GroupImageStatus> *local_images);
+  void handle_create_regular_group_snapshot(int r);
+  int local_group_image_list_by_id(std::vector<cls::rbd::GroupImageStatus> *image_ids);
   void create_mirror_snapshot_start(
       const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
       ImageReplayer<ImageCtxT> *image_replayer, int64_t *local_group_pool_id,

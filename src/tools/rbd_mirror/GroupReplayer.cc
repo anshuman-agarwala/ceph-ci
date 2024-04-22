@@ -536,7 +536,8 @@ void GroupReplayer<I>::bootstrap_group() {
     m_local_mirror_uuid, m_instance_watcher, m_local_status_updater,
     m_remote_group_peer.mirror_status_updater, m_cache_manager_handler,
     m_pool_meta_cache, &m_local_group_id, &m_remote_group_id,
-    &m_local_group_ctx, &m_image_replayers, &m_image_replayer_index, ctx);
+    &m_local_group_snaps, &m_remote_group_snaps, &m_local_group_ctx,
+    &m_image_replayers, &m_image_replayer_index, ctx);
 
   request->get();
   m_bootstrap_request = request;
@@ -859,6 +860,129 @@ void GroupReplayer<I>::set_mirror_group_status_update(
 }
 
 template <typename I>
+void GroupReplayer<I>::create_regular_group_snapshot(
+    const std::string &remote_snap_name,
+    const std::string &remote_snap_id,
+    std::vector<cls::rbd::GroupImageStatus> *local_images) {
+  // each image will have one snapshot specific to group snap, and so for each
+  // image get a ImageSnapshotSpec and prepare a vector
+  // for image :: <images in that group> {
+  //   * get snap whos name has group snap_id for that we can list snaps and
+  //     filter with remote_group_snap_id
+  //   * get its { pool_id, snap_id, image_id }
+  // }
+  // finally write to the object
+  dout(10) << dendl;
+  librados::ObjectWriteOperation op;
+  cls::rbd::GroupSnapshot group_snap{
+    remote_snap_id, // keeping it same as remote group snap id
+    cls::rbd::UserGroupSnapshotNamespace{},
+      remote_snap_name,
+      cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+  librbd::cls_client::group_snap_set(&op, group_snap);
+
+  std::vector<cls::rbd::ImageSnapshotSpec> local_image_snap_specs;
+  local_image_snap_specs = std::vector<cls::rbd::ImageSnapshotSpec>(
+      local_images->size(), cls::rbd::ImageSnapshotSpec());
+  for (auto& image : *local_images) {
+    std::string image_header_oid = librbd::util::header_name(
+        image.spec.image_id);
+    ::SnapContext snapc;
+    int r = librbd::cls_client::get_snapcontext(&m_local_io_ctx,
+                                                image_header_oid, &snapc);
+    if (r < 0) {
+      derr << "get snap context failed: " << cpp_strerror(r) << dendl;
+      return;
+    }
+
+    auto image_snap_name = ".group." + std::to_string(image.spec.pool_id) +
+                           "_" + m_remote_group_id + "_" + remote_snap_id;
+    // stored in reverse order
+    for (auto snap_id : snapc.snaps) {
+      cls::rbd::SnapshotInfo snap_info;
+      r = librbd::cls_client::snapshot_get(&m_local_io_ctx, image_header_oid,
+                                           snap_id, &snap_info);
+      if (r < 0) {
+        derr << "failed getting snap info for snap id: " << snap_id
+          << ", : " << cpp_strerror(r) << dendl;
+        return;
+      }
+
+      // extract { pool_id, snap_id, image_id }
+      if (snap_info.name == image_snap_name) {
+        cls::rbd::ImageSnapshotSpec snap_spec;
+        snap_spec.pool = image.spec.pool_id;
+        snap_spec.image_id = image.spec.image_id;
+        snap_spec.snap_id = snap_info.id;
+
+        local_image_snap_specs.push_back(snap_spec);
+      }
+    }
+  }
+
+  group_snap.snaps = local_image_snap_specs;
+  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  librbd::cls_client::group_snap_set(&op, group_snap);
+
+  auto comp = create_rados_callback(
+      new LambdaContext([this](int r) {
+        handle_create_regular_group_snapshot(r);
+      }));
+  int r = m_local_io_ctx.aio_operate(
+      librbd::util::group_header_name(m_local_group_ctx.group_id), comp, &op);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void GroupReplayer<I>::handle_create_regular_group_snapshot(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "error creating local non-primary group snapshot: "
+         << cpp_strerror(r) << dendl;
+  }
+
+  return;
+}
+
+template <typename I>
+int GroupReplayer<I>::local_group_image_list_by_id(
+    std::vector<cls::rbd::GroupImageStatus> *image_ids) {
+  std::string group_header_oid = librbd::util::group_header_name(
+      m_local_group_ctx.group_id);
+
+  dout(10) << "listing images in local group id " << group_header_oid << dendl;
+  image_ids->clear();
+
+  int r = 0;
+  const int max_read = 1024;
+  cls::rbd::GroupImageSpec start_last;
+  do {
+    std::vector<cls::rbd::GroupImageStatus> image_ids_page;
+
+    r = librbd::cls_client::group_image_list(&m_local_io_ctx, group_header_oid,
+                                             start_last, max_read,
+                                             &image_ids_page);
+
+    if (r < 0) {
+      derr << "error reading image list from local group: "
+           << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    image_ids->insert(image_ids->end(), image_ids_page.begin(),
+                      image_ids_page.end());
+
+    if (image_ids_page.size() > 0)
+      start_last = image_ids_page.rbegin()->spec;
+
+    r = image_ids_page.size();
+  } while (r == max_read);
+
+  return 0;
+}
+
+template <typename I>
 void GroupReplayer<I>::create_mirror_snapshot_start(
     const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
     ImageReplayer<I> *image_replayer, int64_t *local_group_pool_id,
@@ -889,6 +1013,22 @@ void GroupReplayer<I>::create_mirror_snapshot_start(
     locker.unlock();
     on_finish->complete(r);
     return;
+  }
+
+  std::vector<cls::rbd::GroupImageStatus> local_images;
+  for (auto it = m_remote_group_snaps.begin(); it != m_remote_group_snaps.end(); ++it) {
+    auto snap_type = cls::rbd::get_group_snap_namespace_type(
+        it->second.snapshot_namespace);
+    if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
+      if (local_images.empty()) {
+        int r = local_group_image_list_by_id(&local_images);
+        if (r < 0) {
+          return;
+        }
+      }
+      create_regular_group_snapshot(it->second.name,
+                                    it->second.id, &local_images);
+    }
   }
 
   auto requests_it = m_create_snap_requests.find(remote_group_snap_id);
