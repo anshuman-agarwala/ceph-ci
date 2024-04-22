@@ -386,7 +386,10 @@ def get_ceph_mounts_for_type(
     """
     mounts = dict()
 
-    if daemon_type in ceph_daemons():
+    if daemon_type in ceph_daemons() or daemon_type in [
+        'ceph-volume',
+        'shell',
+    ]:
         if fsid:
             run_path = os.path.join('/var/run/ceph', fsid)
             if os.path.exists(run_path):
@@ -400,14 +403,19 @@ def get_ceph_mounts_for_type(
                 journald_sock_dir = '/run/systemd/journal'
                 mounts[journald_sock_dir] = journald_sock_dir
 
-    if daemon_type in ['mon', 'osd', 'clusterless-ceph-volume']:
+    if daemon_type in [
+        'mon',
+        'osd',
+        'ceph-volume',
+        'clusterless-ceph-volume',
+    ]:
         mounts['/dev'] = '/dev'  # FIXME: narrow this down?
         mounts['/run/udev'] = '/run/udev'
-    if daemon_type in ['osd', 'clusterless-ceph-volume']:
+    if daemon_type in ['osd', 'ceph-volume', 'clusterless-ceph-volume']:
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
-    if daemon_type == 'osd':
+    if daemon_type in ['osd', 'ceph-volume']:
         # selinux-policy in the container may not match the host.
         if HostFacts(ctx).selinux_enabled:
             cluster_dir = f'{ctx.data_dir}/{fsid}'
@@ -420,7 +428,10 @@ def get_ceph_mounts_for_type(
                 logger.error(
                     f'Cluster direcotry {cluster_dir} does not exist.'
                 )
+    if daemon_type == 'osd':
         mounts['/'] = '/rootfs'
+    elif daemon_type == 'ceph-volume':
+        mounts['/'] = '/rootfs:slave'
 
     try:
         if (
