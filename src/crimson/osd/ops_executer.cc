@@ -466,7 +466,7 @@ auto OpsExecuter::do_write_op(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   if (!osd_op_params) {
     osd_op_params.emplace();
-    fill_op_params_bump_pg_version();
+    fill_op_params();
   }
   user_modify = (m == modified_by::user);
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
@@ -802,7 +802,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   }
 }
 
-void OpsExecuter::fill_op_params_bump_pg_version()
+void OpsExecuter::fill_op_params()
 {
   osd_op_params->req_id = msg->get_reqid();
   osd_op_params->mtime = msg->get_mtime();

@@ -424,7 +424,7 @@ public:
     MutFunc&& mut_func) &&;
   std::vector<pg_log_entry_t> prepare_transaction(
     const std::vector<OSDOp>& ops);
-  void fill_op_params_bump_pg_version();
+  void fill_op_params();
 
   ObjectContextRef get_obc() const {
     return obc;
