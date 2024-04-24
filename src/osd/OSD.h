@@ -47,6 +47,7 @@
 
 #include "include/unordered_map.h"
 
+#include "common/intrusive_timer.h"
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "messages/MOSDOp.h"
@@ -868,6 +869,8 @@ public:
   bool prepare_to_stop();
   void got_stop_ack();
 
+  // -- PG timer --
+  common::intrusive_timer::thread_executor_t pg_timer;
 
 #ifdef PG_DEBUG_REFS
   ceph::mutex pgid_lock = ceph::make_mutex("OSDService::pgid_lock");
@@ -1915,6 +1918,7 @@ private:
     case MSG_OSD_REP_SCRUBMAP:
     case MSG_OSD_PG_UPDATE_LOG_MISSING:
     case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+    case MSG_OSD_PG_PCT:
     case MSG_OSD_PG_RECOVERY_DELETE:
     case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
     case MSG_OSD_PG_LEASE:
