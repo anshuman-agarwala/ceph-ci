@@ -88,6 +88,8 @@ class PG : public boost::intrusive_ref_counter<
   seastar::timer<seastar::lowres_clock> renew_lease_timer;
 
 public:
+  Operation::id_t last_completed_tid = 0;
+
   template <typename T = void>
   using interruptible_future =
     ::crimson::interruptible::interruptible_future<
