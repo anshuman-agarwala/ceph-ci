@@ -2179,6 +2179,9 @@ def task(ctx, config):
     containers = config.get('containers', {})
     container_image_name = containers.get('image', container_image_name)
 
+    if 'force_image' in config:
+        ctx.ceph[cluster_name].image = config['force_image']
+
     if not hasattr(ctx.ceph[cluster_name], 'image'):
         ctx.ceph[cluster_name].image = config.get('image')
     ref = ctx.config.get("branch", "main")
