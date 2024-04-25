@@ -36,7 +36,7 @@ void NVMeofGwMap::to_gmap(std::map<NvmeGroupKey, NvmeGwMap>& Gmap) const {
             const auto& gw_id = gw_created_pair.first;
             const auto& gw_created  = gw_created_pair.second;
 
-            auto gw_state = NvmeGwState(gw_created.ana_grp_id, epoch);
+            auto gw_state = NvmeGwState(gw_created.ana_grp_id, epoch, gw_created.availability);
             for (const auto& sub: gw_created.subsystems) {
                 gw_state.subsystems.insert({sub.nqn, NqnState(sub.nqn, gw_created.sm_state, gw_created )});
             }
