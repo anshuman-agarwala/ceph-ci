@@ -239,9 +239,11 @@ void aws_response_handler::send_success_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void aws_response_handler::send_error_response_rgw_formatter(const char* error_code,
-    const char* error_message,
-    const char* resource_id)
+std::string empty_error="--";
+
+void aws_response_handler::send_error_response_rgw_formatter(const char* error_code = empty_error.data(),
+    const char* error_message = empty_error.data(),
+    const char* resource_id = empty_error.data())
 {
   set_req_state_err(s, 0);
   dump_errno(s, 400);
@@ -336,6 +338,7 @@ RGWSelectObj_ObjStore_S3::RGWSelectObj_ObjStore_S3():
     } 
     chunk_number++; 
   };
+
 }
 
 RGWSelectObj_ObjStore_S3::~RGWSelectObj_ObjStore_S3()
@@ -730,6 +733,21 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
 #ifdef _ARROW_EXIST
   m_rgw_api.m_y = &y;
 #endif
+
+  if (!m_aws_response_handler.is_set()) {
+    m_aws_response_handler.set(s, this, fp_chunked_transfer_encoding);
+  }
+
+  if(s->cct->_conf->rgw_s3select_disable == true)
+  {
+      std::string error_msg="s3select : is disabled by rgw_s3select_disable configuration parameter";
+ldpp_dout(this, 10) << error_msg << dendl;
+      m_aws_response_handler.send_error_response_rgw_formatter(error_msg.data());
+      
+      op_ret = -ERR_INVALID_REQUEST;
+      return;
+  }
+
   if (m_parquet_type) {
     //parquet processing
     range_request(0, 4, parquet_magic, y);
@@ -995,11 +1013,6 @@ int RGWSelectObj_ObjStore_S3::json_processing(bufferlist& bl, off_t ofs, off_t l
 
 int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_t len)
 {
-  if(s->cct->_conf->rgw_s3select_disable == true)
-  {//TODO should apply all flows.
-      ldpp_dout(this, 10) << "s3select : is disabled by rgw_s3select_disable configuration parameter" << dendl;
-      return -ENOENT;
-  }
 
   if (m_scan_range_ind == false){
     m_object_size_for_processing = s->obj_size;

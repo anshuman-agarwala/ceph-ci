@@ -51,13 +51,14 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_s3select_disasble
+- name: rgw_s3select_disable
   type: bool
   level: advanced
   desc: disable the s3select operation
   default: false
   services:
   - rgw
+  with_legacy: true
 - name: rgw_rados_tracing
   type: bool
   level: advanced
