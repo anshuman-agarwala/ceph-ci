@@ -211,7 +211,7 @@ public:
 	return std::forward<FutureT>(fut);
       }
 
-      const OpT &get_op() { return op; }
+      const OpT &get_op() const { return op; }
 
     protected:
       void record_blocking(const T& blocker) override {
@@ -504,15 +504,28 @@ class PipelineHandle {
   template <typename OpT, typename T>
   std::optional<seastar::future<>>
   do_enter_maybe_sync(T &stage, typename T::BlockingEvent::template Trigger<OpT>&& t) {
+    auto pphase = (void*)&stage;
     if constexpr (!T::is_enter_sync) {
+      crimson::get_logger(ceph_subsys_osd).info(
+          "enter_maybe_sync: id={} exit done, async enter phase={}...",
+          t.get_op().get_id(),
+          pphase);
       auto fut = t.maybe_record_blocking(stage.enter(t), stage);
       return std::move(fut).then(
-        [this, t=std::move(t)](auto &&barrier_ref) {
+        [this, t=std::move(t), pphase](auto &&barrier_ref) {
+        crimson::get_logger(ceph_subsys_osd).info(
+            "enter_maybe_sync: id={} async entered phase={}",
+            t.get_op().get_id(),
+            pphase);
         exit();
         barrier = std::move(barrier_ref);
         return seastar::now();
       });
     } else {
+      crimson::get_logger(ceph_subsys_osd).info(
+          "enter_maybe_sync: id={} sync enter(ed) phase={}",
+          t.get_op().get_id(),
+          pphase);
       auto barrier_ref = stage.enter(t);
       exit();
       barrier = std::move(barrier_ref);
@@ -526,6 +539,10 @@ class PipelineHandle {
     assert(stage.core == seastar::this_shard_id());
     auto wait_fut = wait_barrier();
     if (wait_fut.has_value()) {
+      crimson::get_logger(ceph_subsys_osd).info(
+          "enter_maybe_sync: id={} async exit phase={}...",
+          t.get_op().get_id(),
+          (void*)&stage);
       return wait_fut.value(
       ).then([this, &stage, t=std::move(t)]() mutable {
         auto ret = do_enter_maybe_sync<OpT, T>(stage, std::move(t));
@@ -650,8 +667,16 @@ public:
 
   template <class TriggerT>
   seastar::future<PipelineExitBarrierI::Ref> enter(TriggerT& t) {
+    crimson::get_logger(ceph_subsys_osd).info(
+        "exclusive enter: id={} wait phase={}...",
+        t.get_op().get_id(),
+        (void*)this);
     waiting++;
     return mutex.lock().then([this, op_id=t.get_op().get_id()] {
+      crimson::get_logger(ceph_subsys_osd).info(
+          "exclusive enter: id={}: wait phase={} done",
+          op_id,
+          (void*)this);
       ceph_assert_always(waiting > 0);
       --waiting;
       set_held_by(op_id);
@@ -722,23 +747,40 @@ private:
     std::optional<seastar::future<>> wait() final {
       assert(phase);
       assert(barrier);
+      crimson::get_logger(ceph_subsys_osd).info(
+          "concurrent exit barrier: id={} wait mutex={}...",
+          trigger.get_op().get_id(),
+          (void*)(&phase->mutex));
       auto ret = std::move(*barrier);
       barrier = std::nullopt;
       return trigger.maybe_record_exit_barrier(std::move(ret));
     }
 
     void exit() final {
+      auto op_id = trigger.get_op().get_id();
       if (barrier) {
         assert(phase);
         assert(phase->core == seastar::this_shard_id());
+        crimson::get_logger(ceph_subsys_osd).info(
+            "concurrent exit barrier: id={} async exit mutex={}...",
+            op_id,
+            (void*)(&phase->mutex));
         std::ignore = std::move(*barrier
-        ).then([phase=this->phase] {
+        ).then([phase=this->phase, op_id] {
+          crimson::get_logger(ceph_subsys_osd).info(
+              "concurrent exit barrier: id={} async unlock mutex={}",
+              op_id,
+              (void*)(&phase->mutex));
           phase->mutex.unlock();
         });
         barrier = std::nullopt;
         phase = nullptr;
       } else if (phase) {
         assert(phase->core == seastar::this_shard_id());
+        crimson::get_logger(ceph_subsys_osd).info(
+            "concurrent exit barrier: id={} sync unlock mutex={}",
+            op_id,
+            (void*)(&phase->mutex));
         phase->mutex.unlock();
         phase = nullptr;
       }
@@ -754,7 +796,22 @@ public:
 
   template <class TriggerT>
   PipelineExitBarrierI::Ref enter(TriggerT& t) {
-    return std::make_unique<ExitBarrier<TriggerT>>(*this, mutex.lock(), t);
+    auto op_id = t.get_op().get_id();
+    auto pmutex = (void*)&mutex;
+    crimson::get_logger(ceph_subsys_osd).info(
+        "concurrent exit barrier: id={} locking mutex={}",
+        op_id,
+        pmutex);
+    return std::make_unique<ExitBarrier<TriggerT>>(
+      *this,
+      mutex.lock().then([op_id, pmutex] {
+        crimson::get_logger(ceph_subsys_osd).info(
+            "concurrent exit barrier: id={} locked mutex={}",
+            op_id,
+            pmutex);
+      }),
+      t
+    );
   }
 
 private:
