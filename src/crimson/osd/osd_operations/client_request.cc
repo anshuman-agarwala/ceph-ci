@@ -24,7 +24,7 @@ void ClientRequest::Orderer::requeue(Ref<PG> pg)
 {
   LOG_PREFIX(ClientRequest::Orderer::requeue);
   for (auto &req: list) {
-    DEBUGDPP("requeueing {}", *pg, req);
+    INFODPP("requeueing {}", *pg, req);
     req.reset_instance_handle();
     std::ignore = req.with_pg_process(pg);
   }
@@ -63,7 +63,7 @@ ClientRequest::~ClientRequest()
 
 void ClientRequest::print(std::ostream &lhs) const
 {
-  lhs << "m=[" << *m << "]";
+  lhs << "id=" << get_id() << ", m=[" << *m << "]";
 }
 
 void ClientRequest::dump_detail(Formatter *f) const
@@ -124,7 +124,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
     "{}: same_interval_since: {}",
     *pgref, *this, pgref->get_interval_start_epoch());
 
-  DEBUGDPP("{} start", *pgref, *this);
+  INFODPP("{} start", *pgref, *this);
   PG &pg = *pgref;
   if (!m->get_hobj().get_key().empty()) {
     // There are no users of locator. It was used to ensure that multipart-upload
@@ -190,7 +190,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
     co_await std::move(fut);
   }
 
-  DEBUGDPP("{}.{}: process[_pg]_op complete, completing handle",
+  INFODPP("{}.{}: process[_pg]_op complete, completing handle",
 	   *pgref, *this, this_instance_id);
   co_await interruptor::make_interruptible(ihref.handle.complete());
 
@@ -341,7 +341,7 @@ ClientRequest::process_op(
     *this, pg->scrubber, &decltype(pg->scrubber)::wait_scrub,
     m->get_hobj());
 
-  DEBUGDPP("{}.{}: past scrub blocker, getting obc",
+  INFODPP("{}.{}: past scrub blocker, getting obc",
 	   *pg, *this, this_instance_id);
   // call with_locked_obc() in order, but wait concurrently for loading.
   ihref.enter_stage_sync(
@@ -351,13 +351,13 @@ ClientRequest::process_op(
     [FNAME, this, pg, this_instance_id, &ihref] (
       auto head, auto obc
     ) -> interruptible_future<> {
-      DEBUGDPP("{}.{}: got obc {}, entering process stage",
+      INFODPP("{}.{}: got obc {}, entering process stage",
 	       *pg, *this, this_instance_id, obc->obs);
       return ihref.enter_stage<interruptor>(
 	client_pp(*pg).process, *this
       ).then_interruptible(
 	[FNAME, this, pg, this_instance_id, obc, &ihref]() mutable {
-	  DEBUGDPP("{}.{}: in process stage, calling do_process",
+	  INFODPP("{}.{}: in process stage, calling do_process",
 		   *pg, *this, this_instance_id);
 	  return do_process(
 	    ihref, pg, obc, this_instance_id
