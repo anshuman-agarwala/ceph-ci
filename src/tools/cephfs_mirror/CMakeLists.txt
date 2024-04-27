@@ -18,6 +18,7 @@ add_library(cephfs_mirror_internal STATIC
   ${cephfs_mirror_internal})
 
 target_link_libraries(cephfs-mirror
+  legacy-option-headers
   cephfs_mirror_internal
   global
   ceph-common

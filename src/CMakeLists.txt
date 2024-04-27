@@ -673,6 +673,7 @@ add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon os global-static ceph-common
+  legacy-option-headers
   ${ALLOC_LIBS}
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
@@ -703,7 +704,9 @@ set(ceph_osd_srcs
 
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins extblkdev_plugins)
-target_link_libraries(ceph-osd osd os global-static common
+target_link_libraries(ceph-osd
+  legacy-option-headers
+  osd os global-static common
   ${ALLOC_LIBS}
   ${BLKID_LIBRARIES})
 if(WITH_FUSE)
@@ -721,7 +724,9 @@ if (WITH_CEPHFS)
   set(ceph_mds_srcs
     ceph_mds.cc)
   add_executable(ceph-mds ${ceph_mds_srcs})
-  target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static ceph-common
+  target_link_libraries(ceph-mds
+    legacy-option-headers
+    mds ${CMAKE_DL_LIBS} global-static ceph-common
     Boost::thread
     ${ALLOC_LIBS})
   install(TARGETS ceph-mds DESTINATION bin)
@@ -833,7 +838,9 @@ if(WITH_LIBCEPHFS)
     ceph_syn.cc
     client/SyntheticClient.cc)
   add_executable(ceph-syn ${ceph_syn_srcs})
-  target_link_libraries(ceph-syn client global-static ceph-common)
+  target_link_libraries(ceph-syn
+    legacy-option-headers
+    client global-static ceph-common)
   install(TARGETS ceph-syn DESTINATION bin)
   if(LINUX)
     add_subdirectory(mount)
@@ -843,7 +850,10 @@ endif(WITH_LIBCEPHFS)
 if(WITH_LIBCEPHSQLITE)
   set(cephsqlite_srcs libcephsqlite.cc SimpleRADOSStriper.cc)
   add_library(cephsqlite ${CEPH_SHARED} ${cephsqlite_srcs})
-  target_link_libraries(cephsqlite PRIVATE cls_lock_client librados ceph-common SQLite3::SQLite3 ${EXTRALIBS})
+  target_link_libraries(cephsqlite
+    PRIVATE
+      legacy-option-headers
+      cls_lock_client librados ceph-common SQLite3::SQLite3 ${EXTRALIBS})
   set_target_properties(cephsqlite PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)
@@ -859,7 +869,9 @@ if(WITH_FUSE)
     ceph_fuse.cc
     client/fuse_ll.cc)
   add_executable(ceph-fuse ${ceph_fuse_srcs})
-  target_link_libraries(ceph-fuse FUSE::FUSE
+  target_link_libraries(ceph-fuse
+    legacy-option-headers
+    FUSE::FUSE
     ${GSSAPI_LIBRARIES} client ceph-common global-static ${EXTRALIBS})
   set_target_properties(ceph-fuse PROPERTIES
     POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
