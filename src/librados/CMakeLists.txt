@@ -4,7 +4,8 @@ add_library(librados_impl STATIC
   RadosClient.cc
   librados_util.cc
   librados_tp.cc)
-
+target_link_libraries(librados_impl
+  PRIVATE legacy-option-headers)
 # C/C++ API
 add_library(librados ${CEPH_SHARED}
   librados_c.cc
@@ -30,6 +31,7 @@ if(ENABLE_SHARED)
   endif()
 endif()
 target_link_libraries(librados PRIVATE
+  legacy-option-headers
   librados_impl osdc ceph-common cls_lock_client
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS} ${GSSAPI_LIBRARIES})
 install(TARGETS librados DESTINATION ${CMAKE_INSTALL_LIBDIR})
