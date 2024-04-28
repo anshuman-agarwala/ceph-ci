@@ -235,7 +235,7 @@ void NVMeofGwMonitorClient::send_beacon()
 
 void NVMeofGwMonitorClient::disconnect_panic()
 {
-  auto disconnect_panic_duration = g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_beacon_grace").count();
+  auto disconnect_panic_duration = g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_disconnect_panic").count();
   auto now = std::chrono::steady_clock::now();
   auto elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(now - last_map_time).count();
   if (elapsed_seconds > disconnect_panic_duration) {
