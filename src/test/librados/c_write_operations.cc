@@ -64,7 +64,16 @@ TEST(LibRadosCWriteOps, WriteOpAssertVersion) {
   ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
   rados_release_write_op(op);
 
+  // Write to the object a thrid time to guarantee that its
+  // version number is greater than 1
+  op = rados_create_write_op();
+  ASSERT_TRUE(op);
+  rados_write_op_write_full(op, "hi", 2);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+  rados_release_write_op(op);
+
   uint64_t v = rados_get_last_version(ioctx);
+  // std::cout << "version is " << v << std::endl;
 
   op = rados_create_write_op();
   ASSERT_TRUE(op);
@@ -76,6 +85,12 @@ TEST(LibRadosCWriteOps, WriteOpAssertVersion) {
   ASSERT_TRUE(op);
   rados_write_op_assert_version(op, v-1);
   ASSERT_EQ(-ERANGE, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+  rados_release_write_op(op);
+
+  op = rados_create_write_op();
+  ASSERT_TRUE(op);
+  rados_write_op_assert_version(op, 0);
+  ASSERT_EQ(-EINVAL, rados_write_op_operate(op, ioctx, "test", NULL, 0));
   rados_release_write_op(op);
 
   op = rados_create_write_op();

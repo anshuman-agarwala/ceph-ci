@@ -328,8 +328,12 @@ TEST_F(LibRadosMiscPP, AssertVersionPP) {
   // (unsigned) version must be at least 1 (not 0)
   // since we want to decrement it by 1 later.
   ASSERT_EQ(0, ioctx.write_full("asdfbar", bl));
+  // guarantee that the version is at least 1 also
+  // for Crimson where versioning starts from 0.
+  ASSERT_EQ(0, ioctx.write_full("asdfbar", bl));
 
   uint64_t v = ioctx.get_last_version();
+  // std::cout << "version is " << v << std::endl;
   ObjectWriteOperation op1;
   op1.assert_version(v+1);
   op1.write(0, bl);
@@ -342,6 +346,10 @@ TEST_F(LibRadosMiscPP, AssertVersionPP) {
   op3.assert_version(v);
   op3.write(0, bl);
   ASSERT_EQ(0, ioctx.operate("asdfbar", &op3));
+  ObjectWriteOperation op4;
+  op4.assert_version(0);
+  op4.write(0, bl);
+  ASSERT_EQ(-EINVAL, ioctx.operate("asdfbar", &op4));
 }
 
 TEST_F(LibRadosMiscPP, BigAttrPP) {
