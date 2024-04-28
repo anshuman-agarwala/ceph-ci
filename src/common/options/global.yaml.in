@@ -4190,6 +4190,7 @@ options:
   - bitmap
   - stupid
   - avl
+  - btree
   - hybrid
   with_legacy: true
 - name: bluefs_log_replay_check_allocations
@@ -4995,6 +4996,7 @@ options:
   - bitmap
   - stupid
   - avl
+  - btree
   - hybrid
   with_legacy: true
 - name: bluestore_freelist_blocks_per_key
