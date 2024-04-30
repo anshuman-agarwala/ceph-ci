@@ -239,7 +239,8 @@ void Locker::detect_dead_locks(const MDRequestRef& mdr, int lock_type)
       any_waiter = true;
     }
     if (lock->get_type() > lock_type) {
-      dout(1) << " detected messy lock order, locks: " << mdr->locks << dendl;
+     // dout(1) << " detected messy lock order, locks: " << mdr->locks << dendl;
+      dout(1) << " detected messy lock order" << dendl;
       order_messy = true;
     }
     dout(15) << " lock " << *lock << " any_waiter " << any_waiter << " order_messy " << order_messy << dendl;
