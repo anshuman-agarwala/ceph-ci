@@ -134,7 +134,7 @@ inline std::ostream& print_gw_created_t(std::ostream& os, const NvmeGwCreated va
         os << " " << anas[i] <<": " << value.sm_state[anas[i]] << ",";
     }
 
-    os << "]\n"<< MODULE_PREFFIX << "availability " << value.availability << "]";
+    os << "]\n"<< MODULE_PREFFIX << "availability " << value.availability << " full-startup " << value.performed_full_startup  << " ]";
 
     return os;
 }
@@ -339,6 +339,7 @@ inline void encode(const NvmeGwCreatedMap& gws,  ceph::bufferlist &bl) {
             encode(gw.second.blocklist_data[i].is_failover, bl);
         }
         encode(gw.second.nonce_map, bl);
+        encode((uint32_t)gw.second.performed_full_startup, bl);
     }
     ENCODE_FINISH(bl);
 }
@@ -377,7 +378,9 @@ inline void decode(NvmeGwCreatedMap& gws, ceph::buffer::list::const_iterator &bl
             decode(gw_created.blocklist_data[i].is_failover, bl);
         }
         decode(gw_created.nonce_map, bl);
-
+        uint32_t performed_startup;
+        decode(performed_startup, bl);
+        gw_created.performed_full_startup = (bool)performed_startup;
         gws[gw_name] = gw_created;
     }
     DECODE_FINISH(bl);

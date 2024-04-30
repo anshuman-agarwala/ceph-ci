@@ -423,7 +423,25 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op){
            gw_created = false;
            dout(10) << "Warning: GW " << gw_id << " group_key " << group_key << " was not found in the  map.Created_gws "<< map.Created_gws <<dendl;
         }
+        else {
+            dout(4) << "GW  prepares the full startup " << gw_id << dendl;
+            pending_map.Created_gws[group_key][gw_id].performed_full_startup = true;
+        }
         goto set_propose;
+    }
+    else { // gw already created
+        if (gw != group_gws.end()) // if GW reports Available but in monitor's database it is Unavailable
+                                   // it means it did not perform "exit" after failover was set by NVMeofGWMon
+           if( pending_map.Created_gws[group_key][gw_id].availability == GW_AVAILABILITY_E::GW_UNAVAILABLE  &&
+               pending_map.Created_gws[group_key][gw_id].performed_full_startup == false &&
+               avail == GW_AVAILABILITY_E::GW_AVAILABLE ) {
+               ack_map.Created_gws[group_key][gw_id] = pending_map.Created_gws[group_key][gw_id];
+               ack_map.epoch = map.epoch;
+               dout(1) << " Force gw to exit: Sending ack_map to GW: " << gw_id << dendl;
+               auto msg = make_message<MNVMeofGwMap>(ack_map);
+               mon.send_reply(op, msg.detach());
+               goto false_return;
+           }
     }
 
     // At this stage the gw has to be in the Created_gws
@@ -446,7 +464,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op){
         dout(10) << "Warning: received empty nonce map in the beacon of GW " << gw_id << " "<< dendl;
     }
 
-    if(sub.size() == 0) {
+    if(sub.size() == 0 ) {
         avail = GW_AVAILABILITY_E::GW_UNAVAILABLE;
     }
     if(pending_map.Created_gws[group_key][gw_id].subsystems != sub)

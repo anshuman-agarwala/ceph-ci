@@ -103,7 +103,7 @@ int NVMeofGwMap::process_gw_map_gw_down(const NvmeGwId &gw_id, const NvmeGroupKe
     if (gw_state != gws_states.end()) {
         dout(4) << "GW down " << gw_id << dendl;
         auto& st = gw_state->second;
-        st.availability = GW_AVAILABILITY_E::GW_UNAVAILABLE;
+        st.set_unavailable_state();
         for (NvmeAnaGrpId i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i ++) {
             fsm_handle_gw_down (gw_id, group_key, st.sm_state[i], i, propose_pending);
             st.standby_state(i);
