@@ -61,6 +61,7 @@ int  NVMeofGwMap::cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_ke
         if (allocated[i] == false) {
             NvmeGwCreated gw_created(i);
             Created_gws[group_key][gw_id] = gw_created;
+            Created_gws[group_key][gw_id].performed_full_startup = true;
             dout(4) << __func__ << "Created GWS:  " << Created_gws  <<  dendl;
             return 0;
         }
@@ -103,7 +104,7 @@ int NVMeofGwMap::process_gw_map_gw_down(const NvmeGwId &gw_id, const NvmeGroupKe
     if (gw_state != gws_states.end()) {
         dout(4) << "GW down " << gw_id << dendl;
         auto& st = gw_state->second;
-        st.availability = GW_AVAILABILITY_E::GW_UNAVAILABLE;
+        st.set_unavailable_state();
         for (NvmeAnaGrpId i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i ++) {
             fsm_handle_gw_down (gw_id, group_key, st.sm_state[i], i, propose_pending);
             st.standby_state(i);
