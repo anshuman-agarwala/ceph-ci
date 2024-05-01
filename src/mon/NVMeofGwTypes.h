@@ -102,6 +102,7 @@ struct NvmeGwCreated {
     BeaconSubsystems   subsystems;                    // gateway susbsystem and their state machine states
     NvmeAnaNonceMap    nonce_map;
     SM_STATE           sm_state;                      // state machine states per ANA group
+    entity_addrvec_t   addr_vect;                     // ceph entity address allocated for the GW-client that represents this GW-id
     struct{
        epoch_t     osd_epoch;
        bool        is_failover;
@@ -182,6 +183,17 @@ struct NvmeGwMetaData {
     };
 };
 
+typedef struct Gw_Epoch {
+    epoch_t epoch;
+    //TODO: list of pending mon.replies
+    //bool               session_epoch_pending;        // pending map gw-epoch was incremented
+    Gw_Epoch(epoch_t epoch) : epoch(epoch){
+     // session_epoch_pending  = false;
+    };
+    Gw_Epoch():Gw_Epoch(0) {};
+}GwEpoch;
+
+//using GwEpoch               = struct GW_Epoch;
 using NvmeGwMap             = std::map<NvmeGwId, NvmeGwState>;
 using NvmeGwMetaDataMap     = std::map<NvmeGwId, NvmeGwMetaData>;
 using NvmeGwCreatedMap      = std::map<NvmeGwId, NvmeGwCreated>;

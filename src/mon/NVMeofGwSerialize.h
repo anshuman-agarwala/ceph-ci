@@ -176,7 +176,11 @@ inline std::ostream& operator<<(std::ostream& os, const NvmeGwCreatedMap value) 
 }
 
 inline std::ostream& operator<<(std::ostream& os, const NVMeofGwMap value) {
-    os << "NVMeofGwMap [ Created_gws: ";
+    os <<  "\n" <<  MODULE_PREFFIX << "== NVMeofGwMap [ Created_gws: ";
+
+    for (auto& group_gws: value.Gw_epoch) {
+            os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first << " } -> GW epoch: " << group_gws.second.epoch << " }";
+    }
     for (auto& group_gws: value.Created_gws) {
         os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first << " } -> { " << group_gws.second << " }";
     }
@@ -340,6 +344,7 @@ inline void encode(const NvmeGwCreatedMap& gws,  ceph::bufferlist &bl) {
         }
         encode(gw.second.nonce_map, bl);
         encode((uint32_t)gw.second.performed_full_startup, bl);
+        gw.second.addr_vect.encode(bl, CEPH_FEATURES_ALL);
     }
     ENCODE_FINISH(bl);
 }
@@ -381,6 +386,7 @@ inline void decode(NvmeGwCreatedMap& gws, ceph::buffer::list::const_iterator &bl
         uint32_t performed_startup;
         decode(performed_startup, bl);
         gw_created.performed_full_startup = (bool)performed_startup;
+        gw_created.addr_vect.decode(bl);
         gws[gw_name] = gw_created;
     }
     DECODE_FINISH(bl);
@@ -520,6 +526,46 @@ inline void decode(NvmeGwMetaDataMap& md, ceph::buffer::list::const_iterator &bl
         NvmeGwMetaData gw_meta;
         decode(gw_meta, bl);
         md[gw_id] = gw_meta;
+    }
+    DECODE_FINISH(bl);
+}
+
+
+inline void encode( const Gw_Epoch& gw_epoch,  ceph::bufferlist &bl)
+{
+   encode(gw_epoch.epoch, bl);
+}
+
+inline void encode(const std::map<NvmeGroupKey, GwEpoch>& gw_epoch,  ceph::bufferlist &bl) {
+    ENCODE_START(1, 1, bl);
+    encode ((uint32_t)gw_epoch.size(), bl); // number of groups
+    for (auto& group_epoch: gw_epoch) {
+        auto& group_key = group_epoch.first;
+        encode(group_key.first, bl); // pool
+        encode(group_key.second, bl); // group
+
+        encode(group_epoch.second, bl);
+    }
+    ENCODE_FINISH(bl);
+}
+
+inline void decode(Gw_Epoch& gw_epoch,  ceph::buffer::list::const_iterator &bl)
+{
+    decode(gw_epoch.epoch, bl);
+}
+
+inline void decode(std::map<NvmeGroupKey, GwEpoch>& gw_epoch, ceph::buffer::list::const_iterator &bl) {
+    gw_epoch.clear();
+    uint32_t ngroups;
+    DECODE_START(1, bl);
+    decode(ngroups, bl);
+    for(uint32_t i = 0; i<ngroups; i++){
+        std::string pool, group;
+        decode(pool, bl);
+        decode(group, bl);
+        GwEpoch gepoch;
+        decode(gepoch, bl);
+        gw_epoch[std::make_pair(pool, group)] = gepoch;
     }
     DECODE_FINISH(bl);
 }

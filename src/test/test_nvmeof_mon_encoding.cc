@@ -38,6 +38,7 @@ void test_NVMeofGwMap() {
   pending_map.cfg_add_gw("GW1" ,group_key);
   pending_map.cfg_add_gw("GW2" ,group_key);
   pending_map.cfg_add_gw("GW3" ,group_key);
+  pending_map.Gw_epoch[group_key].epoch = 5;
   NvmeNonceVector new_nonces = {"abc", "def","hij"};
   pending_map.Created_gws[group_key]["GW1"].nonce_map[1] = new_nonces;
   pending_map.Created_gws[group_key]["GW1"].performed_full_startup = true;

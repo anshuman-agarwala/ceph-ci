@@ -34,10 +34,10 @@ class NVMeofGwMap
 public:
     Monitor*                            mon           = NULL;
     epoch_t                             epoch         = 0;      // epoch is for Paxos synchronization  mechanizm
-    bool                                delay_propose = false;
 
     std::map<NvmeGroupKey, NvmeGwCreatedMap>  Created_gws;
     std::map<NvmeGroupKey, NvmeGwMetaDataMap> Gmetadata;
+    std::map<NvmeGroupKey, GwEpoch>           Gw_epoch;   // epoch for synchronization of GWs belong to the same  Group & Key
     void to_gmap(std::map<NvmeGroupKey, NvmeGwMap>& Gmap) const;
 
     int   cfg_add_gw                    (const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
@@ -64,8 +64,11 @@ private:
 
     int  get_timer   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid);
     void cancel_timer(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid);
-    void validate_gw_map(const NvmeGroupKey& group_key);
-
+    void validate_gw_map    (const NvmeGroupKey& group_key);
+    void increment_gw_epoch (const NvmeGroupKey& group_key);
+    void add_gw_ack_to_pending_list( const NvmeGroupKey& group_key/*todo op*/); // when inside  "prepare_beacon" new propose occurs monitor does
+                                                                        // not not send the "old" epoch to gw, it calls this function instead
+                                                                        // the pending list is processed when new epoch came from Paxos in "update_from_paxos"
 public:
     void encode(ceph::buffer::list &bl) const {
         using ceph::encode;
@@ -74,6 +77,7 @@ public:
 
         encode(Created_gws, bl); //Encode created GWs
         encode(Gmetadata, bl);
+        encode(Gw_epoch, bl);
         ENCODE_FINISH(bl);
     }
 
@@ -81,9 +85,9 @@ public:
         using ceph::decode;
         DECODE_START(1, bl);
         decode(epoch, bl);
-
         decode(Created_gws, bl);
         decode(Gmetadata, bl);
+        decode(Gw_epoch, bl);
         DECODE_FINISH(bl);
     }
 };
