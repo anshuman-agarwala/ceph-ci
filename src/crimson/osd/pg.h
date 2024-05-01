@@ -618,10 +618,6 @@ public:
     return eversion_t(get_osdmap_epoch(),
 		      projected_last_update.version);
   }
-  eversion_t get_next_version() {
-    return eversion_t(get_osdmap_epoch(),
-		      projected_last_update.version + 1);
-  }
   ShardServices& get_shard_services() final {
     return shard_services;
   }

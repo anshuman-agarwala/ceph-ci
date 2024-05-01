@@ -340,6 +340,7 @@ void PG::on_activate(interval_set<snapid_t> snaps)
   logger().debug("{}: {} snaps={}", *this, __func__, snaps);
   snap_trimq = std::move(snaps);
   projected_last_update = peering_state.get_info().last_update;
+  projected_last_update.version++;
 }
 
 void PG::on_replica_activate()

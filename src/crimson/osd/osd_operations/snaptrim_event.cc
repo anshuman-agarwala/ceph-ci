@@ -376,7 +376,7 @@ SnapTrimObjSubEvent::remove_or_update(
   }
 
   return seastar::do_with(ceph::os::Transaction{}, [=, this](auto &txn) {
-    osd_op_p.at_version = pg->get_next_version();
+    osd_op_p.at_version = pg->get_cur_version();
     auto ret = remove_or_update_iertr::now();
     if (new_snaps.empty()) {
       // remove clone from snapset
