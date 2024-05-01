@@ -6868,8 +6868,8 @@ void Client::tick()
       check_caps(in, CHECK_CAPS_NODELAY);
   }
 
-  if (!mount_aborted)
-    collect_and_send_metrics();
+  // if (!mount_aborted)
+  // collect_and_send_metrics();
 
   delay_put_inodes(is_unmounting());
   trim_cache(true);
