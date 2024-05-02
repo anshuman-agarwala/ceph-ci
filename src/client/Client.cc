@@ -2337,6 +2337,18 @@ static void reinit_mds_features(MetaSession *session,
   session->mds_metric_flags = std::move(m->metric_spec.metric_flags);
 }
 
+void Client::notify_mount_cond_or_connect_mds_target(MetaSession *session,
+						     mds_rank_t rank) {
+  ldout(cct, 10) << dendl;
+
+  if (is_unmounting()) {
+    mount_cond.notify_all();
+  } else {
+    connect_mds_targets(rank);
+  }
+  signal_context_list(session->waiting_for_open);
+}
+
 void Client::handle_client_session(const MConstRef<MClientSession>& m)
 {
   mds_rank_t from = mds_rank_t(m->get_source().num());
@@ -2362,6 +2374,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
 	// than the one before the upgrade - so, refresh the feature
 	// bits the client holds.
 	reinit_mds_features(session.get(), m);
+	notify_mount_cond_or_connect_mds_target(session.get(), from);
         return;
       }
       /*
@@ -2384,11 +2397,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
 
       renew_caps(session.get());
       session->state = MetaSession::STATE_OPEN;
-      if (is_unmounting())
-	mount_cond.notify_all();
-      else
-	connect_mds_targets(from);
-      signal_context_list(session->waiting_for_open);
+      notify_mount_cond_or_connect_mds_target(session.get(), from);
       break;
     }
 
