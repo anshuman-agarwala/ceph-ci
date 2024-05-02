@@ -472,6 +472,12 @@ void MDRequestImpl::print(ostream &out) const
   if (is_peer()) out << " peer_to mds." << peer_to_mds;
   if (client_request) out << " cr=" << client_request;
   if (peer_request) out << " sr=" << peer_request;
+  if (is_continuous()) {
+    out << " cnt";
+  }
+  if (want_bypass_freezing()) {
+    out << " wbf";
+  }
   out << ")";
 }
 
@@ -479,6 +485,7 @@ void MDRequestImpl::_dump(Formatter *f, bool has_mds_lock) const
 {
   std::lock_guard l(lock);
   f->dump_int("result", result);
+  f->dump_bool("want_bypass_freezing", want_bypass_freezing());
   f->dump_string("flag_point", _get_state_string());
   f->dump_object("reqid", reqid);
   if (client_request) {
@@ -569,6 +576,12 @@ void MDRequestImpl::_dump_op_descriptor(ostream& os) const
     // drat, it's triggered by a peer request, but we don't have a message
     // FIXME
     os << "rejoin:" << reqid;
+  }
+  if (is_continuous()) {
+    os << " continuous";
+  }
+  if (want_bypass_freezing()) {
+    os << " want_bypass_freezing";
   }
 }
 

@@ -660,6 +660,40 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         op = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'], rank=0)['op']
         self.assertEqual(op['result'], -1) # EPERM
 
+    def test_quiesce_dir_fragment(self):
+        """
+        That quiesce completes with fragmentation in the background.
+        """
+
+        # the config should cause continuous merge-split wars
+        self.config_set('mds', 'mds_bal_split_size', '1') # split anything larger than one item ....
+        self.config_set('mds', 'mds_bal_merge_size', '2') # and then merge if only one item ]:-}
+        self.config_set('mds', 'mds_bal_split_bits', '2')
+
+        self._configure_subvolume()
+
+        self.mount_a.run_shell_payload("mkdir -p root/sub1")
+        self.mount_a.write_file("root/sub1/file1", "file1")
+        self.mount_a.run_shell_payload("mkdir -p root/sub2")
+        self.mount_a.write_file("root/sub2/file2", "file2")
+
+        self.config_set('mds', 'mds_freeze_delay_ms', '15000') # fragments will spend at least 15 seconds freezing
+        
+        sleep_for = 30
+        log.info(f"Waiting {sleep_for} seconds to warm up the balancer")
+        time.sleep(30)
+
+        for _ in range(15):
+            root = f"{self.subvolume}/root"
+            J = self.fs.rank_tell("quiesce", "path", root)
+            log.debug(f"{J}")
+            reqid = self._reqid_tostr(J['op']['reqid'])
+            # validate that we can quiesce in under 5 seconds despite the 15 seconds freezing
+            self._wait_for_quiesce_complete(reqid, timeout=5)
+            self._verify_quiesce(root=root)
+            self.fs.kill_op(reqid, rank=0)
+        
+
     def test_quiesce_authpin_wait(self):
         """
         That a quiesce_inode op with outstanding remote authpin requests can be killed.
