@@ -1478,6 +1478,9 @@ private:
   void update_io_stat_read(utime_t latency);
   void update_io_stat_write(utime_t latency);
 
+  void notify_mount_cond_or_connect_mds_target(MetaSession *session,
+					       mds_rank_t rank);
+
   uint32_t deleg_timeout = 0;
 
   client_switch_interrupt_callback_t switch_interrupt_cb = nullptr;
