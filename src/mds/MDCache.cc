@@ -9663,8 +9663,7 @@ MDRequestRef MDCache::request_start(const cref_t<MClientRequest>& req)
   params.all_read = req->get_recv_complete_stamp();
   params.dispatched = req->get_dispatch_stamp();
 
-  MDRequestRef mdr =
-      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params*>(&params);
+  MDRequestRef mdr = mds->op_tracker.create_request<MDRequestImpl>(&params);
   active_requests[params.reqid] = mdr;
   mdr->set_op_stamp(req->get_stamp());
   dout(7) << "request_start " << *mdr << dendl;
@@ -9683,8 +9682,7 @@ MDRequestRef MDCache::request_start_peer(metareqid_t ri, __u32 attempt, const cr
   params.throttled = m->get_throttle_stamp();
   params.all_read = m->get_recv_complete_stamp();
   params.dispatched = m->get_dispatch_stamp();
-  MDRequestRef mdr =
-      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params*>(&params);
+  MDRequestRef mdr = mds->op_tracker.create_request<MDRequestImpl>(&params);
   ceph_assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start_peer " << *mdr << " by mds." << by << dendl;
@@ -9704,17 +9702,19 @@ MDRequestRef MDCache::request_start_internal(int op)
   params.internal_op = op;
 
   switch (op) {
-    case CEPH_MDS_OP_QUIESCE_PATH:
-    case CEPH_MDS_OP_QUIESCE_INODE:
-    case CEPH_MDS_OP_LOCK_PATH:
-      params.continuous = true;
-      break;
-    default:
-      params.continuous = false;
-      break;
+  case CEPH_MDS_OP_QUIESCE_PATH:
+  case CEPH_MDS_OP_QUIESCE_INODE:
+    params.bypass_freezing = true;
+    // fallthrough;
+  case CEPH_MDS_OP_LOCK_PATH:
+    params.continuous = true;
+    break;
+  default:
+    params.continuous = false;
+    break;
   }
 
-  MDRequestRef mdr = mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params*>(&params);
+  MDRequestRef mdr = mds->op_tracker.create_request<MDRequestImpl>(&params);
 
   if (active_requests.count(mdr->reqid)) {
     auto& _mdr = active_requests[mdr->reqid];

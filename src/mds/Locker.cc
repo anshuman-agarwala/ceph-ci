@@ -424,7 +424,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
       continue;
     }
     int err = 0;
-    if (!object->can_auth_pin(&err, skip_quiesce)) {
+    if (!object->can_auth_pin(&err, mdr->want_bypass_freezing())) {
       if (mdr->lock_cache) {
 	CDir *dir;
 	if (CInode *in = dynamic_cast<CInode*>(object)) {
@@ -521,7 +521,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
       }
       if (auth_pin_nonblocking)
 	req->mark_nonblocking();
-      if (skip_quiesce)
+      if (mdr->want_bypass_freezing())
 	req->mark_bypassfreezing();
       else if (!mdr->locks.empty())
 	req->mark_notify_blocking();

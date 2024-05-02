@@ -280,6 +280,13 @@ public:
   bool killed = false;
   bool dead = false;
 
+  bool want_bypass_freezing() const {
+    return bypass_freezing;
+  }
+  void mark_want_bypass_freezing(bool want = true) {
+    bypass_freezing = want;
+  }
+
   // for applying projected inode changes
   std::set<MDSCacheObject*> projected_nodes;
   std::list<ScatterLock*> updated_locks;
@@ -288,6 +295,7 @@ public:
   std::list<std::pair<CDentry*,version_t> > dirty_cow_dentries;
 
 private:
+  bool bypass_freezing = false;
   utime_t mds_stamp; ///< mds-local timestamp (real time)
   utime_t op_stamp;  ///< op timestamp (client provided)
 };
@@ -379,6 +387,9 @@ struct MDRequestImpl : public MutationImpl {
     bool is_continuous() const {
       return continuous;
     }
+    bool want_bypass_freezing() const {
+      return bypass_freezing;
+    }
     metareqid_t reqid;
     __u32 attempt = 0;
     ceph::cref_t<MClientRequest> client_req;
@@ -388,6 +399,7 @@ struct MDRequestImpl : public MutationImpl {
     utime_t throttled, all_read, dispatched;
     int internal_op = -1;
     bool continuous = false;
+    bool bypass_freezing = false;
   };
   MDRequestImpl(const Params* params, OpTracker *tracker) :
     MutationImpl(tracker, params->initiated,
@@ -405,7 +417,10 @@ struct MDRequestImpl : public MutationImpl {
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin(bool clear_inode=false);
   void set_remote_frozen_auth_pin(CInode *inode);
-  bool can_auth_pin(MDSCacheObject *object, bool bypassfreezing=false);
+  bool can_auth_pin(MDSCacheObject *object, bool bypassfreezing);
+  bool can_auth_pin(MDSCacheObject *object) {
+    return can_auth_pin(object, want_bypass_freezing());
+  }
   void drop_local_auth_pins();
   void set_ambiguous_auth(CInode *inode);
   void clear_ambiguous_auth();
