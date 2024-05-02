@@ -11807,11 +11807,29 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
 void MDCache::fragment_freeze_dirs(const std::vector<CDir*>& dirs)
 {
   bool any_subtree = false, any_non_subtree = false;
+
+  auto delay_ms = g_conf().get_val<uint64_t>("mds_freeze_delay_ms");
+
   for (const auto& dir : dirs) {
     dir->auth_pin(dir);  // until we mark and complete them
+
+    if (delay_ms > 0) {
+      auto delay = std::chrono::milliseconds(delay_ms);
+      dout(3) << __func__ << ": adding a dummy authpin to delay freezing by " << delay << "dir: " << *dir << dendl;
+      dir->auth_pin(dir);
+      std::ostringstream done_message_stream;
+      done_message_stream << __func__ << ": removing the dummy authpin for " << *dir;
+      mds->timer.add_event_after(delay, new LambdaContext(
+        [dir, done_message=done_message_stream.str(), this] {
+          dout(3) << done_message << dendl;
+          dir->auth_unpin(dir);
+        }
+      ));
+    }
+
     dir->state_set(CDir::STATE_FRAGMENTING);
     dir->freeze_dir();
-    ceph_assert(dir->is_freezing_dir());
+    ceph_assert(dir->is_freezing_dir() || dir->is_frozen_dir());
 
     if (dir->is_subtree_root())
       any_subtree = true;

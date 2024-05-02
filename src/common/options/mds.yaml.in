@@ -419,6 +419,14 @@ options:
   services:
   - mds
   with_legacy: true
+# debugging long freeze
+- name: mds_freeze_delay_ms
+  type: uint
+  level: dev
+  desc: minimum time in milliseconds that any fragment will spend freezing
+  default: 0
+  services:
+  - mds
 # collapse N-client health metrics to a single 'many'
 - name: mds_health_summarize_threshold
   type: int
