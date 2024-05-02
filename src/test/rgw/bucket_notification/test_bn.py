@@ -304,6 +304,9 @@ class AMQPReceiver(object):
         self.events = []
         return tmp
 
+    def close(self, task):
+        stop_amqp_receiver(self, task)
+
 
 def amqp_receiver_thread_runner(receiver):
     """main thread function for the amqp receiver"""
@@ -400,6 +403,9 @@ class KafkaReceiver(object):
         """verify stored s3 records agains a list of keys"""
         verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, expected_sizes=expected_sizes, etags=etags)
         self.events = []
+
+    def close(self, task):
+        stop_kafka_receiver(self, task)
 
 def kafka_receiver_thread_runner(receiver):
     """main thread function for the kafka receiver"""
@@ -1294,12 +1300,7 @@ def notification_push(endpoint_type, conn, account=None):
     topic_conf.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
-    if endpoint_type == 'http':
-        receiver.close()
-    elif endpoint_type == 'kafka':
-        stop_kafka_receiver(receiver, task)
-    else:
-        stop_amqp_receiver(receiver, task)
+    receiver.close(task)
 
 
 @attr('amqp_test')
@@ -3710,12 +3711,12 @@ def persistent_notification(endpoint_type, conn, account=None):
         # amqp broker guarantee ordering
         exact_match = True
     elif endpoint_type == 'kafka':
-        # start amqp receiver
+        # start kafka receiver
         task, receiver = create_kafka_receiver_thread(topic_name)
         task.start()
         endpoint_address = 'kafka://' + host
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'+'&persistent=true'
-        # amqp broker guarantee ordering
+        # kafka broker guarantee ordering
         exact_match = True
     else:
         return SkipTest('Unknown endpoint type: ' + endpoint_type)
@@ -3776,12 +3777,7 @@ def persistent_notification(endpoint_type, conn, account=None):
     topic_conf.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
-    if endpoint_type == 'http':
-        receiver.close()
-    elif endpoint_type == 'kafka':
-        stop_kafka_receiver(receiver, task)
-    else:
-        stop_amqp_receiver(receiver, task)
+    receiver.close(task)
 
 
 @attr('http_test')
