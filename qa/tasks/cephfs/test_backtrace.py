@@ -100,3 +100,26 @@ class TestBacktrace(CephFSTestCase):
         # we don't update the layout in all the old pools whenever it changes
         old_pool_layout = self.fs.read_layout(file_ino, pool=old_data_pool_name)
         self.assertEqual(old_pool_layout['object_size'], 4194304)
+
+    def test_backtrace_flush_on_deleted_data_pool(self):
+        """
+        that the MDS does not go read-only when handling backtrace update errors
+        when backtrace updates are batched and flushed to RADOS (during journal trim).
+        """
+        extra_data_pool_name_1 = self.fs.get_data_pool_name() + '_extra1'
+        self.fs.add_data_pool(extra_data_pool_name_1)
+
+        self.mount_a.run_shell(["mkdir", "dir_x"])
+        self.mount_a.setfattr("dir_x", "ceph.dir.layout.pool", extra_data_pool_name_1)
+        self.mount_a.run_shell(["touch", "dir_x/file_x"])
+        self.fs.flush()
+
+        extra_data_pool_name_2 = self.fs.get_data_pool_name() + '_extra2'
+        self.fs.add_data_pool(extra_data_pool_name_2)
+        self.mount_a.setfattr("dir_x/file_x", "ceph.file.layout.pool", extra_data_pool_name_2)
+        self.mount_a.run_shell(["setfattr", "-x", "ceph.dir.layout.pool", "dir_x"])
+        self.fs.flush()
+
+        # quick test to check if the mds has handled backtrace update failure
+        # on the deleted data pool without going read-only.
+        self.mount_a.run_shell(["mkdir", "dir_y"])
