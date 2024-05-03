@@ -25,6 +25,11 @@
 #include "crimson/common/smp_helpers.h"
 #include "crimson/common/log.h"
 
+#define PLOG(phase_ptr, op_id, msg)					\
+  crimson::get_logger(ceph_subsys_osd).info(				\
+    "PLOG: {} {} {}: {}", (phase_ptr)->get_type_name(), (void*)(phase_ptr), (op_id), (msg));
+  
+
 namespace ceph {
   class Formatter;
 }
@@ -57,7 +62,6 @@ public:
   void dump(ceph::Formatter *f) const;
   virtual ~Blocker() = default;
 
-private:
   virtual void dump_detail(ceph::Formatter *f) const = 0;
   virtual const char *get_type_name() const = 0;
 };
@@ -238,7 +242,6 @@ public:
       std::forward<Args>(args)..., static_cast<const T&>(*this));
   }
 
-private:
   const char *get_type_name() const final {
     return static_cast<const T*>(this)->type_name;
   }
@@ -505,22 +508,17 @@ class PipelineHandle {
   std::optional<seastar::future<>>
   do_enter_maybe_sync(T &stage, typename T::BlockingEvent::template Trigger<OpT>&& t) {
     if constexpr (!T::is_enter_sync) {
-      crimson::get_logger(ceph_subsys_osd).info(
-          "do_enter_maybe_sync {}: async enter...",
-          t.get_op().get_id());
+      PLOG(&stage, t.get_op().get_id(), "PipelineHandle::do_enter_maybe_sync async enter");
       auto fut = t.maybe_record_blocking(stage.enter(t), stage);
       return std::move(fut).then(
-        [this, t=std::move(t)](auto &&barrier_ref) {
-        crimson::get_logger(ceph_subsys_osd).info(
-            "do_enter_maybe_sync {}: async entered",
-            t.get_op().get_id());
+        [this, &stage, t=std::move(t)](auto &&barrier_ref) {
+	PLOG(&stage, t.get_op().get_id(), "PipelineHandle::do_enter_maybe_sync async entered");
         exit();
         barrier = std::move(barrier_ref);
         return seastar::now();
       });
     } else {
-      crimson::get_logger(ceph_subsys_osd).info(
-          "do_enter_maybe_sync {}: sync enter(ed)", t.get_op().get_id());
+      PLOG(&stage, t.get_op().get_id(), "PipelineHandle::do_enter_maybe_sync sync enter(ed)");
       auto barrier_ref = stage.enter(t);
       exit();
       barrier = std::move(barrier_ref);
@@ -534,11 +532,10 @@ class PipelineHandle {
     assert(stage.core == seastar::this_shard_id());
     auto wait_fut = wait_barrier();
     if (wait_fut.has_value()) {
-      crimson::get_logger(ceph_subsys_osd).info(
-          "enter_maybe_sync {}: async exit...",
-          t.get_op().get_id());
+      PLOG(&stage, t.get_op().get_id(), "PipelineHandle::enter_maybe_sync sync wait barrier");
       return wait_fut.value(
       ).then([this, &stage, t=std::move(t)]() mutable {
+	PLOG(&stage, t.get_op().get_id(), "PipelineHandle::enter_maybe_sync sync wait barrier complete");
         auto ret = do_enter_maybe_sync<OpT, T>(stage, std::move(t));
         if constexpr (!T::is_enter_sync) {
           return std::move(ret.value());
@@ -661,14 +658,10 @@ public:
 
   template <class TriggerT>
   seastar::future<PipelineExitBarrierI::Ref> enter(TriggerT& t) {
-    crimson::get_logger(ceph_subsys_osd).info(
-        "exclusive enter {}: wait...",
-        t.get_op().get_id());
+    PLOG(this, t.get_op().get_id(), "OrderedExclusivePhaseT::ExitBarrier::enter wait lock");
     waiting++;
     return mutex.lock().then([this, op_id=t.get_op().get_id()] {
-      crimson::get_logger(ceph_subsys_osd).info(
-          "exclusive enter {}: done",
-          op_id);
+      PLOG(this, op_id, "OrderedExclusivePhaseT::ExitBarrier::enter wait lock complete");
       ceph_assert_always(waiting > 0);
       --waiting;
       set_held_by(op_id);
@@ -737,10 +730,8 @@ private:
       TriggerT& trigger) : phase(&phase), barrier(std::move(barrier)), trigger(trigger) {}
 
     std::optional<seastar::future<>> wait() final {
-      crimson::get_logger(ceph_subsys_osd).info(
-          "concurrent exit barrier {}: wait...",
-          trigger.get_op().get_id());
       assert(phase);
+      PLOG(phase, trigger.get_op().get_id(), "OrderedConcurrentPhaseT::ExitBarrier::wait");
       assert(barrier);
       auto ret = std::move(*barrier);
       barrier = std::nullopt;
@@ -750,24 +741,18 @@ private:
     void exit() final {
       auto op_id = trigger.get_op().get_id();
       if (barrier) {
-        crimson::get_logger(ceph_subsys_osd).info(
-            "concurrent exit barrier {}: async exit...",
-            op_id);
         assert(phase);
+	PLOG(phase, trigger.get_op().get_id(), "OrderedConcurrentPhaseT::ExitBarrier::exit waiting barrier");
         assert(phase->core == seastar::this_shard_id());
         std::ignore = std::move(*barrier
         ).then([phase=this->phase, op_id] {
-          crimson::get_logger(ceph_subsys_osd).info(
-              "concurrent exit barrier {}: async unlock",
-              op_id);
+	  PLOG(phase, op_id, "OrderedConcurrentPhaseT::ExitBarrier::exit wait barrier complete, unlocking");
           phase->mutex.unlock();
         });
         barrier = std::nullopt;
         phase = nullptr;
       } else if (phase) {
-        crimson::get_logger(ceph_subsys_osd).info(
-            "concurrent exit barrier {}: sync unlock",
-            op_id);
+	PLOG(phase, op_id, "OrderedConcurrentPhaseT::ExitBarrier::exit wait unlocking");
         assert(phase->core == seastar::this_shard_id());
         phase->mutex.unlock();
         phase = nullptr;
@@ -784,9 +769,13 @@ public:
 
   template <class TriggerT>
   PipelineExitBarrierI::Ref enter(TriggerT& t) {
-    crimson::get_logger(ceph_subsys_osd).info(
-        "Concurrent exit barrier {}: locking", t.get_op().get_id());
-    return std::make_unique<ExitBarrier<TriggerT>>(*this, mutex.lock(), t);
+    PLOG(this, t.get_op().get_id(), "OrderedConcurrentPhaseT::enter calling lock");
+    return std::make_unique<ExitBarrier<TriggerT>>(
+      *this,
+      mutex.lock().then([this, op_id=t.get_op().get_id()] {
+	PLOG(this, op_id, "OrderedConcurrentPhaseT::enter lock future resolved");
+      }),
+      t);
   }
 
 private:
