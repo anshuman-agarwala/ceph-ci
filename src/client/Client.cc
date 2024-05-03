@@ -2367,14 +2367,6 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
       if (session->state == MetaSession::STATE_OPEN) {
         ldout(cct, 10) << "mds." << from << " already opened, ignore it"
                        << dendl;
-	// The MDS could send a client_session(open) message even when
-	// the session state is STATE_OPEN. Normally, its fine to
-	// ignore this message, but, if the MDS sent this message just
-	// after it got upgraded, the MDS feature bits could differ
-	// than the one before the upgrade - so, refresh the feature
-	// bits the client holds.
-	reinit_mds_features(session.get(), m);
-	notify_mount_cond_or_connect_mds_target(session.get(), from);
         return;
       }
       /*
