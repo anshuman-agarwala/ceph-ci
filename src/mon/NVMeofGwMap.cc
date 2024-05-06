@@ -69,6 +69,7 @@ int  NVMeofGwMap::cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_ke
             NvmeGwCreated gw_created(i);
             Created_gws[group_key][gw_id] = gw_created;
             dout(4) << __func__ << "Created GWS:  " << Created_gws  <<  dendl;
+            //increment_gw_epoch(group_key);
             return 0;
         }
     }
@@ -103,6 +104,13 @@ int NVMeofGwMap::cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_
     return -EINVAL;
 }
 
+void  NVMeofGwMap::gw_performed_startup (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  bool &propose_pending)
+{
+    dout(4) << "GW  prepared the full startup " << gw_id << dendl;
+    Created_gws[group_key][gw_id].performed_full_startup = true;
+    propose_pending = true;
+    increment_gw_epoch( group_key);
+}
 
 int NVMeofGwMap::process_gw_map_gw_down(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
                                             bool &propose_pending) {

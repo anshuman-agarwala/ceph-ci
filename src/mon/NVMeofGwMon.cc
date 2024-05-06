@@ -186,9 +186,9 @@ void NVMeofGwMon::check_sub(Subscription *sub)
                       dout(4) << "Send unicast map to GW "<< gw_id << dendl;
                       NVMeofGwMap unicast_map;
                       //TODO - maybe send multicast map  group_key map to this sub . need to pass all gw_ids of the group_key map
-                      if(map.Created_gws[group_key][gw_id].availability != GW_AVAILABILITY_E::GW_CREATED){
-                         unicast_map.Created_gws[group_key][gw_id] = map.Created_gws[group_key][gw_id];// respond with a map slice correspondent to the same GW
-                      }
+                      //if(map.Created_gws[group_key][gw_id].availability != GW_AVAILABILITY_E::GW_CREATED){
+                       unicast_map.Created_gws[group_key][gw_id] = map.Created_gws[group_key][gw_id];// respond with a map slice correspondent to the same GW
+                      //}
                       unicast_map.epoch = map.Gw_epoch[group_key].epoch;
                       sub->session->con->send_message2(make_message<MNVMeofGwMap>(unicast_map));
                       sub->next = map.Gw_epoch[group_key].epoch + 1;
@@ -461,8 +461,8 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op){
            dout(10) << "Warning: GW " << gw_id << " group_key " << group_key << " was not found in the  map.Created_gws "<< map.Created_gws <<dendl;
         }
         else {
-            dout(4) << "GW  prepares the full startup " << gw_id << dendl;
-            pending_map.Created_gws[group_key][gw_id].performed_full_startup = true;
+            pending_map.gw_performed_startup(gw_id, group_key, propose);
+            pending_map.Created_gws[group_key][gw_id].addr_vect = entity_addrvec_t(con->get_peer_addr());
         }
         goto set_propose;
     }
@@ -482,7 +482,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op){
                //&& avail == GW_AVAILABILITY_E::GW_AVAILABLE
              ){
                ack_map.Created_gws[group_key][gw_id] = pending_map.Created_gws[group_key][gw_id];
-               ack_map.epoch = map.epoch;
+               ack_map.epoch = map.Gw_epoch[group_key].epoch;
                dout(1) << " Force gw to exit: Sending ack_map to GW: " << gw_id << dendl;
                auto msg = make_message<MNVMeofGwMap>(ack_map);
                mon.send_reply(op, msg.detach());

@@ -42,6 +42,7 @@ public:
 
     int   cfg_add_gw                    (const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
     int   cfg_delete_gw                 (const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+    void  gw_performed_startup          (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending);
     void  process_gw_map_ka             (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, epoch_t& last_osd_epoch,  bool &propose_pending);
     int   process_gw_map_gw_down        (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending);
     void  update_active_timers          (bool &propose_pending);
