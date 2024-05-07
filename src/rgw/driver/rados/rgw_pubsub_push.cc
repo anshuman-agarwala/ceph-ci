@@ -56,6 +56,7 @@ bool get_bool(const RGWHTTPArgs& args, const std::string& name, bool default_val
 }
 
 static std::unique_ptr<RGWHTTPManager> s_http_manager;
+static std::shared_mutex s_http_manager_mutex;
 
 class RGWPubSubHTTPEndpoint : public RGWPubSubEndpoint {
 private:
@@ -88,6 +89,7 @@ public:
   }
 
   int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
+    std::shared_lock lock(s_http_manager_mutex);
     if (!s_http_manager) {
       ldout(cct, 1) << "ERROR: send failed. http endpoint manager not running" << dendl;
       return -ESRCH;
@@ -406,12 +408,14 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
 }
 
 bool init_http_manager(CephContext* cct) {
+  std::unique_lock lock(s_http_manager_mutex);
   if (s_http_manager) return false;
   s_http_manager = std::make_unique<RGWHTTPManager>(cct);
   return (s_http_manager->start() == 0);
 }
 
 void shutdown_http_manager() {
+  std::unique_lock lock(s_http_manager_mutex);
   if (s_http_manager) {
     s_http_manager->stop();
     s_http_manager.reset();
