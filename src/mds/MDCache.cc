@@ -12130,7 +12130,7 @@ void MDCache::dispatch_fragment_dir(const MDRequestRef& mdr)
       // prevent a racing gather on any other scatterlocks too
       lov.lock_scatter_gather(&diri->nestlock);
       lov.lock_scatter_gather(&diri->filelock);
-      if (mds->locker->acquire_locks(mdr, lov, NULL, {}, true)) {
+      if (mds->locker->acquire_locks(mdr, lov, nullptr,  true)) {
         mdr->locking_state |= MutationImpl::ALL_LOCKED;
       } else {
         if (!mdr->aborted) {
@@ -13702,9 +13702,36 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
     MutationImpl::LockOpVec lov;
 
     lov.add_xlock(&in->quiescelock); /* !! */
-    lov.add_rdlock(&in->policylock); /* for F_QUIESCE_BLOCK test */
+
+    // we want to acquire the exclusive quiesce lock before we authpin,
+    // thus we won't interfere with an ongoing operation
+    // which may require this inode frozen, e.g. the rename op
+    if (!mds->locker->acquire_locks(mdr, lov)) {
+      ceph_assert(!mdr->is_auth_pinned(in));
+      return;
+    }
+  
+    // We are holding the quiesce xlock to mark the node as quiesced
+    // This prevents issuing of new W capabilities to clients, and
+    // makes the check of currently issued caps below safe
 
     if (in->is_auth()) {
+      // the quiesce should keep a forced authpin, unless we're frozen
+      // In the latter case, we must wait for the unfreeze
+      if (!mdr->can_auth_pin(in, true)) {
+        dout(10) << __func__ << ": can't auth_pin, dropping the quiesce lock and waiting for unfreeze " << *in << dendl;
+        mds->locker->drop_lock(mdr.get(), &in->quiescelock); 
+        // We need to see if we are failing due to fragments merging.
+        // If that's the case, we should abort the corresponding operation,
+        // otherwise we are risking to deadlock if some of the fragments
+        // are frozen and some are quiesced
+        quiesce_overdrive_merging(in->get_projected_parent_dir());
+        in->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_MDS_RetryRequest(this, mdr));
+        return;
+      }
+
+      mdr->auth_pin(in);
+
       if (splitauth) {
         // xlock the file to let the Fb clients stay with buffered writes.
         // While this will unnecesarily revoke rd caps, it's not as
@@ -13733,13 +13760,10 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
       // replica will follow suite and move to LOCK_LOCK state
       // as a result of the auth taking the above locks.
     }
+  
+    lov.add_rdlock(&in->policylock); /* for F_QUIESCE_BLOCK test */
 
-    if (!mds->locker->acquire_locks(mdr, lov, nullptr, {in}, false, true)) {
-      // We need to see if we are failing due to fragments merging.
-      // If that's the case, we should abort the corresponding operation,
-      // otherwise we are risking to deadlock if some of the fragments
-      // are frozen and some are quiesced
-      quiesce_overdrive_merging(in->get_projected_parent_dir());
+    if (!mds->locker->acquire_locks(mdr, lov)) {
       return;
     }
     mdr->locking_state |= MutationImpl::ALL_LOCKED;
@@ -14073,7 +14097,7 @@ void MDCache::dispatch_lock_path(const MDRequestRef& mdr)
     }
   }
 
-  if (!mds->locker->acquire_locks(mdr, lov, nullptr, {in}, false, true)) {
+  if (!mds->locker->acquire_locks(mdr, lov)) {
     return;
   }
 
