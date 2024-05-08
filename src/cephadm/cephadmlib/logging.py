@@ -231,46 +231,69 @@ def cephadm_init_logging(
     logger.debug('%s\ncephadm %s' % ('-' * 80, args))
 
 
-def write_cephadm_logrotate_config(ctx: CephadmContext) -> None:
-    if not os.path.exists(ctx.logrotate_dir + '/cephadm'):
+def write_cephadm_logrotate_config(
+    ctx: CephadmContext,
+    custom_template: Optional[str] = None,
+    overwrite: bool = False,
+) -> None:
+    if not os.path.exists(ctx.logrotate_dir + '/cephadm') or overwrite:
         with open(ctx.logrotate_dir + '/cephadm', 'w') as f:
-            cephadm_logrotate_config = templating.render(
-                ctx, templating.Templates.cephadm_logrotate_config
-            )
+            if custom_template:
+                cephadm_logrotate_config = templating.render_str(
+                    ctx, custom_template
+                )
+            else:
+                cephadm_logrotate_config = templating.render(
+                    ctx, templating.Templates.cephadm_logrotate_config
+                )
             f.write(cephadm_logrotate_config)
 
 
-def write_cluster_logrotate_config(ctx: CephadmContext, fsid: str) -> None:
+def write_cluster_logrotate_config(
+    ctx: CephadmContext,
+    fsid: str,
+    custom_template: Optional[str] = None,
+    overwrite: bool = False,
+) -> None:
     # logrotate for the cluster
-    with write_new(ctx.logrotate_dir + f'/ceph-{fsid}', perms=None) as f:
-        """
-        See cephadm/cephadmlib/templates/cluster.logrotate.config.j2 to
-        get a better idea what this comment is referring to
+    if not os.path.exists(ctx.logrotate_dir + f'/ceph-{fsid}') or overwrite:
+        with write_new(ctx.logrotate_dir + f'/ceph-{fsid}', perms=None) as f:
+            """
+            See cephadm/cephadmlib/templates/cluster.logrotate.config.j2 to
+            get a better idea what this comment is referring to
 
-        This is a bit sloppy in that the killall/pkill will touch all ceph daemons
-        in all containers, but I don't see an elegant way to send SIGHUP *just* to
-        the daemons for this cluster.  (1) systemd kill -s will get the signal to
-        podman, but podman will exit.  (2) podman kill will get the signal to the
-        first child (bash), but that isn't the ceph daemon.  This is simpler and
-        should be harmless.
-        """
-        targets: List[str] = [
-            'ceph-mon',
-            'ceph-mgr',
-            'ceph-mds',
-            'ceph-osd',
-            'ceph-fuse',
-            'radosgw',
-            'rbd-mirror',
-            'cephfs-mirror',
-            'tcmu-runner',
-        ]
+            This is a bit sloppy in that the killall/pkill will touch all ceph daemons
+            in all containers, but I don't see an elegant way to send SIGHUP *just* to
+            the daemons for this cluster.  (1) systemd kill -s will get the signal to
+            podman, but podman will exit.  (2) podman kill will get the signal to the
+            first child (bash), but that isn't the ceph daemon.  This is simpler and
+            should be harmless.
+            """
+            targets: List[str] = [
+                'ceph-mon',
+                'ceph-mgr',
+                'ceph-mds',
+                'ceph-osd',
+                'ceph-fuse',
+                'radosgw',
+                'rbd-mirror',
+                'cephfs-mirror',
+                'tcmu-runner',
+            ]
 
-        logrotate_config = templating.render(
-            ctx,
-            templating.Templates.cluster_logrotate_config,
-            fsid=fsid,
-            targets=targets,
-        )
+            if custom_template:
+                logrotate_config = templating.render_str(
+                    ctx,
+                    custom_template,
+                    fsid=fsid,
+                    targets=targets,
+                )
+            else:
+                logrotate_config = templating.render(
+                    ctx,
+                    templating.Templates.cluster_logrotate_config,
+                    fsid=fsid,
+                    targets=targets,
+                )
 
-        f.write(logrotate_config)
+            f.write(logrotate_config)
