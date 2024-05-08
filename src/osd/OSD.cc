@@ -499,6 +499,8 @@ void OSDService::shutdown_reserver()
 
 void OSDService::shutdown()
 {
+  pg_timer.stop();
+
   mono_timer.suspend();
 
   {
@@ -535,6 +537,8 @@ void OSDService::init()
 
   if (cct->_conf->osd_recovery_delay_start)
     defer_recovery(cct->_conf->osd_recovery_delay_start);
+
+  pg_timer.run();
 }
 
 void OSDService::final_init()
@@ -9402,7 +9406,8 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
 			 q.query.epoch_sent,
 			 osdmap->get_epoch(),
 			 empty,
-			 PastIntervals()};
+			 PastIntervals(),
+			 PG_FEATURE_CLASSIC_ALL};
       m = new MOSDPGNotify2(spg_t{pgid.pgid, q.query.from},
 			    std::move(notify));
     }
