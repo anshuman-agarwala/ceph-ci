@@ -39,6 +39,7 @@ NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
   osdmap_epoch(0),
   gwmap_epoch(0),
   last_map_time(std::chrono::steady_clock::now()),
+  created(true),
   monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(g_ceph_context, "async", entity_name_t::CLIENT(-1), "client", getpid())),
   objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
@@ -218,8 +219,14 @@ void NVMeofGwMonitorClient::send_beacon()
   auto group_key = std::make_pair(pool, group);
   NvmeGwState old_gw_state;
   // if already got gateway state in the map
-  if (get_gw_state("old map", map, group_key, name, old_gw_state))
-    gw_availability = ok ? GW_AVAILABILITY_E::GW_AVAILABLE : GW_AVAILABILITY_E::GW_UNAVAILABLE;
+  if (get_gw_state("old map", map, group_key, name, old_gw_state)) {
+    // ensure first beacon is "created"
+    if (created) {
+      created = false;
+    } else {
+      gw_availability = ok ? GW_AVAILABILITY_E::GW_AVAILABLE : GW_AVAILABILITY_E::GW_UNAVAILABLE;
+    }
+  }
   dout(0) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
     " osdmap_epoch " << osdmap_epoch << " gwmap_epoch " << gwmap_epoch << dendl;
   auto m = ceph::make_message<MNVMeofGwBeacon>(
@@ -295,6 +302,9 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
   auto got_old_gw_state = get_gw_state("old map", map, group_key, name, old_gw_state); 
   NvmeGwState new_gw_state;
   auto got_new_gw_state = get_gw_state("new map", new_map, group_key, name, new_gw_state); 
+
+  // ensure that the gateway state has not vanished
+  ceph_assert(got_new_gw_state || !got_old_gw_state);
 
   if (!got_old_gw_state) {
     if (!got_new_gw_state) {

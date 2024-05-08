@@ -37,10 +37,11 @@ private:
   std::string server_key;
   std::string server_cert;
   std::string client_cert;
-  epoch_t     osdmap_epoch; // last awaited osdmap_epoch
-  epoch_t     gwmap_epoch;  // last received gw map epoch
+  epoch_t     osdmap_epoch;  // last awaited osdmap_epoch
+  epoch_t     gwmap_epoch;   // last received gw map epoch
   std::chrono::time_point<std::chrono::steady_clock>
               last_map_time; // used to panic on disconnect
+  bool        created;       // flag to ensure first beacon is "created"
 
 protected:
   ceph::async::io_context_pool poolctx;
