@@ -2238,8 +2238,10 @@ RadosObject::~RadosObject()
     delete rados_ctx;
 }
 
-int RadosObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
+int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
+  RGWObjState **pstate{nullptr};
+
   int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), pstate, &manifest, follow_olh, y);
   if (ret < 0) {
     return ret;
