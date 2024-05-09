@@ -8286,7 +8286,7 @@ void MDCache::dispatch(const cref_t<Message> &m)
 
 int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
                            const filepath& path, int flags,
-                           vector<CDentry*> *pdnvec, CInode **pin)
+                           vector<CDentry*> *pdnvec, CInode **pin, CDir **pdir)
 {
   bool discover = (flags & MDS_TRAVERSE_DISCOVER);
   bool forward = !discover;
@@ -8352,6 +8352,8 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
     pdnvec->clear();
   if (pin)
     *pin = cur;
+  if (pdir)
+    *pdir = nullptr;
 
   CInode *target_inode = nullptr;
   MutationImpl::LockOpVec lov;
@@ -8398,6 +8400,9 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
     // open dir
     frag_t fg = cur->pick_dirfrag(path[depth]);
     CDir *curdir = cur->get_dirfrag(fg);
+    if (pdir) {
+      *pdir = curdir;
+    }
     if (!curdir) {
       if (cur->is_auth()) {
         // parent dir frozen_dir?
@@ -8423,6 +8428,9 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
       }
     }
     ceph_assert(curdir);
+    if (pdir) {
+      *pdir = curdir;
+    }
 
 #ifdef MDS_VERIFY_FRAGSTAT
     if (curdir->is_complete())
@@ -12070,7 +12078,7 @@ void MDCache::fragment_frozen(const MDRequestRef& mdr, int r)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
-  if (it == fragments.end() || it->second.mdr != mdr) {
+  if (it == fragments.end() || it->second.mdr != mdr || r < 0) {
     dout(7) << "fragment_frozen " << basedirfrag << " must have aborted" << dendl;
     request_finish(mdr);
     return;
@@ -13589,6 +13597,40 @@ void MDCache::clear_dirty_bits_for_stray(CInode* diri) {
   }
 }
 
+void MDCache::quiesce_overdrive_merging(CDir* dir) {
+  if (!dir) {
+    return;
+  }
+  dout(20) << __func__ << ": will check for fragmenting ops" << dendl;
+  unsigned frag_frozen = CDir::STATE_FRAGMENTING | CDir::STATE_FROZENDIR;
+  if (dir->state_test(frag_frozen) == frag_frozen) {
+    auto diri = dir->get_inode();
+    dout(20) << __func__ << ": found a fragmenting dir " << *dir << dendl;
+    auto mydf = dir->dirfrag();
+    for (auto it = fragments.lower_bound({diri->ino(), {}});
+        it != fragments.end() && it->first.ino == diri->ino();
+        ++it) {
+      if (it->first.frag.contains(mydf.frag)) {
+        if (it->first.frag == mydf.frag) {
+          // this is a dir split, it's safe deadlock wise. Keep it
+          dout(20) << __func__ << ": skipping a dir split for dirfag " << it->first << " op: " << *it->second.mdr << dendl;
+        } else {
+          dout(20) << __func__ << ": detected dir merge, dirfrag " << it->first << " contains my dirfrag " << mydf << dendl;
+          dout(10) << __func__ << ": aborting the merge op " << *it->second.mdr << dendl;
+          // we must abort asyncrhonously, since we have been put on the waiter list
+          // for the unfreeze, which whill happen syncrhonously with the abort
+          mds->queue_waiter(new MDSInternalContextWrapper(mds, new LambdaContext([this, mdr=it->second.mdr]{
+            mdr->aborted = true;
+            dispatch_fragment_dir(mdr);
+          })));
+        }
+        // there can't be (shouldn't be) more than one containing fragment
+        break;
+      }
+    }
+  }
+}
+
 void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
 {
   if (mdr->internal_op_finish == nullptr) {
@@ -13692,6 +13734,11 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
     }
 
     if (!mds->locker->acquire_locks(mdr, lov, nullptr, {in}, false, true)) {
+      // We need to see if we are failing due to fragments merging.
+      // If that's the case, we should abort the corresponding operation,
+      // otherwise we are risking to deadlock if some of the fragments
+      // are frozen and some are quiesced
+      quiesce_overdrive_merging(in->get_projected_parent_dir());
       return;
     }
     mdr->locking_state |= MutationImpl::ALL_LOCKED;
@@ -13834,7 +13881,7 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
 
   ceph_assert(mdr->internal_op_finish);
 
-  dout(5) << __func__ << ": dispatching" << dendl;
+  dout(5) << __func__ << ": dispatching " << *mdr << dendl;
 
   C_MDS_QuiescePath* qfinisher = static_cast<C_MDS_QuiescePath*>(mdr->internal_op_finish);
   ceph_assert(qfinisher->mdr == mdr);
@@ -13852,10 +13899,20 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     | MDS_TRAVERSE_RDLOCK_PATH
     | MDS_TRAVERSE_WANT_INODE
     ;
-  int r = path_traverse(mdr, cf, mdr->get_filepath(), ptflags, nullptr, &diri);
-  if (r > 0)
+
+  // we want to bypass freezing
+  ceph_assert(mdr->want_bypass_freezing());
+
+  CDir* curdir = nullptr;
+  int r = path_traverse(mdr, cf, mdr->get_filepath(), ptflags, nullptr, &diri, &curdir);
+  if (r > 0) {
+    // We need to see if we are failing due to fragments merging.
+    // If that's the case, we should abort the corresponding operation,
+    // otherwise we are risking to deadlock if some of the fragments
+    // are frozen and some are quiesced
+    quiesce_overdrive_merging(curdir);
     return;
-  if (r < 0) {
+  } else if (r < 0) {
     mds->server->respond_to_request(mdr, r);
     return;
   }
