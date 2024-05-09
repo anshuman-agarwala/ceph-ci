@@ -354,7 +354,7 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
                  f->open_object_section("stat");
                  f->dump_string("gw-id", gw_id);
                  f->dump_unsigned("anagrp-id",state.ana_grp_id+1);
-                 f->dump_unsigned("last-gw_map-epoch-valid",state.last_gw_map_epoch_valid);
+                 f->dump_unsigned("performed-full-startup", state.performed_full_startup);
                  std::stringstream  ss1;
                  ss1 << state.availability;
                  f->dump_string("Availability", ss1.str());
@@ -474,7 +474,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op){
     {
         dout(10) << "subsystems of GW changed, propose pending " << gw_id << dendl;
         pending_map.Created_gws[group_key][gw_id].subsystems =  sub;
-        dout(10) << "subsystems of GW " << gw_id << " "<< pending_map.Created_gws[group_key][gw_id].subsystems << dendl;
+        dout(20) << "subsystems of GW " << gw_id << " "<< pending_map.Created_gws[group_key][gw_id].subsystems << dendl;
         nonce_propose = true;
     }
     pending_map.Created_gws[group_key][gw_id].last_gw_map_epoch_valid = ( map.epoch == m->get_last_gwmap_epoch() );

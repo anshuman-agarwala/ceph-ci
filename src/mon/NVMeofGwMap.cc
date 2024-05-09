@@ -514,14 +514,18 @@ NvmeGwCreated& NVMeofGwMap::find_already_created_gw(const NvmeGwId &gw_id, const
 
 struct CMonRequestProposal : public Context {
   NVMeofGwMap *m;
-  CMonRequestProposal(NVMeofGwMap *mon) : m(mon) {}
+  entity_addrvec_t addr_vect;
+  utime_t expires;
+  CMonRequestProposal(NVMeofGwMap *mon , entity_addrvec_t addr_vector, utime_t until) : m(mon), addr_vect(addr_vector), expires (until)  {}
   void finish(int r) {
       dout(4) << "osdmon is  writable? " << m->mon->osdmon()->is_writeable() << dendl;
       if(m->mon->osdmon()->is_writeable()){
+        epoch_t epoch = m->mon->osdmon()->blocklist(addr_vect, expires);
+        dout (4) << "epoch " << epoch <<dendl;
         m->mon->nvmegwmon()->request_proposal(m->mon->osdmon());
       }
       else {
-          m->mon->osdmon()->wait_for_writeable_ctx( new CMonRequestProposal(m));
+          m->mon->osdmon()->wait_for_writeable_ctx( new CMonRequestProposal(m, addr_vect, expires));
       }
   }
 };
@@ -547,14 +551,15 @@ int NVMeofGwMap::blocklist_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_k
         bool rc = addr_vect.parse(&str[0]);
         dout(10) << str << " rc " << rc <<  " network vector: " << addr_vect << " " << addr_vect.size() << dendl;
         ceph_assert(rc);
+
         epoch = mon->osdmon()->blocklist(addr_vect, expires);
 
         if (!mon->osdmon()->is_writeable()) {
-            dout(4) << "osdmon is not writable, waiting " << dendl;
-            mon->osdmon()->wait_for_writeable_ctx( new CMonRequestProposal(this ));// return false;
+            dout(4) << "osdmon is not writable, waiting, epoch = " << epoch << dendl;
+            mon->osdmon()->wait_for_writeable_ctx( new CMonRequestProposal(this, addr_vect, expires ));// return false;
         }
         else  mon->nvmegwmon()->request_proposal(mon->osdmon());
-        dout(4) << str << " mon->osdmon()->blocklist:  " << epoch <<  " address vector: " << addr_vect << " " << addr_vect.size() << dendl;
+        dout(4) << str << " mon->osdmon()->blocklist: epoch : " << epoch <<  " address vector: " << addr_vect << " " << addr_vect.size() << dendl;
     }
     else{
         dout(1) << "Error: No nonces context present for gw: " <<gw_id  << " ANA group: " << grpid << dendl;

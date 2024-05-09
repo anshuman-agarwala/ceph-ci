@@ -331,7 +331,8 @@ inline void encode(const NvmeGwCreatedMap& gws,  ceph::bufferlist &bl) {
             encode((uint32_t)(gw.second.sm_state[i]), bl);
         }
         encode((uint32_t)gw.second.availability, bl);
-        encode((uint32_t)gw.second.performed_full_startup, bl);
+        encode((uint16_t)gw.second.performed_full_startup, bl);
+        encode((uint16_t)gw.second.last_gw_map_epoch_valid, bl);
         encode(gw.second.subsystems, bl);
 
         for(int i=0; i< MAX_SUPPORTED_ANA_GROUPS; i++){
@@ -365,9 +366,12 @@ inline void decode(NvmeGwCreatedMap& gws, ceph::buffer::list::const_iterator &bl
         uint32_t avail;
         decode(avail, bl);
         gw_created.availability = (GW_AVAILABILITY_E)avail;
-        uint32_t performed_startup;
+        uint16_t performed_startup;
         decode(performed_startup, bl);
         gw_created.performed_full_startup = (bool)performed_startup;
+        uint16_t last_epoch_valid;
+        decode(last_epoch_valid, bl);
+        gw_created.last_gw_map_epoch_valid = (bool)last_epoch_valid;
         BeaconSubsystems   subsystems;
         decode(subsystems, bl);
         gw_created.subsystems = subsystems;
