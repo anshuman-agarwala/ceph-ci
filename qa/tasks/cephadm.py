@@ -18,6 +18,7 @@ import jinja2
 from copy import deepcopy
 from io import BytesIO, StringIO
 from tarfile import ReadError
+from tasks.ceph import Rotater
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -105,7 +106,9 @@ def _role_to_remote(rctx, role):
     return None
 
 
-def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
+def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=None, **kwargs):
+    if extra_cephadm_args is None:
+        extra_cephadm_args = []
     teuthology.get_testdir(ctx)
     return remote.run(
         args=[
@@ -818,6 +821,31 @@ def ceph_bootstrap(ctx, config):
                    ['ceph', 'orch', 'client-keyring', 'set', 'client.admin',
                     '*', '--mode', '0755'],
                    check_status=False)
+
+        # default logrotate config for cluster logs does not work for teuthology
+        # where debug logging tends to be enabled and massive log files that
+        # are multiple Gigabytes can be generate in tests that last an hour or two
+        teuth_cluster_logrotate_config = """# created by cephadm
+/var/log/ceph/{{ fsid }}/*.log {
+    rotate 100
+    size 10G
+    compress
+    sharedscripts
+    postrotate
+        killall -q -1 {{ targets|join(' ') }} || pkill -1 -x '{{ targets|join('|') }}' || true
+    endscript
+    missingok
+    notifempty
+    su root root
+}"""
+        bootstrap_remote.run(args=[
+            'echo', teuth_cluster_logrotate_config, run.Raw('>'), '/root/logrotate.conf'
+        ])
+        _shell(ctx, cluster_name, bootstrap_remote,
+               ['ceph', 'orch', 'write-custom-logrotate', 'cluster', '-i', '/mnt/logrotate.conf'],
+               extra_cephadm_args=['--mount', '/root/logrotate.conf'])
+        logrotater = Rotater(ctx, f'/etc/logrotate.d/ceph-{fsid}')
+        logrotater.begin()
 
         # add other hosts
         for remote, roles in _cephadm_remotes(ctx, log_excluded=True):
