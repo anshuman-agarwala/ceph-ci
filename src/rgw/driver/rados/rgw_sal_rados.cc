@@ -2240,9 +2240,9 @@ RadosObject::~RadosObject()
 
 int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
-  RGWObjState **pstate{nullptr};
+  RGWObjState *pstate{nullptr};
 
-  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), pstate, &manifest, follow_olh, y);
+  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), &pstate, &manifest, follow_olh, y);
   if (ret < 0) {
     return ret;
   }
@@ -2252,7 +2252,7 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
   bool is_atomic = state.is_atomic;
   bool prefetch_data = state.prefetch_data;
 
-  state = **pstate;
+  state = *pstate;
 
   state.obj = obj;
   state.is_atomic = is_atomic;
