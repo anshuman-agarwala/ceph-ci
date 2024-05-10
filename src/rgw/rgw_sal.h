@@ -1192,7 +1192,7 @@ class Object {
     /** Check to see if attributes are cached on this object */
     virtual bool has_attrs(void) = 0;
     /** Check to see if an attribute exists, and return it's value if it does */
-    virtual bool get_attr(std::string name, bufferlist &dest) = 0;
+    virtual bool get_attr(const std::string& name, bufferlist &dest) = 0;
     /** Get the cached modification time for this object */
     virtual ceph::real_time get_mtime(void) const = 0;
     /** Set the cached modification time for this object */

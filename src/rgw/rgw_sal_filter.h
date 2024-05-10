@@ -787,7 +787,7 @@ public:
   virtual const Attrs& get_attrs(void) const override { return next->get_attrs(); };
   virtual int set_attrs(Attrs a) override { return next->set_attrs(a); };
   virtual bool has_attrs(void) override { return next->has_attrs(); };
-  virtual bool get_attr(std::string name, bufferlist &dest) override { return next->get_attr(name, dest); }
+  virtual bool get_attr(const std::string& name, bufferlist &dest) override { return next->get_attr(name, dest); }
   virtual ceph::real_time get_mtime(void) const override { return next->get_mtime(); };
   virtual void set_mtime(ceph::real_time& mtime) override { return next->set_mtime(mtime); }
   virtual uint64_t get_size(void) const override { return next->get_size(); };
