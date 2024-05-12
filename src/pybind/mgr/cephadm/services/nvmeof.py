@@ -66,10 +66,12 @@ class NvmeofService(CephService):
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]) -> None:
         """ Overrides the daemon_check_post to add nvmeof gateways safely
         """
+        self.mgr.log.info(f"nvmeof daemon_check_post {daemon_descrs}")
         # Assert configured
         assert self.pool
         assert self.group is not None
         for dd in daemon_descrs:
+            self.mgr.log.info(f"nvmeof daemon_descr {dd}")
             assert dd.daemon_id in self.gws
             name = self.gws[dd.daemon_id]
             # Notify monitor about this gateway creation
