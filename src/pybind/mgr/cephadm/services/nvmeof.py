@@ -74,12 +74,13 @@ class NvmeofService(CephService):
             self.mgr.log.info(f"nvmeof daemon_descr {dd}")
             assert dd.daemon_id in self.gws
             name = self.gws[dd.daemon_id]
+            self.mgr.log.info(f"nvmeof daemon {name=}")
             # Notify monitor about this gateway creation
             cmd = {
                 'prefix': 'nvme-gw create',
                 'id': name,
-                'group': spec.group,
-                'pool': spec.pool
+                'group': self.group,
+                'pool': self.pool
             }
             self.mgr.log.info(f"create gateway: monitor command {cmd}")
             _, _, err = self.mgr.mon_command(cmd)
