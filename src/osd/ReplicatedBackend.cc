@@ -491,9 +491,12 @@ void ReplicatedBackend::send_pct_update()
       parent->get_pg_committed_to()
     );
 
+    dout(10) << __func__ << ": sending pct update to i " << i
+	     << ", i.osd " << i.osd << dendl;
     parent->send_message_osd_cluster(
-      i.osd, pct_update, parent->pgb_get_osdmap_epoch());
+      i.osd, pct_update, get_osdmap_epoch());
   }
+  dout(10) << __func__ << ": sending pct update complete" << dendl;
 }
 
 void ReplicatedBackend::maybe_kick_pct_update()
