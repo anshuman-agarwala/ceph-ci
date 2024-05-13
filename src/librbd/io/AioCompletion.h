@@ -46,6 +46,7 @@ struct AioCompletion {
 
   mutable std::mutex lock;
   std::condition_variable cond;
+  std::atomic<bool> waiting_for_complete{false};
 
   callback_t complete_cb = nullptr;
   void *complete_arg = nullptr;
