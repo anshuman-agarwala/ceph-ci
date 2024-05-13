@@ -353,7 +353,7 @@ public:
     lock();
   }
   void pg_unlock() override {
-    lock();
+    unlock();
   }
 
   template<class T> class BlessedGenContext;
