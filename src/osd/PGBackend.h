@@ -143,7 +143,17 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
       * Wraps a context in whatever outer layers the parent usually
       * uses to call into the PGBackend
       */
-     virtual ceph::mutex &get_pg_lock() = 0;
+     virtual void pg_lock() = 0;
+     virtual void pg_unlock() = 0;
+     struct pg_locker_t {
+       PGBackend::Listener &l;
+       void lock() { l.pg_lock(); }
+       void unlock() { l.pg_unlock(); }
+     };
+     pg_locker_t get_pg_locker() {
+       return pg_locker_t{*this};
+     }
+
      virtual Context *bless_context(Context *c) = 0;
      virtual GenContext<ThreadPool::TPHandle&> *bless_gencontext(
        GenContext<ThreadPool::TPHandle&> *c) = 0;

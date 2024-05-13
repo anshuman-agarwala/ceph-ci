@@ -349,8 +349,11 @@ public:
 			     eversion_t v,
 			     Context *on_complete) override;
 
-  ceph::mutex &get_pg_lock() override {
-    return _lock;
+  void pg_lock() override {
+    lock();
+  }
+  void pg_unlock() override {
+    lock();
   }
 
   template<class T> class BlessedGenContext;

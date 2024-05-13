@@ -126,7 +126,7 @@ ReplicatedBackend::ReplicatedBackend(
   ObjectStore *store,
   CephContext *cct) :
   PGBackend(cct, pg, store, coll, c),
-  pct_callback(pg->get_pg_lock(), [this] { send_pct_update(); } )
+  pct_callback(pg->get_pg_locker(), [this] { send_pct_update(); } )
 {}
 
 void ReplicatedBackend::run_recovery_op(

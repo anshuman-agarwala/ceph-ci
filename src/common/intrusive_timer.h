@@ -67,11 +67,12 @@ class intrusive_timer {
     unsigned get_incarnation() { return incarnation; }
   };
 
-  template <typename Mutex, typename F>
+  template <typename Locker, typename F>
   struct locked_callback_t final : callback_base_t {
-    Mutex &m;
+    Locker m;
     F f;
-    locked_callback_t(Mutex &m, F &&f) : m(m), f(std::forward<F>(f)) {}
+    locked_callback_t(Locker &&m, F &&f)
+      : m(std::forward<Locker>(m)), f(std::forward<F>(f)) {}
 
     void _run() final {
       std::unique_lock l(m);
@@ -106,9 +107,9 @@ public:
     callback_base_t::ref cb;
     friend class intrusive_timer;
   public:
-    template <typename Mutex, typename F>
-    callback_t(Mutex &m, F &&f)
-      : cb(new locked_callback_t{m, std::forward<F>(f)}) {}
+    template <typename Locker, typename F>
+    callback_t(Locker &&m, F &&f)
+      : cb(new locked_callback_t{std::forward<Locker>(m), std::forward<F>(f)}) {}
 
     bool is_scheduled() const {
       return cb->is_scheduled();
