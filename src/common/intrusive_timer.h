@@ -32,10 +32,11 @@ class intrusive_timer {
     callback_base_t &operator=(callback_base_t &&) = delete;
 
     void run(unsigned _incarnation) {
+      std::unique_lock m{*this};
       if (_incarnation == incarnation) {
 	assert(is_scheduled());
 	++incarnation;
-	_run();
+	invoke();
       }
     }
 
@@ -53,7 +54,9 @@ class intrusive_timer {
       if (is_scheduled()) ++incarnation;
     }
 
-    virtual void _run() = 0;
+    virtual void lock() = 0;
+    virtual void unlock() = 0;
+    virtual void invoke() = 0;
 
     auto operator<=>(const callback_base_t &rhs) const {
       return std::make_pair(schedule_point, this) <=>
@@ -74,8 +77,13 @@ class intrusive_timer {
     locked_callback_t(Locker &&m, F &&f)
       : m(std::forward<Locker>(m)), f(std::forward<F>(f)) {}
 
-    void _run() final {
-      std::unique_lock l(m);
+    void lock() final {
+      return m.lock();
+    }
+    void unlock() final {
+      return m.unlock();
+    }
+    void invoke() final {
       std::invoke(f);
     }
   };
