@@ -562,10 +562,27 @@ void Mirror::update_fs_mirrors() {
       auto blocklisted_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted() &&
 	(blocklist_interval.count() > 0 && duration_cast<seconds>(mirror_action.fs_mirror->get_blocklisted_ts() - clock::now()) > blocklist_interval);
 
-      if (!mirror_action.action_in_progress && !_is_restarting(filesystem)) {
+      dout(5) << ": filesystem=" << filesystem
+	      << " failed_restart: " << failed_restart
+	      << " blocklisted_restart: " << blocklisted_restart
+	      << " mirror_action.fs_mirror: " << mirror_action.fs_mirror
+	      << " clock::now: " << clock::now()
+	      << " blocklist_interval: " << blocklist_interval
+	      << dendl;
+      if (mirror_action.fs_mirror) {
+	dout (5) << " mirror_action.fs_mirror->is_blocklisted(): " << mirror_action.fs_mirror->is_blocklisted()
+		 << " mirror_action.fs_mirror->get_blocklisted_ts(): " << mirror_action.fs_mirror->get_blocklisted_ts()
+		 << " duration_cast<seconds>: " << duration_cast<seconds>(mirror_action.fs_mirror->get_blocklisted_ts() - clock::now())
+		 << dendl;
+      }
+
+      bool is_restarting = _is_restarting(filesystem);
+      dout (5) << " mirror_action.action_in_progress: " << mirror_action.action_in_progress
+	       << " is_restarting: " << is_restarting
+	       << dendl;
+      if (!mirror_action.action_in_progress && !is_restarting) {
 	if (failed_restart || blocklisted_restart) {
-	  dout(5) << ": filesystem=" << filesystem << " failed mirroring (failed: "
-		  << failed_restart << ", blocklisted: " << blocklisted_restart << ")" << dendl;
+	  dout(0) << "jos: HIT RESTART" << dendl;
 	  _set_restarting(filesystem);
 	  auto peers = mirror_action.fs_mirror->get_peers();
 	  auto ctx =  new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
