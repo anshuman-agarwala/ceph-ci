@@ -68,6 +68,7 @@ from .services.ingress import IngressService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.nvmeof import NvmeofService
+from .services.admin_gateway import AdminGatewayService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -139,6 +140,7 @@ DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
 DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
 DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
+DEFAULT_NGINX_IMAGE = 'docker.io/nginx:1.26.0'
 DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
 DEFAULT_SAMBA_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
 # ------------------------------------------------------------------------------
@@ -276,6 +278,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_snmp_gateway',
             default=DEFAULT_SNMP_GATEWAY_IMAGE,
             desc='SNMP Gateway container image',
+        ),
+        Option(
+            'container_image_nginx',
+            default=DEFAULT_NGINX_IMAGE,
+            desc='Nginx container image',
         ),
         Option(
             'container_image_elasticsearch',
@@ -562,6 +569,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_haproxy = ''
             self.container_image_keepalived = ''
             self.container_image_snmp_gateway = ''
+            self.container_image_nginx = ''
             self.container_image_elasticsearch = ''
             self.container_image_jaeger_agent = ''
             self.container_image_jaeger_collector = ''
@@ -708,6 +716,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             RgwService,
             SMBService,
             SNMPGatewayService,
+            AdminGatewayService,
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -1650,6 +1659,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'prometheus': self.container_image_prometheus,
                 'promtail': self.container_image_promtail,
                 'snmp-gateway': self.container_image_snmp_gateway,
+                'admin-gateway': self.container_image_nginx,
                 # The image can't be resolved here, the necessary information
                 # is only available when a container is deployed (given
                 # via spec).
@@ -3337,6 +3347,7 @@ Then run the following:
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
+                'admin-gateway': PlacementSpec(count=1),
                 'elasticsearch': PlacementSpec(count=1),
                 'jaeger-agent': PlacementSpec(host_pattern='*'),
                 'jaeger-collector': PlacementSpec(count=1),
@@ -3473,6 +3484,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_smb(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_admin_gateway(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error
