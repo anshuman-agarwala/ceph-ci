@@ -99,7 +99,9 @@ class intrusive_timer {
     }
 
     callback_base_t::ref peek() {
-      return events.empty() ? nullptr : &*(events.begin());
+      return events.empty()
+	? nullptr
+	: callback_base_t::ref(&*(events.begin()), true);
     }
 
     void remove(callback_base_t &cb) {
