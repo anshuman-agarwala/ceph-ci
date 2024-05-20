@@ -195,7 +195,9 @@ void NVMeofGwMonitorClient::send_beacon()
   NVMeofGwClient gw_client(
      grpc::CreateChannel(gateway_address, grpc::InsecureChannelCredentials()));
   subsystems_info gw_subsystems;
+  dout(0) << "GRPC get_subsystems" << dendl;
   bool ok = gw_client.get_subsystems(gw_subsystems);
+  dout(0) << "GRPC get_subsystems done, ok: " << ok << dendl;
   if (ok) {
     for (int i = 0; i < gw_subsystems.subsystems_size(); i++) {
       const subsystem& sub = gw_subsystems.subsystems(i);
@@ -372,7 +374,9 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     while (!set_ana_state) {
       NVMeofGwClient gw_client(
           grpc::CreateChannel(gateway_address, grpc::InsecureChannelCredentials()));
+      dout(0) << "GRPC set_ana_state" << dendl;
       set_ana_state = gw_client.set_ana_state(ai);
+      dout(0) << "GRPC set_ana_state done, rc: " << set_ana_state << dendl;
       if (!set_ana_state) {
 	dout(0) << "GRPC set_ana_state failed" << dendl;
 	usleep(1000); // TODO conf option
