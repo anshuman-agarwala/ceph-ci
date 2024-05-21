@@ -7794,7 +7794,7 @@ next:
       return -ret;
     }
 
-    RGWObjState state = static_cast<rgw::sal::RadosObject*>(obj.get())->get_state();
+    RGWObjState& state = static_cast<rgw::sal::RadosObject*>(obj.get())->get_state();
 
     ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bucket_index_read_olh_log(dpp(), bucket->get_info(), state, obj->get_obj(), 0, &log, &is_truncated, null_yield);
     if (ret < 0) {

@@ -586,7 +586,7 @@ class RadosObject : public StoreObject {
     }
 
     /* For rgw_admin.cc */
-    const RGWObjState& get_state() { return state; }
+    RGWObjState& get_state() { return state; }
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y) override;
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
