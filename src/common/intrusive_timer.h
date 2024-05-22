@@ -33,6 +33,7 @@ class intrusive_timer {
 
     void run(unsigned _incarnation) {
       std::unique_lock m{*this};
+      ceph_assert(use_count() > 0);
       if (_incarnation == incarnation) {
 	ceph_assert(is_scheduled());
 	++incarnation;
@@ -41,16 +42,19 @@ class intrusive_timer {
     }
 
     bool is_scheduled() const {
+      ceph_assert(use_count() > 0);
       return incarnation % 2 == 1;
     }
 
     void ready_for_schedule(auto time) {
+      ceph_assert(use_count() > 0);
       ceph_assert(!is_scheduled());
       schedule_point = time;
       ++incarnation;
     }
 
     void maybe_cancel() {
+      ceph_assert(use_count() > 0);
       if (is_scheduled()) ++incarnation;
     }
 
@@ -93,16 +97,22 @@ class intrusive_timer {
 
   public:
     void schedule(callback_base_t &cb, clock_t::time_point time) {
+      ceph_assert(!cb.is_linked());
+      for (auto &i: events) ceph_assert(i.use_count() > 0);
+      ceph_assert(cb.use_count() > 0);
       cb.ready_for_schedule(time);
       intrusive_ptr_add_ref(&cb);
       events.insert(cb);
     }
 
     callback_base_t::ref peek() {
+      for (auto &i: events) ceph_assert(i.use_count() > 0);
       return events.empty() ? nullptr : &*(events.begin());
     }
 
     void remove(callback_base_t &cb) {
+      ceph_assert(cb.is_linked());
+      for (auto &i: events) ceph_assert(i.use_count() > 0);
       events.erase(cb);
       intrusive_ptr_release(&cb);
     }
