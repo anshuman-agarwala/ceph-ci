@@ -12672,6 +12672,9 @@ void MDCache::force_readonly()
   mds->mdlog->flush();
 }
 
+void MDCache::maybe_fragment(CDir *dir) {
+  mds->balancer->maybe_fragment(dir, false);
+}
 
 // ==============================================================
 // debug crap
