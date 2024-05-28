@@ -79,11 +79,6 @@ SnapTrimEvent::start()
     });
 
   co_await enter_stage<interruptor>(
-    client_pp().recover_missing);
-
-  // co_await do_recover_missing(pg, get_target_oid());
-  
-  co_await enter_stage<interruptor>(
     client_pp().get_obc);
 
   {
@@ -427,11 +422,6 @@ SnapTrimObjSubEvent::start()
     [this] (auto&& trigger) {
       return pg->wait_for_active_blocker.wait(std::move(trigger));
     });
-
-  co_await enter_stage<interruptor>(
-    client_pp().recover_missing);
-
-  // co_await do_recover_missing(pg, get_target_oid());
 
   co_await enter_stage<interruptor>(
     client_pp().get_obc);
