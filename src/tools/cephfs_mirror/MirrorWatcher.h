@@ -28,11 +28,11 @@ class FSMirror;
 class MirrorWatcher : public Watcher {
 public:
   static MirrorWatcher *create(librados::IoCtx &ioctx, FSMirror *fs_mirror,
-                               ContextWQ *work_queue) {
-    return new MirrorWatcher(ioctx, fs_mirror, work_queue);
+                               Listener &listener, ContextWQ *work_queue) {
+    return new MirrorWatcher(ioctx, fs_mirror, listener, work_queue);
   }
 
-  MirrorWatcher(librados::IoCtx &ioctx, FSMirror *fs_mirror,
+  MirrorWatcher(librados::IoCtx &ioctx, FSMirror *fs_mirror, Listener &listener,
                 ContextWQ *work_queue);
   ~MirrorWatcher();
 
@@ -48,11 +48,6 @@ public:
     return m_blocklisted;
   }
 
-  monotime get_blocklisted_ts() {
-    std::scoped_lock locker(m_lock);
-    return m_blocklisted_ts;
-  }
-
   bool is_failed() {
     std::scoped_lock locker(m_lock);
     return m_failed;
@@ -66,6 +61,7 @@ public:
 private:
   librados::IoCtx &m_ioctx;
   FSMirror *m_fs_mirror;
+  Listener &m_listener;
   ContextWQ *m_work_queue;
 
   ceph::mutex m_lock;
@@ -77,7 +73,6 @@ private:
   bool m_blocklisted = false;
   bool m_failed = false;
 
-  monotime m_blocklisted_ts;
   monotime m_failed_ts;
 
   void register_watcher();
