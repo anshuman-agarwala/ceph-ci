@@ -71,13 +71,6 @@ SnapTrimEvent::start()
   });
 
   ShardServices &shard_services = pg->get_shard_services();
-  co_await enter_stage<interruptor>(client_pp().wait_for_active);
-
-  co_await with_blocking_event<PGActivationBlocker::BlockingEvent, interruptor>(
-    [this] (auto&& trigger) {
-      return pg->wait_for_active_blocker.wait(std::move(trigger));
-    });
-
   co_await enter_stage<interruptor>(
     client_pp().get_obc);
 
@@ -406,15 +399,6 @@ SnapTrimObjSubEvent::start()
     logger().debug("{}: exit", *this);
     handle.exit();
   });
-
-  co_await enter_stage<interruptor>(
-    client_pp().wait_for_active
-  );
-
-  co_await with_blocking_event<PGActivationBlocker::BlockingEvent, interruptor>(
-    [this] (auto&& trigger) {
-      return pg->wait_for_active_blocker.wait(std::move(trigger));
-    });
 
   co_await enter_stage<interruptor>(
     client_pp().get_obc);
