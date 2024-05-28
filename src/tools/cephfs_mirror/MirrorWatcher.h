@@ -28,11 +28,11 @@ class FSMirror;
 class MirrorWatcher : public Watcher {
 public:
   static MirrorWatcher *create(librados::IoCtx &ioctx, FSMirror *fs_mirror,
-                               ContextWQ *work_queue) {
-    return new MirrorWatcher(ioctx, fs_mirror, work_queue);
+                               ErrorListener &elistener, ContextWQ *work_queue) {
+    return new MirrorWatcher(ioctx, fs_mirror, elistener, work_queue);
   }
 
-  MirrorWatcher(librados::IoCtx &ioctx, FSMirror *fs_mirror,
+  MirrorWatcher(librados::IoCtx &ioctx, FSMirror *fs_mirror, ErrorListener &elistener,
                 ContextWQ *work_queue);
   ~MirrorWatcher();
 
@@ -43,29 +43,10 @@ public:
                      uint64_t notifier_id, bufferlist& bl) override;
   void handle_rewatch_complete(int r) override;
 
-  bool is_blocklisted() {
-    std::scoped_lock locker(m_lock);
-    return m_blocklisted;
-  }
-
-  monotime get_blocklisted_ts() {
-    std::scoped_lock locker(m_lock);
-    return m_blocklisted_ts;
-  }
-
-  bool is_failed() {
-    std::scoped_lock locker(m_lock);
-    return m_failed;
-  }
-
-  monotime get_failed_ts() {
-    std::scoped_lock locker(m_lock);
-    return m_failed_ts;
-  }
-
 private:
   librados::IoCtx &m_ioctx;
   FSMirror *m_fs_mirror;
+  ErrorListener &m_elistener;
   ContextWQ *m_work_queue;
 
   ceph::mutex m_lock;
@@ -73,12 +54,6 @@ private:
 
   Context *m_on_init_finish = nullptr;
   Context *m_on_shutdown_finish = nullptr;
-
-  bool m_blocklisted = false;
-  bool m_failed = false;
-
-  monotime m_blocklisted_ts;
-  monotime m_failed_ts;
 
   void register_watcher();
   void handle_register_watcher(int r);
