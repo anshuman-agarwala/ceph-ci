@@ -76,14 +76,12 @@ public:
 
   monotime get_blocklisted_ts() {
     std::scoped_lock locker(m_lock);
-    if (m_instance_watcher) {
-      return m_instance_watcher->get_blocklisted_ts();
-    }
-    if (m_mirror_watcher) {
-      return m_mirror_watcher->get_blocklisted_ts();
-    }
+    return m_blocklisted_ts;
+  }
 
-    return clock::now();
+  void set_blocklisted_ts() {
+    std::scoped_lock locker(m_lock);
+    m_blocklisted_ts = clock::now();
   }
 
   Peers get_peers() {
@@ -128,8 +126,13 @@ private:
     void release_directory(std::string_view dir_path) override {
       fs_mirror->handle_release_directory(dir_path);
     }
+
+    void set_blocklisted_ts() {
+      fs_mirror->set_blocklisted_ts();
+    }
   };
 
+  monotime m_blocklisted_ts;
   CephContext *m_cct;
   Filesystem m_filesystem;
   uint64_t m_pool_id;

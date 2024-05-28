@@ -22,13 +22,6 @@ namespace mirror {
 
 class InstanceWatcher : public Watcher {
 public:
-  struct Listener {
-    virtual ~Listener() {
-    }
-
-    virtual void acquire_directory(std::string_view dir_path) = 0;
-    virtual void release_directory(std::string_view dir_path) = 0;
-  };
 
   static InstanceWatcher *create(librados::IoCtx &ioctx,
                                  Listener &listener, ContextWQ *work_queue) {
@@ -48,11 +41,6 @@ public:
   bool is_blocklisted() {
     std::scoped_lock locker(m_lock);
     return m_blocklisted;
-  }
-
-  monotime get_blocklisted_ts() {
-    std::scoped_lock locker(m_lock);
-    return m_blocklisted_ts;
   }
 
   bool is_failed() {
@@ -77,7 +65,6 @@ private:
   bool m_blocklisted = false;
   bool m_failed = false;
 
-  monotime m_blocklisted_ts;
   monotime m_failed_ts;
 
   void create_instance();
