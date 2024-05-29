@@ -559,7 +559,7 @@ void Mirror::update_fs_mirrors() {
     for (auto &[filesystem, mirror_action] : m_mirror_actions) {
       auto failed_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed() &&
 	(failed_interval.count() > 0 && duration_cast<seconds>(mirror_action.fs_mirror->get_failed_ts() - clock::now()) > failed_interval);
-      auto blocklisted_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted() &&
+      auto blocklisted_restart = mirror_action.fs_mirror  &&
 	(blocklist_interval.count() > 0 && duration_cast<seconds>(mirror_action.fs_mirror->get_blocklisted_ts() - clock::now()) > blocklist_interval);
 
       bool is_restarting = _is_restarting(filesystem);
