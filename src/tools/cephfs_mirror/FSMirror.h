@@ -127,6 +127,13 @@ private:
       fs_mirror->handle_release_directory(dir_path);
     }
 
+  };
+
+  struct BlocklistListener: public Watcher::ErrorListener {
+    FSMirror *fs_mirror;
+    BlocklistListener(FSMirror *fs_mirror)
+      : fs_mirror(fs_mirror) {
+    }
     void set_blocklisted_ts() {
       fs_mirror->set_blocklisted_ts();
     }
@@ -142,6 +149,7 @@ private:
 
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::fs_mirror");
   SnapListener m_snap_listener;
+  BlocklistListener m_blocklist_listener;
   std::set<std::string, std::less<>> m_directories;
   Peers m_all_peers;
   std::map<Peer, std::unique_ptr<PeerReplayer>> m_peer_replayers;

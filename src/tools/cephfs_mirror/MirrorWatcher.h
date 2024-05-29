@@ -28,11 +28,11 @@ class FSMirror;
 class MirrorWatcher : public Watcher {
 public:
   static MirrorWatcher *create(librados::IoCtx &ioctx, FSMirror *fs_mirror,
-                               Listener &listener, ContextWQ *work_queue) {
-    return new MirrorWatcher(ioctx, fs_mirror, listener, work_queue);
+                               ErrorListener &elistener, ContextWQ *work_queue) {
+    return new MirrorWatcher(ioctx, fs_mirror, elistener, work_queue);
   }
 
-  MirrorWatcher(librados::IoCtx &ioctx, FSMirror *fs_mirror, Listener &listener,
+  MirrorWatcher(librados::IoCtx &ioctx, FSMirror *fs_mirror, ErrorListener &elistener,
                 ContextWQ *work_queue);
   ~MirrorWatcher();
 
@@ -61,7 +61,7 @@ public:
 private:
   librados::IoCtx &m_ioctx;
   FSMirror *m_fs_mirror;
-  Listener &m_listener;
+  ErrorListener &m_elistener;
   ContextWQ *m_work_queue;
 
   ceph::mutex m_lock;

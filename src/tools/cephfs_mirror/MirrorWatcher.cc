@@ -21,11 +21,11 @@ namespace cephfs {
 namespace mirror {
 
 MirrorWatcher::MirrorWatcher(librados::IoCtx &ioctx, FSMirror *fs_mirror,
-                             Listener &listener, ContextWQ *work_queue)
+                             ErrorListener &elistener, ContextWQ *work_queue)
   : Watcher(ioctx, CEPHFS_MIRROR_OBJECT, work_queue),
     m_ioctx(ioctx),
     m_fs_mirror(fs_mirror),
-    m_listener(listener),
+    m_elistener(elistener),
     m_work_queue(work_queue),
     m_lock(ceph::make_mutex("cephfs::mirror::mirror_watcher")),
     m_instance_id(stringify(m_ioctx.get_instance_id())) {
@@ -93,7 +93,7 @@ void MirrorWatcher::handle_rewatch_complete(int r) {
     dout(0) << ": client blocklisted" <<dendl;
     std::scoped_lock locker(m_lock);
     m_blocklisted = true;
-    m_listener.set_blocklisted_ts();
+    m_elistener.set_blocklisted_ts();
   } else if (r == -ENOENT) {
     derr << ": mirroring object deleted" << dendl;
     m_failed = true;
