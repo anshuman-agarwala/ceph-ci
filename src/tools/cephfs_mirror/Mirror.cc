@@ -560,19 +560,19 @@ void Mirror::update_fs_mirrors() {
       auto failed_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed() &&
 	(failed_interval.count() > 0 && duration_cast<seconds>(mirror_action.fs_mirror->get_failed_ts() - clock::now()) > failed_interval);
       auto blocklisted_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted() &&
-	(blocklist_interval.count() > 0 && duration_cast<seconds>(mirror_action.fs_mirror->get_blocklisted_ts() - clock::now()) > blocklist_interval);
+	(blocklist_interval.count() > 0 && duration_cast<seconds>(clock::now() - mirror_action.fs_mirror->get_blocklisted_ts()).count() > blocklist_interval.count());
 
       dout(5) << ": filesystem=" << filesystem
 	      << " failed_restart: " << failed_restart
 	      << " blocklisted_restart: " << blocklisted_restart
 	      << " mirror_action.fs_mirror: " << mirror_action.fs_mirror
 	      << " clock::now: " << clock::now()
-	      << " blocklist_interval: " << blocklist_interval
+	      << " blocklist_interval: " << blocklist_interval.count()
 	      << dendl;
       if (mirror_action.fs_mirror) {
 	dout (5) << " mirror_action.fs_mirror->is_blocklisted(): " << mirror_action.fs_mirror->is_blocklisted()
 		 << " mirror_action.fs_mirror->get_blocklisted_ts(): " << mirror_action.fs_mirror->get_blocklisted_ts()
-		 << " duration_cast<seconds>: " << duration_cast<seconds>(mirror_action.fs_mirror->get_blocklisted_ts() - clock::now())
+		 << " duration_cast<seconds>: " << duration_cast<seconds>(clock::now() - mirror_action.fs_mirror->get_blocklisted_ts()).count()
 		 << dendl;
       }
 
