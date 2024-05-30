@@ -591,6 +591,7 @@ class TestMonitoring:
                                 "alertmanager.yml": y,
                             },
                             "peers": [],
+                            "use_url_prefix": False,
                         }
                     }),
                     use_current_daemon_image=False,
@@ -687,6 +688,7 @@ class TestMonitoring:
                             },
                             'peers': [],
                             'web_config': '/etc/alertmanager/web.yml',
+                            "use_url_prefix": False,
                         }
                     }),
                     use_current_daemon_image=False,
@@ -828,6 +830,7 @@ class TestMonitoring:
                             'retention_time': '15d',
                             'retention_size': '0',
                             'ip_to_bind_to': '1.2.3.1',
+                            "use_url_prefix": False
                         },
                     }),
                     use_current_daemon_image=False,
@@ -1011,6 +1014,7 @@ class TestMonitoring:
                             'retention_size': '0',
                             'ip_to_bind_to': '',
                             'web_config': '/etc/prometheus/web.yml',
+                            "use_url_prefix": False
                         },
                     }),
                     use_current_daemon_image=False,
@@ -1974,7 +1978,6 @@ class TestIngressService:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_config_ssl_rgw(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
-
         with with_host(cephadm_module, 'test'):
             cephadm_module.cache.update_host_networks('test', {
                 '1.2.3.0/24': {
@@ -2103,7 +2106,6 @@ class TestIngressService:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_config_multi_vips(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
-
         with with_host(cephadm_module, 'test', addr='1.2.3.7'):
             cephadm_module.cache.update_host_networks('test', {
                 '1.2.3.0/24': {
@@ -2231,7 +2233,6 @@ class TestIngressService:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_keepalive_config_multi_interface_vips(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
-
         with with_host(cephadm_module, 'test', addr='1.2.3.1'):
             with with_host(cephadm_module, 'test2', addr='1.2.3.2'):
                 cephadm_module.cache.update_host_networks('test', {
