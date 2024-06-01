@@ -516,7 +516,7 @@ class TestMirroring(CephFSTestCase):
 
         # get the new rados_inst
         rados_inst_new = ""
-        with safe_while(sleep=2, tries=20, action='wait for mirror status rados_inst') as proceed:
+        with safe_while(sleep=1, tries=30, action='wait for mirror status rados_inst') as proceed:
             while proceed():
                 rados_inst_new = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
                 if rados_inst_new:
