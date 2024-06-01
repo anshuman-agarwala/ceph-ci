@@ -116,15 +116,15 @@ void InstanceWatcher::handle_rewatch_complete(int r) {
   if (r == -EBLOCKLISTED) {
     dout(0) << ": client blocklisted" <<dendl;
     std::scoped_lock locker(m_lock);
-    m_elistener.set_blocklisted(true);
+    m_blocklisted = true;
     m_elistener.set_blocklisted_ts();
   } else if (r == -ENOENT) {
     derr << ": mirroring object deleted" << dendl;
-    m_elistener.set_failed(true);
+    m_failed = true;
     m_elistener.set_failed_ts();
   } else if (r < 0) {
     derr << ": rewatch error: " << cpp_strerror(r) << dendl;
-    m_elistener.set_failed(true);
+    m_failed = true;
     m_elistener.set_failed_ts();
   }
 }
