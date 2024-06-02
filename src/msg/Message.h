@@ -240,7 +240,7 @@
 #define MSG_MGR_COMMAND_REPLY     0x70a
 
 // *** ceph-mgr <-> MON daemons ***
-#define MSG_MGR_UPDATE            0x70b
+#define MSG_MGR_UPDATE     0x70b
 
 // *** nvmeof mon -> gw daemons ***
 #define MSG_MNVMEOF_GW_MAP        0x800
