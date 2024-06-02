@@ -180,6 +180,10 @@ enum {
   l_osdc_osdop_omap_rd,
   l_osdc_osdop_omap_del,
 
+  l_osdc_replica_read_sent,
+  l_osdc_replica_read_bounced,
+  l_osdc_replica_read_completed,
+
   l_osdc_last,
 };
 
@@ -237,6 +241,13 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("rados_osd_op_timeout")) {
     osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  }
+
+  auto read_policy = conf.get_val<std::string>("rados_replica_read_policy");
+  if (read_policy == "localize") {
+    extra_read_flags = CEPH_OSD_FLAG_LOCALIZE_READS;
+  } else if (read_policy == "balance") {
+    extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
   }
 }
 
@@ -377,6 +388,13 @@ void Objecter::init()
 			"OSD OMAP read operations");
     pcb.add_u64_counter(l_osdc_osdop_omap_del, "omap_del",
 			"OSD OMAP delete operations");
+
+    pcb.add_u64_counter(l_osdc_replica_read_sent, "replica_read_sent",
+			"Operations sent to replica");
+    pcb.add_u64_counter(l_osdc_replica_read_bounced, "replica_read_bounced",
+			"Operations bounced by replica to be resent to primary");
+    pcb.add_u64_counter(l_osdc_replica_read_completed, "replica_read_completed",
+			"Operations completed by replica");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2328,6 +2346,10 @@ void Objecter::_send_op_account(Op *op)
     ldout(cct, 20) << " note: not requesting reply" << dendl;
   }
 
+  if (op->target.used_replica) {
+    logger->inc(l_osdc_replica_read_sent);
+  }
+
   logger->inc(l_osdc_op_active);
   logger->inc(l_osdc_op);
   logger->inc(l_osdc_oplen_avg, op->ops.size());
@@ -3475,6 +3497,15 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     _op_submit(op, sul, NULL);
     m->put();
     return;
+  }
+
+  if (op->target.flags & (CEPH_OSD_FLAG_BALANCE_READS |
+			  CEPH_OSD_FLAG_LOCALIZE_READS)) {
+    if (rc == -EAGAIN) {
+      logger->inc(l_osdc_replica_read_bounced);
+    } else {
+      logger->inc(l_osdc_replica_read_completed);
+    }
   }
 
   if (rc == -EAGAIN) {
@@ -5087,6 +5118,15 @@ Objecter::Objecter(CephContext *cct,
 {
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+
+  auto read_policy = cct->_conf.get_val<std::string>("rados_replica_read_policy");
+  if (read_policy == "localize") {
+    ldout(cct, 20) << __func__ << ": read policy: localize" << dendl;
+    extra_read_flags = CEPH_OSD_FLAG_LOCALIZE_READS;
+  } else if (read_policy == "balance") {
+    ldout(cct, 20) << __func__ << ": read policy: balance" << dendl;
+    extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
+  }
 }
 
 Objecter::~Objecter()
