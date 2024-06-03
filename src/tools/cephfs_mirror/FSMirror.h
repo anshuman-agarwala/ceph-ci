@@ -59,7 +59,12 @@ public:
 
   bool is_blocklisted() {
     std::scoped_lock locker(m_lock);
-    return is_blocklisted(locker);
+    return m_blocklisted;
+  }
+
+  void set_blocklisted(bool blocklisted) {
+    std::scoped_lock locker(m_lock);
+    m_blocklisted |= blocklisted;
   }
 
   monotime get_blocklisted_ts() {
@@ -98,18 +103,6 @@ public:
   void reopen_logs();
 
 private:
-  bool is_blocklisted(const std::scoped_lock<ceph::mutex> &locker) const {
-    bool blocklisted = false;
-    if (m_instance_watcher) {
-      blocklisted = m_instance_watcher->is_blocklisted();
-    }
-    if (m_mirror_watcher) {
-      blocklisted |= m_mirror_watcher->is_blocklisted();
-    }
-
-    return blocklisted;
-  }
-
   struct SnapListener : public InstanceWatcher::Listener {
     FSMirror *fs_mirror;
 
@@ -132,6 +125,9 @@ private:
     BlocklistListener(FSMirror *fs_mirror)
       : fs_mirror(fs_mirror) {
     }
+    void set_blocklisted(bool b) {
+      fs_mirror->set_blocklisted(b);
+    }
     void set_blocklisted_ts() {
       fs_mirror->set_blocklisted_ts();
     }
@@ -140,6 +136,7 @@ private:
     }
   };
 
+  bool m_blocklisted = false;
   monotime m_blocklisted_ts;
   monotime m_failed_ts;
   CephContext *m_cct;
