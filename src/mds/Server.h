@@ -342,6 +342,10 @@ public:
     laggy_clients.clear();
   }
 
+  double get_setxattr_selinux_count() const {
+    return setxattr_selinux_count;
+  }
+
   const bufferlist& get_snap_trace(Session *session, SnapRealm *realm) const;
   const bufferlist& get_snap_trace(client_t client, SnapRealm *realm) const;
 
@@ -574,6 +578,9 @@ private:
 
   // record laggy clients due to laggy OSDs
   std::set<client_t> laggy_clients;
+
+  // keep track of setxattr occurrences of security.selinux
+  uint64_t setxattr_selinux_count = 0;
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {

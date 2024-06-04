@@ -6733,6 +6733,9 @@ void Server::handle_client_setxattr(const MDRequestRef& mdr)
   pi.inode->change_attr++;
   pi.inode->xattr_version++;
 
+  if (name == "security.selinux"sv)
+    setxattr_selinux_count++;
+
   if ((flags & CEPH_XATTR_REMOVE)) {
     std::invoke(handler->removexattr, this, cur, pi.xattrs, xattr_op);
   } else {

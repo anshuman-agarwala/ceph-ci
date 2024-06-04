@@ -500,6 +500,30 @@ void Beacon::notify_health(MDSRank const *mds)
     }
   }
 
+  // Report if selinux setxattrs ops exceed threshold
+  {
+    const auto selinux_xattr_count = mds->server->get_setxattr_selinux_count();
+    const auto xattr_warn_threshold = g_conf().get_val<double>("mds_log_max_setxattr_selinux");
+
+    if (xattr_warn_threshold != -1) {
+      auto now = clock::now();
+      auto elapsed = std::chrono::duration<double>(now - last_setxattr_selinux_time).count();
+      auto rate = double(selinux_xattr_count - last_setxattr_selinux_val) / elapsed;
+      if (rate > xattr_warn_threshold) {
+        CachedStackStringStream css;
+        *css << "selinux setxattr warn reached at: " << rate;
+
+        MDSHealthMetric m(MDS_HEALTH_XATTR_SELINUX, HEALTH_WARN, css->strv());
+        m.metadata["selinux_xattr_rate"] = stringify(rate);
+        health.metrics.push_back(m);
+      }
+
+      last_setxattr_selinux_time = now;
+      last_setxattr_selinux_val = selinux_xattr_count;
+    }
+
+  }
+
   // Report if we have significantly exceeded our cache size limit
   if (mds->mdcache->cache_overfull()) {
     CachedStackStringStream css;

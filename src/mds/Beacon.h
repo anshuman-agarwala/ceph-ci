@@ -75,6 +75,9 @@ public:
    */
   void send_and_wait(const double duration);
 
+  time last_setxattr_selinux_time = clock::zero();
+  uint64_t last_setxattr_selinux_val = 0;
+
   bool is_laggy();
   double last_cleared_laggy() const {
     std::unique_lock lock(mutex);

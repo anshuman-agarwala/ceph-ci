@@ -596,6 +596,16 @@ options:
   min: 1
   see_also:
   - mds_log_events_per_segment
+- name: mds_log_max_setxattr_selinux
+  type: float
+  level: advanced
+  desc: rate of selinux xattrs per second
+  fmt_desc: The rate of setxattr selinux or ``security.selinux`` attrs
+    per second that a single mds see before potential performance degradation.
+    Set to ``-1`` to disable limits.
+  default: 50
+  services:
+  - mds
 # segment size for mds log, default to default file_layout_t
 - name: mds_log_segment_size
   type: size
