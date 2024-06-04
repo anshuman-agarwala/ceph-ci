@@ -332,6 +332,26 @@ def ceph_log(ctx, config):
                 teuthology.pull_directory(remote, '/var/log/ceph',
                                           os.path.join(sub, 'log'))
 
+            import subprocess
+            subprocess.run(
+                [
+                    'find',
+                    ctx.archive,
+                    '-name',
+                    '*.gz',
+                    '-print0',
+                    '|',
+                    'xargs',
+                    '--max-args=1',
+                    '--max-procs=0',
+                    '--verbose',
+                    '-0',
+                    '--no-run-if-empty',
+                    '--',
+                    'sha1sum',
+                    '--'
+                ], shell=True)
+
 
 def assign_devs(roles, devs):
     """
