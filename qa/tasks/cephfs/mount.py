@@ -1314,8 +1314,14 @@ class CephFSMountBase(object):
         self.background_procs.append(rproc)
         return rproc
 
+    def chcon(self, fs_path, context):
+        abs_path = os.path.join(self.hostfs_mntpt, fs_path)
+        self.client_remote.run(args=['sudo', 'chcon', '-R', '-t',
+                                             context, abs_path],
+                                       omit_sudo=True, check_status=False)
+
     def create_n_files(self, fs_path, count, sync=False, dirsync=False,
-                       unlink=False, finaldirsync=False, hard_links=0):
+                       unlink=False, finaldirsync=False, hard_links=0, timeout=None):
         """
         Create n files.
 
@@ -1367,7 +1373,7 @@ class CephFSMountBase(object):
                 os.close(dirfd)
             """)
 
-        self.run_python(pyscript)
+        self.run_python(pyscript, timeout=timeout)
 
     def teardown(self):
         log.info("Terminating background process")

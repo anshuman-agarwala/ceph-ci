@@ -2068,6 +2068,29 @@ class TestFsAuthorizeUpdate(CephFSTestCase):
                         cephfs_mntpt=cephfs_mntpt, cephfs_name=fsname)
 
 
+class TestSetXattr(CephFSTestCase):
+    """
+    Tests for setxattr call
+    """
+
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 1
+
+    def test_setxattr_security_seliniux(self):
+        """
+        That rate of "security.selinux" setxattr can be counted.
+        """
+
+        self.config_set('mds', 'mds_log_max_setxattr_selinux', '1')
+        self.mount_a.create_n_files("test_dir/test_file", 1000, sync=True, timeout=60)
+
+        #sleep for 1 min to ensure no cached ops
+        sleep(60)
+        self.mount_a.chcon("test_dir", "mnt_t")
+        self.wait_for_health("MDS_XATTR_SELINUX", 60)
+        self.wait_for_health_clear(60)
+
+
 class TestAdminCommandIdempotency(CephFSTestCase):
     """
     Tests for administration command idempotency.
