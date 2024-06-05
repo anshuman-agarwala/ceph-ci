@@ -19,7 +19,7 @@ using crimson::common::local_conf;
     assert(obc->is_head());
     obc->append_to(obc_set_accessing);
     return obc->with_lock<State, IOInterruptCondition>(
-      [existed, obc, func=std::move(func), this] {
+      [existed=existed, obc=obc, func=std::move(func), this] {
       return get_or_load_obc<State>(obc, existed)
       .safe_then_interruptible(
         [func = std::move(func)](auto obc) {
@@ -86,7 +86,7 @@ using crimson::common::local_conf;
     }
     auto [clone, existed] = obc_registry.get_cached_obc(clone_oid);
     return clone->template with_lock<State, IOInterruptCondition>(
-      [existed, clone=std::move(clone),
+      [existed=existed, clone=std::move(clone),
        func=std::move(func), head=std::move(head), this]() mutable
       -> load_obc_iertr::future<> {
       return get_or_load_obc<State>(clone, existed)
