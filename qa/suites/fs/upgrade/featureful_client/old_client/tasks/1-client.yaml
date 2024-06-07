@@ -1,6 +1,7 @@
 tasks:
 - ceph-fuse:
-- print: "**** done octopus client"
+  client_feature_range: 22
+- print: "**** done client"
 - workunit:
     clients:
       all:

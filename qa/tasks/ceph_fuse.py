@@ -86,6 +86,15 @@ def task(ctx, config):
             client.1:
               mount_subvol_num: 1
 
+    Example for client mount with custom client feature set
+
+        tasks:
+        - ceph:
+        - ceph-fuse:
+            client.0:
+              client_features: 0,1,2,3,4,19,20,21 # only these feature bits
+              client_feature_range: 21 # everything except CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK
+
     :param ctx: Context
     :param config: Configuration
     """
@@ -166,7 +175,19 @@ def task(ctx, config):
     for info in mounted_by_me.values():
         config = info["config"]
         mount_x = info['mount']
-        mount_x.mount(mntopts=config.get('mntopts', []), mntargs=config.get('mntargs', []))
+
+        # apply custom client feature set
+        client_features = config.get("client_features", None)
+        client_feature_range = config.get("client_feature_range", None)
+        log.info(f"client_features={client_features} {type(client_features)} client_feature_range={client_feature_range} {type(client_feature_range)}")
+        if client_feature_range is not None:
+            client_features = ",".join(str(i) for i in range(client_feature_range))
+            log.info(f"client_features={client_features}")
+        mntargs = config.get('mntargs', [])
+        if client_features is not None:
+            mntargs.append(f"--client_debug_inject_features={client_features}")
+        log.info(f"mntargs={mntargs}")
+        mount_x.mount(mntopts=config.get('mntopts', []), mntargs)
 
     for info in mounted_by_me.values():
         info["mount"].wait_until_mounted()
