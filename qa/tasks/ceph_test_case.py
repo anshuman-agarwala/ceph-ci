@@ -263,7 +263,8 @@ class CephTestCase(unittest.TestCase, RunCephCmd):
         only when @pattern is a code string.
         """
         def seen_health_warning():
-            health = self.ceph_cluster.mon_manager.get_mon_health(debug=False, detail=bool(check_in_detail))
+            health = self.ceph_cluster.mon_manager.get_mon_health(debug=True, detail=bool(check_in_detail))
+            print("the health status is:%s" % health)
             codes = [s for s in health['checks']]
             summary_strings = [s[1]['summary']['message'] for s in health['checks'].items()]
             if len(summary_strings) == 0:

@@ -512,12 +512,13 @@ void Beacon::notify_health(MDSRank const *mds)
       if (rate > xattr_warn_threshold) {
         CachedStackStringStream css;
         *css << "selinux setxattr warn reached at: " << rate;
-
+	ldout(cct, 0) << "setting xattr health warn!" << dendl;
         MDSHealthMetric m(MDS_HEALTH_XATTR_SELINUX, HEALTH_WARN, css->strv());
         m.metadata["selinux_xattr_rate"] = stringify(rate);
         health.metrics.push_back(m);
       }
 
+	ldout(cct, 0) << "setting xattr time right now!" << dendl;
       last_setxattr_selinux_time = now;
       last_setxattr_selinux_val = selinux_xattr_count;
     }

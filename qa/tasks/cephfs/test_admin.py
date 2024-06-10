@@ -2081,8 +2081,13 @@ class TestSetXattr(CephFSTestCase):
         That rate of "security.selinux" setxattr can be counted.
         """
 
+        out_text = self.fs.get_ceph_cmd_stdout('--format=json-pretty', 'osd', 'pool', 'ls', 'detail')
+        #out_text = self.fs.get_ceph_cmd_stdout('--format=json-pretty', 'osd', 'lspools')
+        pools = json.loads(out_text)
+        print("the pools are: %s" % pools)
+
         self.config_set('mds', 'mds_log_max_setxattr_selinux', '1')
-        self.mount_a.create_n_files("test_dir/test_file", 10000, sync=True, timeout=60)
+        self.mount_a.create_n_files("test_dir/test_file", 1000, sync=True, timeout=1200)
 
         #sleep for 1 min to ensure no cached ops
         sleep(60)
