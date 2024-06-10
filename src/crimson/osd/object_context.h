@@ -138,19 +138,13 @@ private:
   template <typename Lock, typename Func>
   auto _with_lock(Lock& lock, Func&& func) {
     Ref obc = this;
-    auto maybe_fut = lock.lock();
     return seastar::futurize_invoke([
-        maybe_fut=std::move(maybe_fut),
+        &lock,
         func=std::forward<Func>(func)]() mutable {
-      if (maybe_fut) {
-        return std::move(*maybe_fut
-        ).then([func=std::forward<Func>(func)]() mutable {
-          return seastar::futurize_invoke(func);
-        });
-      } else {
-        // atomically calling func upon locking
-        return seastar::futurize_invoke(func);
-      }
+      return lock.lock(
+      ).then([func=std::forward<Func>(func)]() mutable {
+	return seastar::futurize_invoke(func);
+      });
     }).finally([&lock, obc] {
       lock.unlock();
     });
