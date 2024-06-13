@@ -196,7 +196,7 @@ class TestScrubChecks(CephFSTestCase):
     it uses that value to generate unique folder and file names.
     """
 
-    MDSS_REQUIRED = 1
+    MDSS_REQUIRED = 2
     CLIENTS_REQUIRED = 1
     def get_dsplits(self, dir_ino):
         return self.fs.rank_asok(['dump', 'inode', str(dir_ino)])['dirfragtree']['splits']
@@ -442,6 +442,56 @@ class TestScrubChecks(CephFSTestCase):
             lambda: len(self.get_dsplits(dir_ino)) > 0,
             timeout=30
         )
+
+    def test_scrub_backtrace_divergent_newer(self):
+        """
+        On-disk backtrace is divergent or newer
+        """
+
+        test_path2 = "testdir1/testdir2"
+        test_path3 = f"{test_path2}/testdir3"
+        test_path4 = f"{test_path3}/testdir4"
+        abs_test_path4 = f"/{test_path4}"
+        split_size = 100
+        merge_size = 50
+        replica_threshold = 1
+
+        self.config_set('mds', 'mds_bal_split_size', split_size)
+        self.config_set('mds', 'mds_bal_merge_size', merge_size)
+        self.config_set('mds', 'mds_bal_replicate_threshold', replica_threshold)
+
+        self.mount_a.run_shell(["mkdir", "-p", test_path4])
+        dir_ino=self.mount_a.path_to_ino(test_path4)
+
+        self.assertEqual(len(self.get_dsplits(dir_ino)), 0)
+        for i in range(8 * split_size):
+            self.mount_a.run_shell(["touch", f"{test_path4}/file_{i}"])
+
+        self.fs.flush()
+        out_json = self.fs.run_scrub(["start", abs_test_path4, "recursive"])
+        self.assertNotEqual(out_json, None)
+
+        # Wait until split is present to confirm split by scrub
+        self.wait_until_true(
+            lambda: len(self.get_dsplits(dir_ino)) > 0,
+            timeout=30
+        )
+
+        # Dirty the parents in mds.0 and the mds.1 will keep old
+        self.mount_a.run_shell(["touch", f"{test_path3}/file_0}"])
+        for i in range(32):
+            self.mount_a.run_shell(["touch", f"{test_path2}/file_{i}"])
+            self.mount_a.run_shell(["touch", f"{test_path3}/file_{i}"])
+
+        self.fs.flush()
+
+        # Export testdir3 to mds.1
+        status = self.fs.wait_for_daemons()
+        self.fs.rank_asok(["export", "dir", f"{test_path3}", "1"], rank=0, status=status) 
+
+        # Scrub 'testdir3/file_0' and it will detect the backtrace in memory will be newer
+        out_json = self.fs.run_scrub(["start", abs_test_path4, "recursive"])
+        self.assertNotEqual(out_json, None)
 
     def test_stray_evaluation_with_scrub(self):
         """
