@@ -174,6 +174,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::Op &rhs)
 
 void ECCommon::ReadPipeline::complete_read_op(ReadOp &rop)
 {
+  dout(20) << __func__ << " completing " << rop << dendl;
   map<hobject_t, read_request_t>::iterator req_iter =
     rop.to_read.begin();
   map<hobject_t, read_result_t>::iterator resiter =
@@ -345,7 +346,7 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
 {
   get_min_want_to_read_shards(
     offset, length, sinfo, ec_impl->get_chunk_mapping(), want_to_read);
-  dout(30) << __func__ << ": offset " << offset << " length " << length
+  dout(20) << __func__ << ": offset " << offset << " length " << length
 	   << " want_to_read " << *want_to_read << dendl;
 }
 
@@ -521,6 +522,9 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
     list<ECCommon::ec_align_t> to_read,
     set<int> wanted_to_read) override
   {
+    auto* cct = read_pipeline.cct;
+    dout(20) << __func__ << " completing hoid=" << hoid
+             << " res=" << res << " to_read="  << to_read << dendl;
     extent_map result;
     if (res.r != 0)
       goto out;
@@ -544,6 +548,10 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
 	   ++j) {
 	to_decode[j->first.shard] = std::move(j->second);
       }
+      dout(20) << __func__ << " going to decode: "
+               << " wanted_to_read=" << wanted_to_read
+               << " to_decode=" << to_decode
+               << dendl;
       int r = ECUtil::decode(
 	read_pipeline.sinfo,
 	read_pipeline.ec_impl,
@@ -551,22 +559,22 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
 	to_decode,
 	&bl);
       if (r < 0) {
+        dout(10) << __func__ << " error on ECUtil::decode r=" << r << dendl;
         res.r = r;
         goto out;
       }
       bufferlist trimmed;
-      auto* cct = read_pipeline.cct;
       auto off = read.offset - aligned.first;
       if (g_conf()->osd_ec_partial_reads) {
         const auto skip_size =
 	  read_pipeline.sinfo.get_partial_read_skip_size(aligned);
         off += skip_size;
-        dout(30) << __func__ << "partial read skip size="
+        dout(20) << __func__ << "partial read skip size="
 		 << skip_size << dendl;
       }
       auto len =
           std::min(read.size, bl.length() - (read.offset - aligned.first));
-      dout(30) << __func__ << " bl.length()=" << bl.length()
+      dout(20) << __func__ << " bl.length()=" << bl.length()
 	       << " len=" << len << " read.size=" << read.size
 	       << " off=" << off << " read.offset=" << read.offset
 	       << dendl;
@@ -576,6 +584,8 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
       res.returned.pop_front();
     }
 out:
+    dout(20) << __func__ << " calling complete_object with result="
+             << result << dendl;
     status->complete_object(hoid, res.r, std::move(result));
     read_pipeline.kick_reads();
   }
