@@ -564,6 +564,7 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
         goto out;
       }
       bufferlist trimmed;
+      ceph_assert(aligned.first <= read.offset);
       auto off = read.offset - aligned.first;
       if (g_conf()->osd_ec_partial_reads) {
         const auto skip_size =
@@ -572,8 +573,7 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
         dout(20) << __func__ << "partial read skip size="
 		 << skip_size << dendl;
       }
-      auto len =
-          std::min(read.size, bl.length() - (read.offset - aligned.first));
+      auto len = std::min(read.size, bl.length() - off);
       dout(20) << __func__ << " bl.length()=" << bl.length()
 	       << " len=" << len << " read.size=" << read.size
 	       << " off=" << off << " read.offset=" << read.offset
