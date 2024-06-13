@@ -199,6 +199,11 @@ public:
       std::forward<T>(evt));
   }
 
+  /* PeeringState::Listener implementations
+   *
+   * In general, we handle peering_state events in a seastar thread
+   * (see PG::do_peering_event).  These handlers are, therefore, allowed
+   * to use get() directly to block until future resolution */
   void schedule_event_after(
     PGPeeringEventRef event,
     float delay) final {
@@ -211,9 +216,7 @@ public:
     unsigned priority,
     PGPeeringEventURef on_grant,
     PGPeeringEventURef on_preempt) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.local_request_reservation(
+    shard_services.local_request_reservation(
       pgid,
       on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
 	start_peering_event_operation(std::move(*on_grant));
@@ -222,32 +225,26 @@ public:
       on_preempt ? make_lambda_context(
 	[this, on_preempt=std::move(on_preempt)] (int) {
 	start_peering_event_operation(std::move(*on_preempt));
-      }) : nullptr);
+      }) : nullptr).get0();
   }
 
   void update_local_background_io_priority(
     unsigned priority) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.local_update_priority(
+    shard_services.local_update_priority(
       pgid,
-      priority);
+      priority).get0();
   }
 
   void cancel_local_background_io_reservation() final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.local_cancel_reservation(
-      pgid);
+    shard_services.local_cancel_reservation(
+      pgid).get0();
   }
 
   void request_remote_recovery_reservation(
     unsigned priority,
     PGPeeringEventURef on_grant,
     PGPeeringEventURef on_preempt) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.remote_request_reservation(
+    shard_services.remote_request_reservation(
       pgid,
       on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
 	start_peering_event_operation(std::move(*on_grant));
@@ -256,14 +253,12 @@ public:
       on_preempt ? make_lambda_context(
 	[this, on_preempt=std::move(on_preempt)] (int) {
 	start_peering_event_operation(std::move(*on_preempt));
-      }) : nullptr);
+      }) : nullptr).get0();
   }
 
   void cancel_remote_recovery_reservation() final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore =  shard_services.remote_cancel_reservation(
-      pgid);
+    shard_services.remote_cancel_reservation(
+      pgid).get0();
   }
 
   void schedule_event_on_commit(
@@ -286,14 +281,10 @@ public:
     // Not needed yet
   }
   void queue_want_pg_temp(const std::vector<int> &wanted) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.queue_want_pg_temp(pgid.pgid, wanted);
+    shard_services.queue_want_pg_temp(pgid.pgid, wanted).get0();
   }
   void clear_want_pg_temp() final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.remove_want_pg_temp(pgid.pgid);
+    shard_services.remove_want_pg_temp(pgid.pgid).get0();
   }
   void check_recovery_sources(const OSDMapRef& newmap) final {
     // Not needed yet
