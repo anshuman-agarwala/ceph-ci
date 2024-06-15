@@ -451,6 +451,8 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
             self.remove_snapshots(d[1:])
             self.mount_a.run_shell(['rmdir', d[1:]])
 
+        self.mount_a.run_shell(['echo', 'finished running test_concurrent_snap_creates'])
+
     def test_snap_schedule_with_mgr_restart(self):
         """Test that snap schedule is resumed after mgr restart"""
         self.mount_a.run_shell(['mkdir', '-p', TestSnapSchedules.TEST_DIRECTORY])
