@@ -407,3 +407,5 @@ class TestSnapSchedules(CephFSTestCase):
             self.fs_snap_schedule_cmd('remove', path=d, snap_schedule='1M')
             self.remove_snapshots(d[1:])
             self.mount_a.run_shell(['rmdir', d[1:]])
+
+        log.debug("finished test_concurrent_snap_creates")
