@@ -637,6 +637,12 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
       &shards);
     ceph_assert(r == 0);
 
+    int subchunk_size =
+      sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
+    dout(20) << __func__
+             << " subchunk_size=" << subchunk_size
+             << " chunk_size=" << sinfo.get_chunk_size() << dendl;
+
     for_read_op.insert(
       make_pair(
 	to_read.first,
