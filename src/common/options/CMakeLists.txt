@@ -105,7 +105,7 @@ add_options(rgw)
 add_library(common-options-objs OBJECT
   ${common_options_srcs})
 add_library(legacy-option-headers INTERFACE)
-target_sources(legacy-option-headers
+target_sources(legacy-option-headers INTERFACE
   PRIVATE
     ${legacy_options_headers})
 
