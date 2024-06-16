@@ -629,6 +629,17 @@ target_link_libraries(rados_snap_set_diff_obj
 
 option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
+if(CMAKE_VERSION VERSION_LESS "3.20")
+  # see src/common/options/CMakeLists.txt
+  set(all_options
+    global cephfs-mirror crimson mgr mds mds-client mon osd rbd rbd-mirror immutable-object-cache ceph-exporter)
+  foreach(name ${all_options})
+    set_property(SOURCE
+      ${PROJECT_BINARY_DIR}/include/${name}_legacy_options.h
+      PROPERTY GENERATED TRUE)
+  endforeach()
+endif()
+
 add_subdirectory(include)
 add_subdirectory(librados)
 add_subdirectory(neorados)
