@@ -20,3 +20,6 @@ tasks:
   - cephfs_test_runner:
       modules:
         - tasks.cephfs.test_snap_schedules
+        - tasks.cephfs.test_snap_schedules_2
+        - tasks.cephfs.test_snap_schedules_3
+        - tasks.cephfs.test_snap_schedules_4
