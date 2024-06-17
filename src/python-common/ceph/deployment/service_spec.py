@@ -765,6 +765,7 @@ class ServiceSpec(object):
         'elasticsearch',
         'grafana',
         'ingress',
+        'mgmt-gateway',
         'iscsi',
         'jaeger-agent',
         'jaeger-collector',
@@ -819,6 +820,7 @@ class ServiceSpec(object):
             'nvmeof': NvmeofServiceSpec,
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
+            'mgmt-gateway': MgmtGatewaySpec,
             'container': CustomContainerSpec,
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
@@ -1753,6 +1755,70 @@ class IngressSpec(ServiceSpec):
 
 
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
+
+
+class MgmtGatewaySpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'mgmt-gateway',
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 disable_https: Optional[bool] = False,
+                 port: Optional[int] = None,
+                 ssl_certificate: Optional[List[str]] = None,
+                 ssl_certificate_key: Optional[List[str]] = None,
+                 ssl_prefer_server_ciphers: Optional[str] = None,
+                 ssl_session_tickets: Optional[str] = None,
+                 ssl_session_timeout: Optional[str] = None,
+                 ssl_session_cache: Optional[str] = None,
+                 server_tokens: Optional[str] = None,
+                 ssl_stapling: Optional[str] = None,
+                 ssl_stapling_verify: Optional[str] = None,
+                 ssl_protocols: List[Optional[str]] = None,
+                 ssl_ciphers: Optional[List[str]] = None,
+                 unmanaged: bool = False,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
+                 ):
+        assert service_type == 'mgmt-gateway'
+
+        super(MgmtGatewaySpec, self).__init__(
+            'mgmt-gateway', service_id=service_id,
+            placement=placement, config=config,
+            networks=networks,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs
+        )
+        self.disable_https = disable_https
+        self.port = port
+        self.ssl_certificate = ssl_certificate
+        self.ssl_certificate_key = ssl_certificate_key
+        self.ssl_prefer_server_ciphers = ssl_prefer_server_ciphers
+        self.ssl_session_tickets = ssl_session_tickets
+        self.ssl_session_timeout = ssl_session_timeout
+        self.ssl_session_cache = ssl_session_cache
+        self.server_tokens = server_tokens
+        self.ssl_stapling = ssl_stapling
+        self.ssl_stapling_verify = ssl_stapling_verify
+        self.ssl_protocols = ssl_protocols
+        self.ssl_ciphers = ssl_ciphers
+        self.unmanaged = unmanaged
+
+    def get_port_start(self) -> List[int]:
+        ports = []
+        if self.port is not None:
+            ports.append(cast(int, self.port))
+        return ports
+
+    def validate(self) -> None:
+        super(MgmtGatewaySpec, self).validate()
+        # TODO(redo)
+
+
+yaml.add_representer(MgmtGatewaySpec, ServiceSpec.yaml_representer)
 
 
 class InitContainerSpec(object):
