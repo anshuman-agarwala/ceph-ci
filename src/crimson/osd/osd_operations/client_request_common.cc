@@ -19,21 +19,27 @@ CommonClientRequest::do_recover_missing(
   const hobject_t& soid,
   const osd_reqid_t& reqid)
 {
-  eversion_t ver;
-  assert(pg->is_primary());
   logger().debug("{} reqid {} check for recovery, {}",
                  __func__, reqid, soid);
-
+  assert(pg->is_primary());
+  eversion_t ver;
+  auto &peering_state = pg->get_peering_state();
+  auto &missing_loc = peering_state.get_missing_loc();
   bool needs_recovery_or_backfill = false;
+
   if (pg->is_unreadable_object(soid)) {
-    auto &peering_state = pg->get_peering_state();
-    auto &missing_loc = peering_state.get_missing_loc();
+    logger().debug("{} reqid {}, {} is unreadable",
+                   __func__, reqid, soid);
     ceph_assert(missing_loc.needs_recovery(soid, &ver));
     needs_recovery_or_backfill = true;
   }
 
   if (pg->is_degraded_or_backfilling_object(soid)) {
-    needs_recovery_or_backfill = true;
+    logger().debug("{} reqid {}, {} is degraded or backfilling",
+                   __func__, reqid, soid);
+    if (missing_loc.needs_recovery(soid, &ver)) {
+      needs_recovery_or_backfill = true;
+    }
   }
 
   if (!needs_recovery_or_backfill) {
