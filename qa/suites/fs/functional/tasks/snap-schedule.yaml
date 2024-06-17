@@ -19,4 +19,7 @@ overrides:
 tasks:
   - cephfs_test_runner:
       modules:
-        - tasks.cephfs.test_snap_schedules
+        - tasks.cephfs.test_snap_schedules.TestSnapSchedules
+        - tasks.cephfs.test_snap_schedules.TestSnapSchedulesSubvolAndGroupArguments
+        - tasks.cephfs.test_snap_schedules.TestSnapSchedulesSnapdir
+        - tasks.cephfs.test_snap_schedules.TestSnapSchedulesMandatoryFSArgument
