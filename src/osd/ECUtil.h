@@ -106,6 +106,16 @@ public:
     const auto last_chunk_idx = (chunk_size - 1 + off + len) / chunk_size;
     return {first_chunk_idx, last_chunk_idx};
   }
+  bool offset_length_is_same_stripe(
+    uint64_t off, uint64_t len) const {
+    if (len == 0) {
+      return true;
+    }
+    assert(chunk_size > 0);
+    const auto first_stripe_idx = off / stripe_width;
+    const auto last_inc_stripe_idx = (off + len - 1) / stripe_width;
+    return first_stripe_idx == last_inc_stripe_idx;
+  }
   uint64_t get_partial_read_skip_size(std::pair<uint64_t, uint64_t> in) const {
     const auto [offset, length] = in;
     const auto offset_in_stripe = offset % get_stripe_width();
