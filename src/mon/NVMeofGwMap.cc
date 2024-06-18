@@ -34,14 +34,45 @@ void NVMeofGwMap::to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) c
         const NvmeGwMonStates& gw_created_map = created_map_pair.second;
         for (const auto& gw_created_pair: gw_created_map) {
             const auto& gw_id = gw_created_pair.first;
-            const auto& gw_created  = gw_created_pair.second;
-
+            auto gw_created  = gw_created_pair.second;
+            if(gw_created.availability == gw_availability_t::GW_DELETING)
+                gw_created.availability = gw_availability_t::GW_UNAVAILABLE;
             auto gw_state = NvmeGwClientState(gw_created.ana_grp_id, epoch, gw_created.availability);
             for (const auto& sub: gw_created.subsystems) {
                 gw_state.subsystems.insert({sub.nqn, NqnState(sub.nqn, gw_created.sm_state, gw_created )});
             }
             Gmap[group_key][gw_id] = gw_state;
         }
+    }
+}
+
+int NVMeofGwMap::get_num_namespaces(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  const BeaconSubsystems&  subs) {
+  auto grpid = created_gws[group_key][gw_id].ana_grp_id ;
+  int num_ns = 0;
+  for (auto & subs_it:subs)
+      for (auto & ns :subs_it.namespaces){
+          if (ns.anagrpid == (grpid+1)){
+             num_ns++;
+          }
+      }
+  return num_ns;
+}
+
+void NVMeofGwMap::track_deleting_gws(const NvmeGroupKey& group_key,const BeaconSubsystems& subs,  bool &propose_pending){
+
+    propose_pending = false;
+    for (auto& itr: created_gws[group_key]) {
+       auto &gw_id = itr.first;
+       if (itr.second.availability == gw_availability_t::GW_DELETING){
+            int num_ns = 0;
+            if ( (num_ns = get_num_namespaces(gw_id, group_key, subs)) == 0) {
+                bool deleted;
+                cfg_delete_gw(gw_id, group_key, deleted, true);
+                propose_pending =  true;
+                ceph_assert(deleted == true);
+            }
+            dout(4) << " to delete ? " << gw_id  << " num_ns " << num_ns <<  dendl;
+       }
     }
 }
 
@@ -53,6 +84,18 @@ int  NVMeofGwMap::cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_ke
         if(itr.first == gw_id) {
             dout(1) << __func__ << " ERROR create GW: already exists in map " << gw_id << dendl;
             return -EEXIST ;
+        }
+        if(itr.second.availability == gw_availability_t::GW_DELETING){
+           NvmeGwMonState gw_created(itr.second.ana_grp_id);
+           created_gws[group_key][gw_id] = gw_created;
+           created_gws[group_key][gw_id].performed_full_startup = true;
+           created_gws[group_key][gw_id].availability =  gw_availability_t::GW_UNAVAILABLE;// it will get its ANA group via Failback
+           dout(4) << "Created GW inherits ANA group of deleting GW-id :" << itr.first << " group " << itr.second.ana_grp_id  <<  dendl;
+           dout(4) << "Created GWS:  " << created_gws  <<  dendl;
+           bool deleted = false;
+           cfg_delete_gw(itr.first, group_key, deleted, true);
+           ceph_assert(deleted == true);
+           return 0;
         }
     }
 
@@ -70,24 +113,54 @@ int  NVMeofGwMap::cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_ke
     return -EINVAL;
 }
 
-int NVMeofGwMap::cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key) {
+int NVMeofGwMap::cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool& deleted, bool force_delete) {
     int rc = 0;
+    deleted = false;
     for (auto& gws_states: created_gws[group_key]) {
 
         if (gws_states.first == gw_id) {
             auto& state = gws_states.second;
-            for(int i=0; i<MAX_SUPPORTED_ANA_GROUPS; i++){
-                bool modified;
-                fsm_handle_gw_delete (gw_id, group_key, state.sm_state[i], i, modified);
-            }
-            dout(4) << " Delete GW :"<< gw_id  << " ANA grpid: " << state.ana_grp_id  << dendl;
-            fsm_timers[group_key].erase(gw_id);
-            if(fsm_timers[group_key].size() == 0)
-                fsm_timers.erase(group_key);
+            switch (state.availability){
 
-            created_gws[group_key].erase(gw_id);
-            if(created_gws[group_key].size() == 0)
-                created_gws.erase(group_key);
+            case gw_availability_t::GW_CREATED:
+                state.availability = gw_availability_t::GW_DELETING;
+                dout(4) << " Deleting Created GW :"<< gw_id  << " Resulting GW availability: " << state.availability  << dendl;
+                break;
+            case gw_availability_t::GW_AVAILABLE:
+                state.availability = gw_availability_t::GW_DELETING;
+                dout(4) << " Deleting Available GW :"<< gw_id  << " Resulting GW availability: " << state.availability  << dendl;
+                break;
+
+            case gw_availability_t::GW_UNAVAILABLE:
+                state.availability = gw_availability_t::GW_DELETING;
+                dout(4) << " Deleting Unavailable GW :"<< gw_id  << " Resulting GW availability: " << state.availability  << dendl;
+                break;
+
+            case gw_availability_t::GW_DELETING:
+                if(force_delete){
+                    dout(4) << " Delete GW :"<< gw_id  << " ANA grpid: " << state.ana_grp_id  << dendl;
+                    deleted = true;
+                    for(int i=0; i<MAX_SUPPORTED_ANA_GROUPS; i++){
+                        bool modified;
+                        fsm_handle_gw_delete (gw_id, group_key, state.sm_state[i], i, modified);
+                    }
+
+                    fsm_timers[group_key].erase(gw_id);
+                    if(fsm_timers[group_key].size() == 0)
+                        fsm_timers.erase(group_key);
+                    created_gws[group_key].erase(gw_id);
+                    if(created_gws[group_key].size() == 0)
+                        created_gws.erase(group_key);
+                }
+                break;
+
+                break;
+
+            default:
+               ceph_assert(false);
+               break;
+            }
+
             return rc;
         }
     }
@@ -400,7 +473,7 @@ void NVMeofGwMap::fsm_handle_gw_delete (const NvmeGwId &gw_id, const NvmeGroupKe
     {
         case gw_states_per_group_t::GW_STANDBY_STATE:
         case gw_states_per_group_t::GW_IDLE_STATE:
-        case gw_states_per_group_t::GW_OWNER_WAIT_FAILBACK_PREPARED:
+       // case gw_states_per_group_t::GW_OWNER_WAIT_FAILBACK_PREPARED:
         {
             NvmeGwMonState& gw_state = created_gws[group_key][gw_id];
 
@@ -409,6 +482,7 @@ void NVMeofGwMap::fsm_handle_gw_delete (const NvmeGwId &gw_id, const NvmeGroupKe
                 for (auto& gs: gateway_states) {
                     if (gs.second.sm_state[grpid] == gw_states_per_group_t::GW_ACTIVE_STATE  || gs.second.sm_state[grpid] == gw_states_per_group_t::GW_WAIT_FAILBACK_PREPARED){
                         gs.second.standby_state(grpid);
+                        dout(4) << "Before deleting the gw " << gw_id << " need to set it's group " << grpid << " to standby at gw "<< gs.first  << dendl;
                         map_modified = true;
                         if (gs.second.sm_state[grpid] == gw_states_per_group_t::GW_WAIT_FAILBACK_PREPARED)
                             cancel_timer(gs.first, group_key, grpid);
@@ -428,31 +502,8 @@ void NVMeofGwMap::fsm_handle_gw_delete (const NvmeGwId &gw_id, const NvmeGroupKe
         }
         break;
 
-        case gw_states_per_group_t::GW_WAIT_FAILBACK_PREPARED:
-        {
-            cancel_timer(gw_id, group_key, grpid);
-            for (auto& nqn_gws_state: created_gws[group_key]) {
-                auto& st = nqn_gws_state.second;
-
-                if (st.sm_state[grpid] == gw_states_per_group_t::GW_OWNER_WAIT_FAILBACK_PREPARED) { // found GW   that was intended for  Failback for this ana grp
-                    dout(4) << "Warning: Outgoing Failback when GW is deleted - to rollback it" << " GW " << gw_id << "for ANA Group " << grpid << dendl;
-                    st.standby_state(grpid);
-                    map_modified = true;
-                    break;
-                }
-            }
-        }
-        break;
-
-        case gw_states_per_group_t::GW_ACTIVE_STATE:
-        {
-            NvmeGwMonState& gw_state = created_gws[group_key][gw_id];
-            map_modified = true;
-            gw_state.standby_state(grpid);
-        }
-        break;
-
         default: {
+            dout(4) << "Error: state " << state << dendl;
             ceph_assert(false);
         }
     }

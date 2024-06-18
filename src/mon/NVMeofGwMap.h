@@ -39,9 +39,9 @@ public:
     std::map<NvmeGroupKey, NvmeGwMonStates>  created_gws;
     std::map<NvmeGroupKey, NvmeGwTimers> fsm_timers;// map that handles timers started by all Gateway FSMs
     void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
-
+    void  track_deleting_gws            (const NvmeGroupKey& group_key, const BeaconSubsystems&  subs, bool &propose_pending);
     int   cfg_add_gw                    (const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
-    int   cfg_delete_gw                 (const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+    int   cfg_delete_gw                 (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool& deleted, bool force_delete = false);
     void  process_gw_map_ka             (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, epoch_t& last_osd_epoch,  bool &propose_pending);
     int   process_gw_map_gw_down        (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending);
     void  update_active_timers          (bool &propose_pending);
@@ -60,7 +60,7 @@ private:
     void find_failback_gw       (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  bool &propose_pending);
     void set_failover_gw_for_ANA_group (const NvmeGwId &failed_gw_id, const NvmeGroupKey& group_key, const NvmeGwId &gw_id,
                                                                                                      NvmeAnaGrpId groupid);
-
+    int  get_num_namespaces (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const BeaconSubsystems&  subs );
 
     int  get_timer   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid);
     void cancel_timer(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid);

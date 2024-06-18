@@ -104,19 +104,20 @@ void test_MNVMeofGwMap() {
   dout(0) << "decode msg: " << *msg << dendl;
 
   dout(0)   << "\n == Test GW Delete ==" << dendl;
-  pending_map.cfg_delete_gw("GW1" ,group_key);
+  bool deleted;
+  pending_map.cfg_delete_gw("GW1" ,group_key, deleted);
   dout(0) << "deleted GW1 " << pending_map << dendl;
 
-  pending_map.cfg_delete_gw("GW1" ,group_key);
+  pending_map.cfg_delete_gw("GW1" ,group_key, deleted);
   dout(0) << "duplicated delete of GW1 " << pending_map << dendl;
 
-  pending_map.cfg_delete_gw("GW2" ,group_key);
+  pending_map.cfg_delete_gw("GW2" ,group_key, deleted);
   dout(0) << "deleted GW2 " << pending_map << dendl;
 
   dout(0) << "delete of wrong gw id" << dendl;
-  pending_map.cfg_delete_gw("wow" ,group_key);
+  pending_map.cfg_delete_gw("wow" ,group_key,deleted);
 
-  pending_map.cfg_delete_gw("GW3" ,group_key);
+  pending_map.cfg_delete_gw("GW3" ,group_key, deleted);
   dout(0) << "deleted GW3 . we should see the empty map " << pending_map << dendl;
 
 
