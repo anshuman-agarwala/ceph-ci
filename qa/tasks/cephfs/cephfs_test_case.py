@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import time
 
 from tasks.ceph_test_case import CephTestCase
 
@@ -185,6 +186,9 @@ class CephFSTestCase(CephTestCase):
 
             # wait for ranks to become active
             self.fs.wait_for_daemons()
+            while len(self.fs.get_active_names()) < self.MDSS_REQUIRED:
+                log.debug(f"sleeping for 1s until {self.MDSS_REQUIRED} mds are active")
+                time.sleep(1)
 
             # Mount the requested number of clients
             for i in range(0, self.CLIENTS_REQUIRED):
