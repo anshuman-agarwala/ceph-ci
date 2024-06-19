@@ -2957,25 +2957,26 @@ def wait_for_queue_to_drain(topic_name, tenant=None, account=None, http_port=Non
     log.info('waited for %ds for queue %s to drain', time_diff, topic_name)
 
 
-@attr('basic_test')
+@attr('kafka_test')
 def test_ps_s3_persistent_topic_stats():
     """ test persistent topic stats """
     conn = connection()
     zonegroup = get_config_zonegroup()
-
-    # create random port for the http server
-    host = get_ip()
-    port = random.randint(10000, 20000)
 
     # create bucket
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
     topic_name = bucket_name + TOPIC_SUFFIX
 
+    # start kafka receiver
+    host = get_ip()
+    task, receiver = create_kafka_receiver_thread(topic_name)
+    task.start()
+
     # create s3 topic
-    endpoint_address = 'http://'+host+':'+str(port)
-    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
-            '&retry_sleep_duration=1'
+    endpoint_address = 'kafka://' + host + ':1234' # wrong port
+    endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'+ \
+                    '&retry_sleep_duration=1'
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
@@ -3022,17 +3023,21 @@ def test_ps_s3_persistent_topic_stats():
     # topic stats
     get_stats_persistent_topic(topic_name, 2 * number_of_objects)
 
-    # start an http server in a separate thread
-    http_server = HTTPServerWithEvents((host, port))
+    # change the endpoint port
+    endpoint_address = 'kafka://' + host
+    endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'+ \
+                    '&retry_sleep_duration=1'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
 
-    wait_for_queue_to_drain(topic_name, http_port=port)
+    wait_for_queue_to_drain(topic_name)
 
     # cleanup
     s3_notification_conf.del_config()
     topic_conf.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
-    http_server.close()
+    receiver.close(task)
 
 @attr('basic_test')
 def test_persistent_topic_dump():
