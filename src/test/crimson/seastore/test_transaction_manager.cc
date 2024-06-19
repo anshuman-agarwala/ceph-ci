@@ -2182,7 +2182,7 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
     using namespace crimson::os::seastore::lba_manager::btree;
     {
       auto t = create_transaction();
-      for (int i = 0; i < LEAF_NODE_CAPACITY; i++) {
+      for (unsigned i = 0; i < LEAF_NODE_CAPACITY; i++) {
 	auto extent = alloc_extent(
 	  t,
 	  laddr_t::from_byte_offset(i * 4096),
