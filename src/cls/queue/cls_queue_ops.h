@@ -232,5 +232,4 @@ struct cls_queue_get_stats_ret {
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_get_stats_ret)
-
 #endif /* CEPH_CLS_QUEUE_OPS_H */
