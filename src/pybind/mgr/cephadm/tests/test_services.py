@@ -3252,10 +3252,36 @@ class TestMgmtGateway:
                                                  listen                    [::]:5555 ssl;
                                                  ssl_certificate            /etc/nginx/ssl/nginx.crt;
                                                  ssl_certificate_key /etc/nginx/ssl/nginx.key;
-                                                 ssl_protocols            TLSv1.2 TLSv1.3;
+                                                 ssl_protocols            TLSv1.3;
+                                                 # from:  https://ssl-config.mozilla.org/#server=nginx
+                                                 ssl_ciphers              ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
+
+                                                 # Only return Nginx in server header, no extra info will be provided
+                                                 server_tokens             off;
+
+                                                 # Perfect Forward Secrecy(PFS) is frequently compromised without this
                                                  ssl_prefer_server_ciphers on;
-                                                 ssl_stapling on;
-                                                 ssl_stapling_verify on;
+
+                                                 # Enable SSL session caching for improved performance
+                                                 ssl_session_tickets       off;
+                                                 ssl_session_timeout       1d;
+                                                 ssl_session_cache         shared:SSL:10m;
+
+                                                 # OCSP stapling
+                                                 ssl_stapling              on;
+                                                 ssl_stapling_verify       on;
+                                                 resolver_timeout 5s;
+
+                                                 # Security headers
+                                                 ## X-Content-Type-Options: avoid MIME type sniffing
+                                                 add_header X-Content-Type-Options nosniff;
+                                                 ## Strict Transport Security (HSTS): Yes
+                                                 add_header Strict-Transport-Security "max-age=31536000; includeSubdomains; preload";
+                                                 ## Enables the Cross-site scripting (XSS) filter in browsers.
+                                                 add_header X-XSS-Protection "1; mode=block";
+                                                 ## Content-Security-Policy (CSP): FIXME
+                                                 # add_header Content-Security-Policy "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; require-trusted-types-for 'script'; frame-ancestors 'self';";
+
 
                                                  location / {
                                                      proxy_pass https://dashboard_servers;
@@ -3310,11 +3336,11 @@ class TestMgmtGateway:
 
         with with_host(cephadm_module, 'ceph-node'):
             with with_service(cephadm_module, spec):
-                _run_cephadm.assert_called_with(
-                    'ceph-node',
-                    'mgmt-gateway.ceph-node',
-                    ['_orch', 'deploy'],
-                    [],
-                    stdin=json.dumps(expected),
-                    use_current_daemon_image=False,
-                )
+                    _run_cephadm.assert_called_with(
+                        'ceph-node',
+                        'mgmt-gateway.ceph-node',
+                        ['_orch', 'deploy'],
+                        [],
+                        stdin=json.dumps(expected),
+                        use_current_daemon_image=False,
+                    )
