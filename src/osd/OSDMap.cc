@@ -4799,6 +4799,215 @@ bool OSDMap::try_pg_upmap(
   return true;
 }
 
+int OSDMap::efficiency_adjusted_osd_weight_map(
+  int ruleno,
+  const PGMap &pg_map,
+  std::map<int, float> &adj_wm) const
+{
+  map<int,float> wm;
+  int r = crush->get_rule_weight_osd_map(ruleno, &wm);
+  if (r < 0) {
+    return r;
+  }
+  if (wm.empty()) {
+    return 0;
+  }
+  
+  adj_wm.clear();
+  float sum = 0.0;
+  float sum_og = 0.0;
+  for (auto const& [osd_id, w] : wm) {
+    const auto &statfs = pg_map.osd_stat.at(osd_id).statfs;
+    std::cout << "osd " << osd_id << ": ds=" << statfs.data_stored << std::endl;
+    std::cout << "osd " << osd_id << ": all=" << statfs.allocated << std::endl;
+    const float eff = ((float) statfs.data_stored) / ((float) statfs.allocated);
+    std::cout << "osd " << osd_id << ": eff=" << eff << std::endl;
+    const float adj_weight = eff * w;
+    adj_wm[osd_id] = adj_weight;
+    sum += adj_weight;
+    sum_og += w;
+    std::cout << "osd " << osd_id << ": og_w=" << w << std::endl;
+  }
+  
+  std::cout << "og_sum: " << sum_og << std::endl;
+
+  for (auto const& [osd_id, w] : adj_wm) {
+    adj_wm[osd_id] = w / sum;
+    std::cout << "osd " << osd_id << ": adj_w=" << w << std::endl;
+  }
+  return 0;
+}
+
+
+int OSDMap::calc_pg_upmaps_max_avail_storage(
+  CephContext *cct,
+  PGMap &pgmap,
+  int64_t pool_id,
+  Incremental *pending_inc)
+{
+  OSDMap tmp;
+  tmp.deepish_copy_from(*this);
+
+  const pg_pool_t* pool =  get_pg_pool(pool_id);
+  if (!pool) {
+    return -ENOENT;
+  }
+  int pg_num = pool->get_pg_num();
+  int pool_size = pool->get_size();
+  int num_pg_slots = pg_num * pool_size;
+  int crush_rule = pool->get_crush_rule();
+
+  ldout(cct, 0) << "num_pg_slots: " << num_pg_slots << dendl;
+  
+  map<int, float> wm;
+  int r = efficiency_adjusted_osd_weight_map(crush_rule, pgmap, wm);
+  if (r < 0) {
+    return r;
+  }
+  
+  map<int, float> osd_target_pg_cnt;
+  int floor_total = 0;
+  float weight_total = 0.0;
+  for (const auto &[osd_id, p] : wm) {
+    float target = p * ((float) num_pg_slots);
+    ldout(cct, 0) << "osd target" << osd_id << ": " << target << dendl;
+    osd_target_pg_cnt[osd_id] = target;
+    floor_total += floor(target);
+    weight_total += p;
+  }
+
+  ldout(cct, 0) << "weight total: " << weight_total << dendl;
+  
+  int round_up = num_pg_slots - floor_total;
+  int round_down = wm.size() - round_up;
+  
+  ldout(cct, 0) << "round up: " << round_up << dendl;
+  ldout(cct, 0) << "round down: " << round_down << dendl;
+
+  map<int,set<pg_t>> pgs_by_osd;
+  map<int,float> osd_weight;
+  for (unsigned ps = 0; ps < pg_num; ++ps) {
+    pg_t pg(ps, pool_id);
+    vector<int> up;
+    tmp.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
+    for (auto osd : up) {
+      if (osd != CRUSH_ITEM_NONE) {
+        pgs_by_osd[osd].insert(pg);
+      }
+    }
+  }
+  
+  std::vector<std::pair<float, int>> rdeltas; // delta, osd_id
+  std::vector<std::pair<int, int>> deltas; // delta, osd_id
+  
+  for (const auto &[osd_id, target] : osd_target_pg_cnt) {
+    float delta = target - floor(target);
+    float rdelta = delta / target;
+    // higher rdelta means we should prefer rounding up
+    rdeltas.push_back({rdelta, osd_id});
+  }
+  // sorts in descending order, so highest rdeltas are first
+  std::sort(rdeltas.begin(), rdeltas.end(), std::greater<>());
+  
+  int round_up_cnt = 0;
+  // iterate over rdeltas in descending order
+  for (const auto &[rdelta, osd_id] : rdeltas) {
+    int target;
+    if (round_up_cnt < round_up) {
+      target = ceil(osd_target_pg_cnt[osd_id]);
+      round_up_cnt += 1;
+    } else {
+      target = floor(osd_target_pg_cnt[osd_id]);
+    }
+    int num_pgs = pgs_by_osd[osd_id].size();
+    int delta = num_pgs - target;
+    if (delta == 0) {
+      ldout(cct, 0) << "=) osd=" << osd_id << ": t=" << target << " c=" << num_pgs << dendl;
+    } else if (delta > 0) {
+      ldout(cct, 0) << "H) osd=" << osd_id << ": t=" << target << " c=" << num_pgs << dendl;
+    } else if (delta < 0) {
+      ldout(cct, 0) << "L) osd=" << osd_id << ": t=" << target << " c=" << num_pgs << dendl;
+    }
+    deltas.push_back({delta, osd_id});
+  }
+  
+  std::sort(deltas.begin(), deltas.end());
+  auto [ret, crush_validator] = crush->create_crush_validator(crush_rule, pool_size);
+  if (ret < 0) {
+    ldout(cct, 0) << "failed to create crush validator" << dendl;
+    return ret;
+  }
+  
+  bool done = false;
+
+  int num_changes = 0;
+  std::map<pg_t, mempool::osdmap::vector<pair<int32_t,int32_t>>> to_upmap; 
+  while (!done) {
+    auto &[low_delta, low_candidate] = deltas[0];
+    for (auto iter = deltas.rbegin(); iter != deltas.rend(); ++iter) {
+      bool found = false;
+      auto &[high_delta, high_candidate] = *iter;
+      ldout(cct, 0) << "trying from osd=" << high_candidate << " [" << high_delta << "] to " << low_candidate << " [" << low_delta << "]" << dendl;
+      if (high_delta == 0 && low_delta == 0) {
+        // all OSDs must have the target number of pgs, done
+        done = true;
+        break;
+      }
+      // iterate over pgs on the high_candidate and try to find one that
+      // we can move to the low candidate.
+      std::set<pg_t> &osd_pgs = pgs_by_osd[high_candidate];
+      for (const pg_t &pg : osd_pgs) {
+        vector<int> up;
+        tmp.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
+        auto [r, upmap_validator] = crush_validator.create_upmap_validator(up);
+        if (r < 0) {
+          ldout(cct, 0) << "failed to create upmap validator: " << up << dendl;
+          return r;
+        }
+        // can we move this pg slot from high_candidate to low_candidate?
+        if (upmap_validator.validate(std::pair{high_candidate, low_candidate})) {
+          // get the existing upmap items for this pg
+	  auto p = tmp.pg_upmap_items.find(pg);
+          if (p == tmp.pg_upmap_items.end()) {
+            // no existing upmap items for this PG
+            to_upmap[pg] = {{high_candidate, low_candidate}};
+            tmp.pg_upmap_items[pg] = to_upmap[pg];
+            pending_inc->new_pg_upmap_items[pg] = to_upmap[pg];
+          } else {
+            // creating an upmap to move the pg slot
+            to_upmap[pg] = {};
+            int crush_slot_osd = high_candidate;
+            for (const auto existing : p->second) {
+              if (existing.second != high_candidate) {
+                // this is the case where there was an existing upmap
+                // pointing at high_candidate,
+                to_upmap[pg].push_back(existing);
+              } else {
+                crush_slot_osd = existing.first;
+              }
+            }
+            to_upmap[pg].push_back({crush_slot_osd, low_candidate});
+            tmp.pg_upmap_items[pg] = to_upmap[pg];
+            pending_inc->new_pg_upmap_items[pg] = to_upmap[pg];
+          }
+          found = true;
+          low_delta += 1;
+          high_delta -= 1;
+          pgs_by_osd[high_candidate].erase(pg);
+          pgs_by_osd[low_candidate].insert(pg);
+          num_changes += 1;
+          break;
+        }
+      }
+      if (found) {
+        break;
+      }
+    }
+    std::sort(deltas.begin(), deltas.end());
+  }
+  return num_changes;
+}
+
 int OSDMap::calc_pg_upmaps(
   CephContext *cct,
   uint32_t max_deviation,

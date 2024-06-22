@@ -4058,6 +4058,98 @@ int CrushWrapper::_choose_type_stack(
   return 0;
 }
 
+std::pair<int, CrushValidator> CrushWrapper::create_crush_validator(
+  int ruleno,
+  int pool_size) const
+{
+  const crush_rule *rule = get_rule(ruleno);
+  if (!rule) {
+    return {-ENOENT, CrushValidator(nullptr)};
+  }
+  
+  vector<pair<int,int>> type_stack;  // (type, fan-out)
+
+  int root_bucket = 0;
+  int top_down_fanout = 1;
+  int numrep, type;
+  std::shared_ptr<Condition> cnd = std::make_shared<Condition>();
+  for (unsigned step = 0; step < rule->len; ++step) {
+    const crush_rule_step *curstep = &rule->steps[step];
+    switch (curstep->op) {
+    case CRUSH_RULE_TAKE:
+      root_bucket = curstep->arg1;
+      top_down_fanout = 1;
+      break;
+    case CRUSH_RULE_CHOOSE_FIRSTN:
+    case CRUSH_RULE_CHOOSE_INDEP:
+    case CRUSH_RULE_CHOOSELEAF_FIRSTN:
+    case CRUSH_RULE_CHOOSELEAF_INDEP:
+      numrep = curstep->arg1;
+      type = curstep->arg2;
+      if (numrep <= 0) {
+        numrep += pool_size;
+      }
+      top_down_fanout *= numrep;
+      type_stack.push_back(make_pair(type, numrep));
+      if ((curstep->op == CRUSH_RULE_CHOOSELEAF_FIRSTN || curstep->op == CRUSH_RULE_CHOOSELEAF_INDEP) &&
+           type > 0) {
+        type_stack.push_back(make_pair(0, 1));
+      }
+      break;
+    case CRUSH_RULE_EMIT:
+      {
+        for (int idx=0; idx<top_down_fanout; idx++) {
+          if (idx >= pool_size) {
+            break;
+          }
+          cnd = std::make_shared<AndCondition>(cnd, std::make_shared<SubtreeCondition>(root_bucket, idx, *this));    
+        }
+        int bottom_up_fanout = 1;
+        for (auto iter = type_stack.rbegin(); iter != type_stack.rend(); ++iter) {
+          int type = iter->first;
+          int n = iter->second;
+          if (n == 1) {
+            continue;
+          }
+          for (int i=0; i<top_down_fanout/n; i++) {
+            int pbase = i * bottom_up_fanout * n;
+            if (pbase >= pool_size) {
+              continue;
+            }
+            for (int j=0; j<n; j++) {
+              int tbase = j * bottom_up_fanout + pbase;
+              if (tbase >= pool_size) {
+                break;
+              }
+              for (int k=0; k<j; k++) {
+                int tcmp = bottom_up_fanout * k + pbase;
+                if (tcmp >= pool_size) {
+                    break;
+                }
+                cnd = std::make_shared<AndCondition>(cnd, std::make_shared<NeqCondition>(tbase, tcmp, type, *this));    
+              }
+              for (int m=1; m<bottom_up_fanout; m++) {
+                int tcmp = tbase + m;
+                if (tcmp >= pool_size) {
+                  continue;
+                }
+                cnd = std::make_shared<AndCondition>(cnd, std::make_shared<EqCondition>(tbase, tcmp, type, *this));
+              }
+            }
+          }
+          bottom_up_fanout *= n;
+          top_down_fanout /= n;
+        }          
+      }
+      break;
+    default:
+      break;
+    }
+  }
+  // TODO handle case where fanout isn't >= pool_size?
+  return {0, CrushValidator(cnd)};  
+}
+
 int CrushWrapper::try_remap_rule(
   CephContext *cct,
   int ruleno,

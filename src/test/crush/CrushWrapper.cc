@@ -1454,6 +1454,138 @@ TEST_F(CrushWrapperTest, try_remap_rule) {
   }
 }
 
+TEST_F(CrushWrapperTest, CrushValidator) {
+  // build a simple 2 level map
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(0, "osd");
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "rack");
+  c.set_type_name(3, "root");
+  int bno;
+  int r = c.add_bucket(0, CRUSH_BUCKET_STRAW2,
+		       CRUSH_HASH_DEFAULT, 3, 0, NULL,
+		       NULL, &bno);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(-1, bno);
+  c.set_item_name(bno, "default");
+
+  c.set_max_devices(20);
+
+  // JSONFormatter jf(true);
+
+  map<string,string> loc;
+  loc["host"] = "foo";
+  loc["rack"] = "a";
+  loc["root"] = "default";
+  c.insert_item(cct, 0, 1, "osd.0", loc);
+  c.insert_item(cct, 1, 1, "osd.1", loc);
+  c.insert_item(cct, 2, 1, "osd.2", loc);
+
+  loc.clear();
+  loc["host"] = "bar";
+  loc["rack"] = "a";
+  loc["root"] = "default";
+  c.insert_item(cct, 3, 1, "osd.3", loc);
+  c.insert_item(cct, 4, 1, "osd.4", loc);
+  c.insert_item(cct, 5, 1, "osd.5", loc);
+
+  loc.clear();
+  loc["host"] = "baz";
+  loc["rack"] = "b";
+  loc["root"] = "default";
+  c.insert_item(cct, 6, 1, "osd.6", loc);
+  c.insert_item(cct, 7, 1, "osd.7", loc);
+  c.insert_item(cct, 8, 1, "osd.8", loc);
+
+  loc.clear();
+  loc["host"] = "qux";
+  loc["rack"] = "b";
+  loc["root"] = "default";
+  c.insert_item(cct, 9, 1, "osd.9", loc);
+  c.insert_item(cct, 10, 1, "osd.10", loc);
+  c.insert_item(cct, 11, 1, "osd.11", loc);
+  c.finalize();
+
+  loc.clear();
+  loc["host"] = "bif";
+  loc["rack"] = "c";
+  loc["root"] = "default";
+  c.insert_item(cct, 12, 1, "osd.12", loc);
+  c.insert_item(cct, 13, 1, "osd.13", loc);
+  c.insert_item(cct, 14, 1, "osd.14", loc);
+  c.finalize();
+
+  loc.clear();
+  loc["host"] = "pop";
+  loc["rack"] = "c";
+  loc["root"] = "default";
+  c.insert_item(cct, 15, 1, "osd.15", loc);
+  c.insert_item(cct, 16, 1, "osd.16", loc);
+  c.insert_item(cct, 17, 1, "osd.17", loc);
+
+  loc.clear();
+  loc["host"] = "pip";
+  loc["rack"] = "d";
+  loc["root"] = "default";
+  c.insert_item(cct, 18, 1, "osd.18", loc);
+  c.insert_item(cct, 19, 1, "osd.19", loc);
+  c.insert_item(cct, 20, 1, "osd.20", loc);
+  c.finalize();
+
+  loc.clear();
+  loc["host"] = "zam";
+  loc["rack"] = "d";
+  loc["root"] = "default";
+  c.insert_item(cct, 21, 1, "osd.21", loc);
+  c.insert_item(cct, 22, 1, "osd.22", loc);
+  c.insert_item(cct, 23, 1, "osd.23", loc);
+  c.finalize();
+
+  // c.dump(&jf);
+  // jf.flush(cout);
+
+  // take + emit
+  {
+  }
+
+  // chooseleaf
+  {
+    cout << "take + chooseleaf + emit" << std::endl;
+    ostringstream err;
+    int rule = c.add_simple_rule("one", "default", "host", "",
+				 "firstn", 0, &err);
+    ASSERT_EQ(rule, 0);
+
+    auto [r, validator] = c.create_crush_validator(rule, 3);
+    ASSERT_EQ(r, 0);
+
+    vector<int> orig = { 0, 3, 9 };
+    ASSERT_TRUE(validator.validate(orig));
+    orig = { 0, 1, 2 };
+    ASSERT_FALSE(validator.validate(orig));
+  }
+
+  // choose + choose
+  {
+    cout << "take + choose + chooseleaf + emit" << std::endl;
+    int rule = c.add_rule(1, 4, 0, 1, 4);
+    ASSERT_EQ(1, rule);
+    c.set_rule_step_take(rule, 0, bno);
+    // choose 2 different racks
+    c.set_rule_step_choose_indep(rule, 1, 2, 2);
+    // in each rack, choose 2 different hosts and then 1 osd on each of those
+    c.set_rule_step_choose_leaf_indep(rule, 2, 2, 1);
+    c.set_rule_step_emit(rule, 3);
+
+    auto [r, validator] = c.create_crush_validator(rule, 4);
+    vector<int> orig = { 0, 3, 6, 9 };
+    ASSERT_TRUE(validator.validate(orig));
+    orig = { 0, 3, 1, 9 };
+    ASSERT_FALSE(validator.validate(orig));
+  }
+}
+
 // Local Variables:
 // compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && valgrind --tool=memcheck bin/unittest_crush_wrapper"
 // End:

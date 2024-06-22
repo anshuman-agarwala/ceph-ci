@@ -97,6 +97,11 @@ add_executable(osdmaptool ${osdomaptool_srcs})
 target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
 
+set(neobalancer_srcs neobalancer.cc)
+add_executable(neobalancer ${neobalancer_srcs})
+target_link_libraries(neobalancer librados global)
+install(TARGETS neobalancer DESTINATION bin)
+
 set(ceph-diff-sorted_srcs ceph-diff-sorted.cc)
 add_executable(ceph-diff-sorted ${ceph-diff-sorted_srcs})
 set_target_properties(ceph-diff-sorted PROPERTIES

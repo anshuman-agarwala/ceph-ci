@@ -50,6 +50,85 @@ inline void decode(crush_rule_step &s, ceph::buffer::list::const_iterator &p)
   decode(s.arg2, p);
 }
 
+// TODO make this a private class
+class PlacementVec {
+  std::vector<int>& og_placement;
+  std::map<int, int> upmaps;
+public:
+  PlacementVec(std::vector<int> &og_placement) :
+    og_placement{og_placement} {}
+
+  PlacementVec with_upmap(std::pair<int, int> new_upmap) const {
+    PlacementVec copy{og_placement};
+    copy.upmaps = upmaps;
+    copy.upmaps.insert(new_upmap);
+    return copy;
+  }
+  
+  PlacementVec with_upmaps(std::map<int, int> &&upmaps) const {
+    PlacementVec copy{og_placement};
+    copy.upmaps = std::move(upmaps);
+    return copy;
+  }
+  
+  int osd_for_slot(int slot_idx) const {
+    if (slot_idx >= 0 && (long unsigned int) slot_idx < og_placement.size()) {
+      int osd_id = og_placement[slot_idx];
+      if (upmaps.count(osd_id)) {
+        return upmaps.at(osd_id);
+      }
+      return osd_id;
+    } else {
+      return -EINVAL;
+    }
+  }
+};
+
+class Condition {
+public:
+  virtual bool eval(const PlacementVec &pv) const {
+    return true;
+  }
+public:
+  Condition() {}
+  virtual ~Condition() {}
+};
+
+
+class UpmapValidator {
+  PlacementVec pv;
+  std::shared_ptr<Condition> cnd;
+public:
+  UpmapValidator(PlacementVec pv, const std::shared_ptr<Condition> cnd) : pv{pv}, cnd{cnd} {}
+  
+  bool validate(std::pair<int, int> upmap) const {
+    // TODO prune the condition to validate only the upmaps
+    return cnd->eval(pv.with_upmap(upmap));
+  }
+
+  bool validate(std::map<int, int> &&upmaps) const {
+    // TODO prune the condition to validate only the upmaps
+    return cnd->eval(pv.with_upmaps(std::move(upmaps)));
+  }
+};
+
+class CrushValidator {
+  std::shared_ptr<Condition> condition;
+public:
+  CrushValidator(const std::shared_ptr<Condition> condition) : condition{condition} {
+  }
+  
+  bool validate(std::vector<int> &v) const {
+    return condition->eval(PlacementVec(v));
+  }
+  
+  std::pair<int, UpmapValidator> create_upmap_validator(std::vector<int> &v) const {
+    auto pv = PlacementVec(v);
+    return { condition->eval(pv) ? 0 : -EINVAL, UpmapValidator(pv, condition)};
+  }
+  
+};
+
 class CrushWrapper {
 public:
   // magic value used by OSDMap for a "default" fallback choose_args, used if
@@ -1608,6 +1687,10 @@ public:
     std::vector<int> *pw,
     int root_bucket,
     int rule) const;
+  
+  std::pair<int, CrushValidator> create_crush_validator(
+    int ruleno,
+    int pool_size) const;
 
   int try_remap_rule(
     CephContext *cct,
@@ -1673,5 +1756,86 @@ public:
 				 const std::map<std::string,std::string>& loc);
 };
 WRITE_CLASS_ENCODER_FEATURES(CrushWrapper)
+
+class AndCondition : public Condition {
+  std::shared_ptr<Condition> a, b;
+public:
+  AndCondition(const std::shared_ptr<Condition> a, const std::shared_ptr<Condition> b) : a{a}, b{b} {
+  }
+
+  ~AndCondition() override {}
+
+  bool eval(const PlacementVec &pv) const override {
+    return a->eval(pv) && b->eval(pv);
+  }
+};
+
+class EqCondition : public Condition {
+  int idx_a, idx_b;
+  int type; // crush ancestor type to compare
+  const CrushWrapper& cw;
+public:
+  EqCondition(int idx_a, int idx_b, int type, const CrushWrapper &cw) : idx_a{idx_a}, idx_b{idx_b}, type{type}, cw{cw} {
+  }
+  ~EqCondition() override {}
+  bool eval(const PlacementVec &pv) const override {
+    int osd_a = pv.osd_for_slot(idx_a);
+    if (osd_a < 0) {
+      // TODO how to handle this?
+      return false;
+    }
+    int parent_a = cw.get_parent_of_type(osd_a, type);
+    int osd_b = pv.osd_for_slot(idx_b);
+    if (osd_b < 0) {
+      // TODO how to handle this?
+      return false;
+    }
+    int parent_b = cw.get_parent_of_type(osd_b, type);
+    return parent_a == parent_b;
+  }
+};
+
+class NeqCondition : public Condition {
+  int idx_a, idx_b;
+  int type; // crush ancestor type to compare
+  const CrushWrapper &cw;
+public:
+  NeqCondition(int idx_a, int idx_b, int type, const CrushWrapper &cw) : idx_a{idx_a}, idx_b{idx_b}, type{type}, cw{cw} {
+  }
+  ~NeqCondition() override {}
+  bool eval(const PlacementVec &pv) const override {
+    int osd_a = pv.osd_for_slot(idx_a);
+    if (osd_a < 0) {
+      // TODO how to handle this?
+      return false;
+    }
+    int parent_a = type == 0 ? osd_a : cw.get_parent_of_type(osd_a, type);
+    int osd_b = pv.osd_for_slot(idx_b);
+    if (osd_b < 0) {
+      // TODO how to handle this?
+      return false;
+    }
+    int parent_b = type == 0 ? osd_b : cw.get_parent_of_type(osd_b, type);
+    return parent_a != parent_b;
+  }
+};
+
+class SubtreeCondition : public Condition {
+  int root;
+  int idx;
+  const CrushWrapper &cw;
+public:
+  SubtreeCondition(int root, int idx, const CrushWrapper &cw) : root{root}, idx{idx}, cw{cw} {
+  }
+  ~SubtreeCondition() override {}
+  bool eval(const PlacementVec &pv) const override {
+    int osd = pv.osd_for_slot(idx);
+    if (osd < 0) {
+      // TODO how to handle this?
+      return false;
+    }
+    return cw.subtree_contains(root, osd);
+  }
+};
 
 #endif

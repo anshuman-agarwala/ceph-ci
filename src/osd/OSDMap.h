@@ -42,6 +42,7 @@
 
 // forward declaration
 class CrushWrapper;
+class PGMap;
 class health_check_map_t;
 
 /*
@@ -1454,6 +1455,13 @@ public:
     std::vector<int> *orig,
     std::vector<int> *out);             ///< resulting alternative mapping
 
+  int calc_pg_upmaps_max_avail_storage(
+    CephContext *cct,
+    PGMap &pgmap,
+    int64_t pool_id,
+    Incremental *pending_inc
+  );
+
   int calc_pg_upmaps(
     CephContext *cct,
     uint32_t max_deviation, ///< max deviation from target (value >= 1)
@@ -1496,7 +1504,14 @@ private:
   int build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
 			    int num_osd, int pg_bits, int pgp_bits,
 			    bool default_pool);
+
+  int efficiency_adjusted_osd_weight_map(
+    int ruleno,
+    const PGMap &pg_map,
+    std::map<int, float> &adj_wm) const;
+  
 public:
+
   int build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 		   int num_osd) {
     return build_simple_optioned(cct, e, fsid, num_osd, 0, 0, false);
