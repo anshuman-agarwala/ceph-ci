@@ -344,7 +344,7 @@ void OSDService::identify_splits_and_merges(
 	   << " to e" << new_map->get_epoch() << dendl;
   if (!old_map->have_pg_pool(pgid.pool())) {
     dout(20) << __func__ << " " << pgid << " pool " << pgid.pool()
-	     << " does not exist in old map" << dendl;
+	     << " does not exist in old map returning" << dendl;
     return;
   }
   int old_pgnum = old_map->get_pg_num(pgid.pool());
