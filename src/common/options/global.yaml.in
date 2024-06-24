@@ -4178,7 +4178,7 @@ options:
 - name: bluefs_allocator
   type: str
   level: dev
-  default: hybrid
+  default: hybrid_btree2
   enum_values:
   - bitmap
   - stupid
@@ -4984,7 +4984,7 @@ options:
   level: advanced
   desc: Allocator policy
   long_desc: Allocator to use for bluestore.  Stupid should only be used for testing.
-  default: hybrid
+  default: hybrid_btree2
   enum_values:
   - bitmap
   - stupid
