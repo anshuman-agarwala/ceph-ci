@@ -2011,12 +2011,6 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   rgw_bucket_entry_ver ver;
   ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
 
-  if (op.null_verid) {
-    op.bilog_flags = op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP | RGW_BILOG_NULL_VERSION;
-  } else {
-    op.bilog_flags = op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP;
-  }
-
   real_time mtime = obj.mtime(); /* mtime has no real meaning in
                                   * instance removal context */
   ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
