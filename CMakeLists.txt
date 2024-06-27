@@ -196,7 +196,7 @@ endif()
 
 option(WITH_FUSE "Fuse is here" ON)
 if(WITH_FUSE)
-  find_package(FUSE 3.0 REQUIRED)
+  find_package(FUSE REQUIRED)
   set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif()
 
