@@ -5132,7 +5132,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 void BlueStore::Collection::split_cache(
   Collection *dest)
 {
-  ldout(store->cct, 10) << __func__ << " to " << dest << dendl;
+  ldout(store->cct, 5) << __func__ << " to " << dest << dendl;
 
   auto *ocache = get_onode_cache();
   auto *ocache_dest = dest->get_onode_cache();
@@ -14441,7 +14441,7 @@ void BlueStore::_osr_register_zombie(OpSequencer *osr)
 void BlueStore::_osr_drain_preceding(TransContext *txc)
 {
   OpSequencer *osr = txc->osr.get();
-  dout(10) << __func__ << " " << txc << " osr " << osr << dendl;
+  dout(5) << __func__ << " " << txc << " osr " << osr << dendl;
   ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
   {
     // submit anything pending
@@ -14462,7 +14462,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
   }
   osr->drain_preceding(txc);
   --deferred_aggressive;
-  dout(10) << __func__ << " " << osr << " done" << dendl;
+  dout(5) << __func__ << " " << osr << " done" << dendl;
 }
 
 void BlueStore::_osr_drain(OpSequencer *osr)
@@ -18115,7 +18115,7 @@ int BlueStore::_create_collection(
   unsigned bits,
   CollectionRef *c)
 {
-  dout(15) << __func__ << " " << cid << " bits " << bits << dendl;
+  dout(5) << __func__ << " " << cid << " bits " << bits << dendl;
   int r;
   bufferlist bl;
 
@@ -18137,7 +18137,7 @@ int BlueStore::_create_collection(
   r = 0;
 
  out:
-  dout(10) << __func__ << " " << cid << " bits " << bits << " = " << r << dendl;
+  dout(5) << __func__ << " " << cid << " bits " << bits << " = " << r << dendl;
   return r;
 }
 
@@ -18221,7 +18221,7 @@ int BlueStore::_split_collection(TransContext *txc,
 				CollectionRef& d,
 				unsigned bits, int rem)
 {
-  dout(15) << __func__ << " " << c->cid << " to " << d->cid << " "
+  dout(5) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << dendl;
   std::unique_lock l(c->lock);
   std::unique_lock l2(d->lock);
@@ -18263,7 +18263,7 @@ int BlueStore::_split_collection(TransContext *txc,
   encode(c->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
-  dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
+  dout(5) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << " = " << r << dendl;
   return r;
 }

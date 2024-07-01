@@ -3251,6 +3251,7 @@ void PeeringState::try_mark_clean()
 void PeeringState::split_into(
   pg_t child_pgid, PeeringState *child, unsigned split_bits)
 {
+  psdout(10) << "IN SPLIT INTO " << child_pgid << dendl;
   child->update_osdmap_ref(get_osdmap());
   child->pool = pool;
 
@@ -3304,6 +3305,7 @@ void PeeringState::split_into(
   vector<int> newup, newacting;
   get_osdmap()->pg_to_up_acting_osds(
     child->info.pgid.pgid, &newup, &up_primary, &newacting, &primary);
+    psdout(10) << " AFTER pg_to_up_acting_osds " << dendl;
   child->init_primary_up_acting(
     newup,
     newacting,
