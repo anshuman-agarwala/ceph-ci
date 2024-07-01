@@ -271,12 +271,11 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
             f->dump_string("group", group);
             f->dump_unsigned("num gws", map.created_gws[group_key].size());
             sstrm <<"[ ";
-            NvmeAnaGrpId anas[MAX_SUPPORTED_ANA_GROUPS];
-            int i = 0;
+            NvmeGwId gw_id;
             for (auto& gw_created_pair: map.created_gws[group_key]) {
+                gw_id = gw_created_pair.first;
                 auto& st = gw_created_pair.second;
                 sstrm << st.ana_grp_id+1 << " ";
-                anas[i++] = st.ana_grp_id;
             }
             sstrm << "]";
             f->dump_string("Anagrp list", sstrm.str());
@@ -293,8 +292,8 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
                 sstrm1 << state.availability;
                 f->dump_string("Availability", sstrm1.str());
                 sstrm1.str("");
-                for (size_t i = 0; i < map.created_gws[group_key].size(); i++) {
-                    sstrm1 << " " << anas[i]+1 <<": " << state.sm_state[anas[i]] << ",";
+                for (auto &state_itr: map.created_gws[group_key][gw_id].sm_state) {
+                    sstrm1 << " " << state_itr.first + 1 << ": " << state.sm_state[state_itr.first] << ",";
                 }
                 f->dump_string("ana states", sstrm1.str());
                 f->close_section();
