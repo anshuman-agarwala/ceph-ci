@@ -50,18 +50,36 @@ class Finisher {
   std::vector<std::pair<Context*,int>> in_progress_queue;
 
   std::string thread_name;
+  std::string wd_thread_name;
 
   /// Performance counter for the finisher's queue length.
   /// Only active for named finishers.
   PerfCounters *logger;
 
   void *finisher_thread_entry();
+  void *watchdog_thread_entry();
 
   struct FinisherThread : public Thread {
     Finisher *fin;
     explicit FinisherThread(Finisher *f) : fin(f) {}
     void* entry() override { return fin->finisher_thread_entry(); }
   } finisher_thread;
+
+  struct WatchdogThread : public Thread {
+    Finisher *fin;
+    explicit WatchdogThread(Finisher *f) : fin(f) {}
+    void *entry() override { return fin->watchdog_thread_entry(); }
+  } wd_thread;
+
+  bool should_start_counting = false;
+  ceph::coarse_mono_time last_updated;
+  void start_counting() {
+    last_updated = ceph::coarse_mono_clock::now();
+    should_start_counting = true;
+  }
+  void stop_counting() {
+    should_start_counting = false;
+  }
 
  public:
   /// Add a context to complete, optionally specifying a parameter for the complete function.
@@ -142,15 +160,17 @@ class Finisher {
   explicit Finisher(CephContext *cct_) :
     cct(cct_), finisher_lock(ceph::make_mutex("Finisher::finisher_lock")),
     finisher_stop(false), finisher_running(false), finisher_empty_wait(false),
-    thread_name("fn_anonymous"), logger(0),
-    finisher_thread(this) {}
+    thread_name("fn_anonymous"), wd_thread_name("wd_anonymous"), logger(0),
+    finisher_thread(this),
+    wd_thread(this) {}
 
   /// Construct a named Finisher that logs its queue length.
   Finisher(CephContext *cct_, std::string name, std::string tn) :
     cct(cct_), finisher_lock(ceph::make_mutex("Finisher::" + name)),
     finisher_stop(false), finisher_running(false), finisher_empty_wait(false),
-    thread_name(tn), logger(0),
-    finisher_thread(this) {
+    thread_name(tn), wd_thread_name("wd-" + tn.substr(0,12)), logger(0),
+    finisher_thread(this),
+    wd_thread(this) {
     PerfCountersBuilder b(cct, std::string("finisher-") + name,
 			  l_finisher_first, l_finisher_last);
     b.add_u64(l_finisher_queue_len, "queue_len");
@@ -159,6 +179,7 @@ class Finisher {
     cct->get_perfcounters_collection()->add(logger);
     logger->set(l_finisher_queue_len, 0);
     logger->set(l_finisher_complete_lat, 0);
+    last_updated = ceph::coarse_mono_clock::now();
   }
 
   ~Finisher() {

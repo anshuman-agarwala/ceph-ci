@@ -11,6 +11,7 @@ void Finisher::start()
 {
   ldout(cct, 10) << __func__ << dendl;
   finisher_thread.create(thread_name.c_str());
+  wd_thread.create(wd_thread_name.c_str());
 }
 
 void Finisher::stop()
@@ -44,6 +45,22 @@ bool Finisher::is_empty()
   return finisher_queue.empty();
 }
 
+void *Finisher::watchdog_thread_entry()
+{
+  while (true) {
+    if (thread_name == "m-fin-volumes" &&
+	wd_thread_name == "wd-m-fin-volume" &&
+	should_start_counting) {
+      auto elapsed = ceph::coarse_mono_clock::now() - last_updated;
+      auto elapsed_sec = std::chrono::seconds(ceph::to_seconds<int64_t>(elapsed));
+      if (elapsed_sec > std::chrono::seconds(115)) {
+	ceph_assert(false);
+      }
+    }
+    sleep(1);
+  }
+}
+
 void *Finisher::finisher_thread_entry()
 {
   std::unique_lock ul(finisher_lock);
@@ -69,7 +86,9 @@ void *Finisher::finisher_thread_entry()
 
       // Now actually process the contexts.
       for (auto p : in_progress_queue) {
+	start_counting();
 	p.first->complete(p.second);
+	stop_counting();
       }
       ldout(cct, 10) << "finisher_thread done with " << in_progress_queue
                      << dendl;
