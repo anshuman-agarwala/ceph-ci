@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-ignorelist:
       - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
     log-only-match:
       - CEPHADM_
 tasks:
