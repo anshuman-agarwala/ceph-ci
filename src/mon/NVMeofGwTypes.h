@@ -46,7 +46,7 @@ enum class gw_availability_t {
 };
 
 #define REDUNDANT_GW_ANA_GROUP_ID 0xFF
-using SM_STATE    = std::map < NvmeAnaGrpId, gw_states_per_group_t>;
+using SmState  = std::map < NvmeAnaGrpId, gw_states_per_group_t>;
 
 using ana_state_t = std::vector<std::pair<gw_exported_states_per_group_t, epoch_t>>;
 
@@ -99,11 +99,11 @@ using NvmeAnaNonceMap  = std::map <NvmeAnaGrpId, NvmeNonceVector>;
 struct Blocklist_data{
    epoch_t     osd_epoch;
    bool        is_failover;
-   Blocklist_data(){
+   Blocklist_data() {
        osd_epoch = 0;
        is_failover = true;
    };
-   Blocklist_data(epoch_t epoch, bool failover):osd_epoch(epoch), is_failover(failover){};
+   Blocklist_data(epoch_t epoch, bool failover):osd_epoch(epoch), is_failover(failover) {};
 };
 
 using BlocklistData    = std::map < NvmeAnaGrpId, Blocklist_data>;
@@ -115,14 +115,14 @@ struct NvmeGwMonState {
     bool               performed_full_startup;        // in order to identify gws that did not exit upon failover
     BeaconSubsystems   subsystems;                    // gateway susbsystem and their state machine states
     NvmeAnaNonceMap    nonce_map;
-    SM_STATE           sm_state;                      // state machine states per ANA group
+    SmState           sm_state;                      // state machine states per ANA group
     BlocklistData      blocklist_data;
 
     NvmeGwMonState(): ana_grp_id(REDUNDANT_GW_ANA_GROUP_ID) {};
 
     NvmeGwMonState(NvmeAnaGrpId id): ana_grp_id(id), availability(gw_availability_t::GW_CREATED), last_gw_map_epoch_valid(false),
-                                    performed_full_startup(false){};
-    void set_unavailable_state(){
+                                    performed_full_startup(false) {};
+    void set_unavailable_state() {
         availability = gw_availability_t::GW_UNAVAILABLE;
         performed_full_startup = false; // after setting this state the next time monitor sees GW, it expects it performed the full startup
     }
@@ -142,8 +142,8 @@ struct NqnState {
     // constructors
     NqnState(const std::string& _nqn, const ana_state_t& _ana_state):
         nqn(_nqn), ana_state(_ana_state)  {}
-    NqnState(const std::string& _nqn, const SM_STATE& sm_state, const NvmeGwMonState & gw_created) : nqn(_nqn)  {
-          for (auto& state_itr: sm_state ){
+    NqnState(const std::string& _nqn, const SmState& sm_state, const NvmeGwMonState & gw_created) : nqn(_nqn)  {
+          for (auto& state_itr: sm_state ) {
             std::pair<gw_exported_states_per_group_t, epoch_t> state_pair;
             state_pair.first = (  sm_state.at(state_itr.first) == gw_states_per_group_t::GW_ACTIVE_STATE
 			       || sm_state.at(state_itr.first) == gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL)
@@ -176,16 +176,16 @@ struct Tmdata{
    uint32_t     timer_started; // statemachine timer(timestamp) set in some state
    uint8_t      timer_value;
    std::chrono::system_clock::time_point end_time;
-    Tmdata(){
+    Tmdata() {
        timer_started = 0;
        timer_value   = 0;
    }
 };
 
-using TM_DATA    = std::map < NvmeAnaGrpId, Tmdata>;
+using TmData = std::map < NvmeAnaGrpId, Tmdata>;
 
 struct NvmeGwTimerState {
-    TM_DATA data;
+    TmData data;
     NvmeGwTimerState() {};
 };
 
