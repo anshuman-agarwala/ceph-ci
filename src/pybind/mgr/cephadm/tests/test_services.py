@@ -1163,8 +1163,8 @@ class TestMonitoring:
         _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
 
         with with_host(cephadm_module, "test"):
-            cephadm_module.cert_key_store.save_cert('grafana_cert', grafana_cert, host='test')
-            cephadm_module.cert_key_store.save_key('grafana_key', grafana_key, host='test')
+            cephadm_module.cert_key_store.save_cert('grafana_cert', ceph_generated_cert, host='test')
+            cephadm_module.cert_key_store.save_key('grafana_key', ceph_generated_key, host='test')
             with with_service(
                 cephadm_module, PrometheusSpec("prometheus")
             ) as _, with_service(cephadm_module, ServiceSpec("mgr")) as _, with_service(

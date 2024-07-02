@@ -42,13 +42,16 @@ class MgmtGatewayService(CephadmService):
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
 
     def get_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str, str, str]:
-        # TODO(redo): store/load these certificates by using the new support and check the posibility
-        # to have a "centrilized" certificate mangaer for all cephadm components so we use the same
-        # root CA fo sign all of them
-        #
-        # PD: a this moment we are generating new certificates each time the service is reconfigured
         self.ssl_certs = SSLCerts()
-        self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
+        old_cert = self.mgr.cert_key_store.get_cert('mgmt_gw_root_cert')
+        old_key = self.mgr.cert_key_store.get_key('mgmt_gw_root_key')
+        if old_cert and old_key:
+            self.ssl_certs.load_root_credentials(old_cert, old_key)
+        else:
+            self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
+            self.mgr.cert_key_store.save_cert('mgmt_gw_root_cert', self.ssl_certs.get_root_cert())
+            self.mgr.cert_key_store.save_key('mgmt_gw_root_key', self.ssl_certs.get_root_key())
+
         node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
         internal_cert, internal_pkey = self.ssl_certs.generate_cert(host_fqdn, node_ip)
