@@ -36,6 +36,7 @@ from ceph.deployment.service_spec import (
     ServiceSpec,
     TracingSpec,
     MgmtGatewaySpec,
+    OAuth2ProxySpec
 )
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
 
@@ -3251,7 +3252,7 @@ class TestMgmtGateway:
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
-    def test_mgmt_gateway_config(self, get_service_endpoints_mock: List[str], _run_cephadm, cephadm_module: CephadmOrchestrator):
+    def test_mgmt_gateway_config_no_auth(self, get_service_endpoints_mock: List[str], _run_cephadm, cephadm_module: CephadmOrchestrator):
 
         def get_services_endpoints(name):
             if name == 'prometheus':
@@ -3447,6 +3448,111 @@ class TestMgmtGateway:
                 _run_cephadm.assert_called_with(
                     'ceph-node',
                     'mgmt-gateway.ceph-node',
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps(expected),
+                    use_current_daemon_image=False,
+                )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_external_certificates",
+           lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_internal_certificates",
+           lambda instance, dspec: (ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
+    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    def test_mgmt_gateway_config_with_oauth2(self, get_service_endpoints_mock: List[str], _run_cephadm, cephadm_module: CephadmOrchestrator):
+
+        def get_services_endpoints(name):
+            if name == 'prometheus':
+                return ["192.168.100.100:9095", "192.168.100.101:9095"]
+            elif name == 'grafana':
+                return ["ceph-node-2:3000", "ceph-node-2:3000"]
+            elif name == 'alertmanager':
+                return ["192.168.100.100:9093", "192.168.100.102:9093"]
+            return []
+
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        get_service_endpoints_mock.side_effect = get_services_endpoints
+
+        server_port = 5555
+        mgmt_gw_spec = MgmtGatewaySpec(port=server_port,
+                                       ssl_certificate=ceph_generated_cert,
+                                       ssl_certificate_key=ceph_generated_key,
+                                       enable_auth=True)
+
+        oauth2_spec = OAuth2ProxySpec(provider_display_name='my_idp_provider',
+                                      client_id='my_client_id',
+                                      client_secret='my_client_secret',
+                                      oidc_issuer_url='http://192.168.10.10:8888/dex',
+                                      cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ',
+                                      ssl_certificate=ceph_generated_cert,
+                                      ssl_certificate_key=ceph_generated_key)
+        expected = {
+            "fsid": "fsid",
+            "name": "oauth2-proxy.ceph-node",
+            "image": "",
+            "deploy_arguments": [],
+            "params": {"tcp_ports": [4180]},
+            "meta": {
+                "service_name": "oauth2-proxy",
+                "ports": [4180],
+                "ip": None,
+                "deployed_by": [],
+                "rank": None,
+                "rank_generation": None,
+                "extra_container_args": None,
+                "extra_entrypoint_args": None
+            },
+            "config_blobs": {
+                "files": {
+                    "oauth2-proxy.conf": dedent("""
+                                         # Listen on port 4180 for incoming HTTP traffic.
+                                         https_address= "0.0.0.0:4180"
+
+                                         skip_provider_button= true
+                                         skip_jwt_bearer_tokens= true
+
+                                         # OIDC provider configuration.
+                                         provider= "oidc"
+                                         provider_display_name= "my_idp_provider"
+                                         client_id= "my_client_id"
+                                         client_secret= "my_client_secret"
+                                         oidc_issuer_url= "http://192.168.10.10:8888/dex"
+
+                                         ssl_insecure_skip_verify=true
+
+                                         # following configuration is needed to avoid getting Forbidden
+                                         # when using chrome like browsers as they handle 3rd party cookies
+                                         # more strictly than Firefox
+                                         cookie_samesite= "none"
+                                         cookie_secure= true
+                                         cookie_expire= "5h"
+                                         cookie_refresh= "2h"
+
+                                         pass_access_token= true
+                                         pass_authorization_header= true
+                                         pass_basic_auth= true
+                                         pass_user_headers= true
+                                         set_xauthrequest= true
+
+                                         # Secret value for encrypting cookies.
+                                         cookie_secret= "kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ"
+                                         email_domains= "*"
+                                         whitelist_domains= "1::4,ceph-node\""""),
+                    "oauth2-proxy.crt": f"{ceph_generated_cert}",
+                    "oauth2-proxy.key": f"{ceph_generated_key}",
+                }
+            }
+        }
+
+        with with_host(cephadm_module, 'ceph-node'):
+            with with_service(cephadm_module, mgmt_gw_spec) as _, with_service(cephadm_module, oauth2_spec):
+                _run_cephadm.assert_called_with(
+                    'ceph-node',
+                    'oauth2-proxy.ceph-node',
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),

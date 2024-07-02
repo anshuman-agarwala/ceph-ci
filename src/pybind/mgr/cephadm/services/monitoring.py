@@ -37,6 +37,8 @@ class GrafanaService(CephadmService):
 
         # add a dependency since url_prefix depends on the existence of mgmt-gateway
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('mgmt-gateway')]
+        # add a dependency since when oauth-proxy is active we handover Grafana login to it
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('oauth2-proxy')]
 
         prom_services = []  # type: List[str]
         for dd in self.mgr.cache.get_daemons_by_service('prometheus'):
@@ -279,6 +281,9 @@ class AlertmanagerService(CephadmService):
 
         # add a dependency since url_prefix depends on the existence of mgmt-gateway
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('mgmt-gateway')]
+        # add a dependency since enbling basic-auth (or not) depends on the existence of 'oauth2-proxy'
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('oauth2-proxy')]
+
         # scan all mgrs to generate deps and to get standbys too.
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
             # we consider mgr a dep even if the dashboard is disabled
@@ -318,6 +323,8 @@ class AlertmanagerService(CephadmService):
             addr = self.mgr.get_fqdn(dd.hostname)
             peers.append(build_url(host=addr, port=port).lstrip('/'))
 
+        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
+        oauth2_enabled = len(self.mgr.cache.get_daemons_by_service('oauth2-proxy')) > 0
         deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
         if security_enabled:
             alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
@@ -326,7 +333,7 @@ class AlertmanagerService(CephadmService):
             cert, key = self.get_alertmanager_certificates(daemon_spec)
             context = {
                 'enable_mtls': mgmt_gw_enabled,
-                'enable_basic_auth': True,  # TODO(redo): disable when ouath2-proxy is enabled
+                'enable_basic_auth': not oauth2_enabled,
                 'alertmanager_web_user': alertmanager_user,
                 'alertmanager_web_password': password_hash(alertmanager_password),
             }
@@ -415,7 +422,7 @@ class PrometheusService(CephadmService):
             # we shouldn't get here (mon will tell the mgr to respawn), but no
             # harm done if we do.
 
-    def get_mgr_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+    def get_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
         node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
         cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, 'prometheus_servers'], node_ip)
@@ -500,15 +507,21 @@ class PrometheusService(CephadmService):
             if ip_to_bind_to:
                 daemon_spec.port_ips = {str(port): ip_to_bind_to}
 
+        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
+        oauth2_enabled = len(self.mgr.cache.get_daemons_by_service('oauth2-proxy')) > 0
         web_context = {
             'enable_mtls': mgmt_gw_enabled,
-            'enable_basic_auth': True,  # TODO(redo): disable when ouath2-proxy is enabled
+            'enable_basic_auth': not oauth2_enabled,
             'prometheus_web_user': prometheus_user,
             'prometheus_web_password': password_hash(prometheus_password),
         }
 
         if security_enabled:
-            cert, key = self.get_mgr_prometheus_certificates(daemon_spec)
+            # Following key/cert are needed for:
+            # 1- run the prometheus server (web.yml config)
+            # 2- use mTLS to scrape node-exporter (prometheus acts as client)
+            # 3- use mTLS to send alerts to alertmanager (prometheus acts as client)
+            cert, key = self.get_prometheus_certificates(daemon_spec)
             r: Dict[str, Any] = {
                 'files': {
                     'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context),
@@ -579,6 +592,8 @@ class PrometheusService(CephadmService):
 
         # add a dependency since url_prefix depends on the existence of mgmt-gateway
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('mgmt-gateway')]
+        # add a dependency since enbling basic-auth (or not) depends on the existence of 'oauth2-proxy'
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('oauth2-proxy')]
 
         # add dependency on ceph-exporter daemons
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('ceph-exporter')]
