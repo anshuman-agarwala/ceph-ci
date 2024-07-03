@@ -143,14 +143,28 @@ struct NqnState {
     NqnState(const std::string& _nqn, const ana_state_t& _ana_state):
         nqn(_nqn), ana_state(_ana_state)  {}
     NqnState(const std::string& _nqn, const SmState& sm_state, const NvmeGwMonState & gw_created) : nqn(_nqn)  {
-          for (auto& state_itr: sm_state ) {
-            std::pair<gw_exported_states_per_group_t, epoch_t> state_pair;
-            state_pair.first = (  sm_state.at(state_itr.first) == gw_states_per_group_t::GW_ACTIVE_STATE
-			       || sm_state.at(state_itr.first) == gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL)
-                           ? gw_exported_states_per_group_t::GW_EXPORTED_OPTIMIZED_STATE
-                           : gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
-            state_pair.second = gw_created.blocklist_data.at(state_itr.first).osd_epoch;
-            ana_state.push_back(state_pair);
+        uint32_t i = 0;
+        for (auto& state_itr: sm_state) {
+            if (state_itr.first > i) {
+                uint32_t num_to_add = state_itr.first - i;
+                for (uint32_t j = 0; j<num_to_add; j++){ // add fake elements to the ana_state in order to preserve vector index == correct ana_group_id
+                    std::pair<gw_exported_states_per_group_t, epoch_t> state_pair;
+                    state_pair.first = gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
+                    state_pair.second = 0;
+                    ana_state.push_back(state_pair);
+                }
+                i += num_to_add;
+            }
+            else {
+                std::pair<gw_exported_states_per_group_t, epoch_t> state_pair;
+                state_pair.first = (  sm_state.at(state_itr.first) == gw_states_per_group_t::GW_ACTIVE_STATE
+                        || sm_state.at(state_itr.first) == gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL)
+                                   ? gw_exported_states_per_group_t::GW_EXPORTED_OPTIMIZED_STATE
+                                           : gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
+                state_pair.second = gw_created.blocklist_data.at(state_itr.first).osd_epoch;
+                ana_state.push_back(state_pair);
+                i ++;
+            }
         }
     }
 };
