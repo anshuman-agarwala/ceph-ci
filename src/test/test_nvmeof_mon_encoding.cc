@@ -180,6 +180,45 @@ void test_NVMeofGwTimers()
 
 }
 
+void test_MNVMeofGwMapArray() {
+  dout(0) << __func__ << "\n\n" << dendl;
+
+  std::string nqn = "nqn";
+  const NvmeGroupKey group_key = std::make_pair("a","b");
+  BeaconSubsystem sub = { nqn, {}, {} };
+  NVMeofGwMap pending_map;
+  pending_map.cfg_add_gw("GW1" ,group_key);
+  pending_map.cfg_add_gw("GW2" ,group_key);
+  pending_map.cfg_add_gw("GW3" ,group_key);
+  NvmeNonceVector new_nonces = {"abc", "def","hij"};
+  pending_map.created_gws[group_key]["GW1"].nonce_map[1] = new_nonces;
+  pending_map.created_gws[group_key]["GW1"].subsystems.push_back(sub);
+  int i = 0;
+  for(auto & blklst_itr : pending_map.created_gws[group_key]["GW1"].blocklist_data){
+     blklst_itr.second.osd_epoch = 2*(i++);
+     blklst_itr.second.is_failover = false;
+  }
+
+  pending_map.created_gws[group_key]["GW2"].nonce_map[2] = new_nonces;
+  dout(0) << "False pending map: " << pending_map << dendl;
+
+  auto msg = make_message<MNVMeofGwMap>(pending_map);
+  msg->encode_payload(0);
+  msg->decode_payload();
+  dout(0) << "decode msg: " << *msg << dendl;
+  dout(0) << "decoded internal msg: " << msg->get_map() << dendl;
+
+  dout(0)   << "\n == Test GW Delete ==" << dendl;
+  pending_map.cfg_delete_gw("GW2" ,group_key);
+  dout(0) << "deleted GW2 " << pending_map << dendl;
+
+  msg = make_message<MNVMeofGwMap>(pending_map);
+  msg->encode_payload(0);
+  msg->decode_payload();
+  dout(0) << "decode msg: " << *msg << dendl;
+  dout(0) << "decoded internal msg: " << msg->get_map() << dendl;
+}
+
 int main(int argc, const char **argv)
 {
   // Init ceph
@@ -194,5 +233,5 @@ int main(int argc, const char **argv)
   test_MNVMeofGwMap();
   test_MNVMeofGwBeacon();
   test_NVMeofGwTimers();
+  test_MNVMeofGwMapArray();
 }
-
