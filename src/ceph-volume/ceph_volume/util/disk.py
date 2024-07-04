@@ -931,3 +931,33 @@ def has_bluestore_label(device_path):
         logger.info(f'{device_path} is a directory, skipping.')
 
     return isBluestore
+
+def get_lvm_mappers(sys_block_path: str = '/sys/block') -> List[str]:
+    """
+    Retrieve a list of Logical Volume Manager (LVM) device mappers.
+
+    This function scans the given system block path for device mapper (dm) devices
+    and identifies those that are managed by LVM. For each LVM device found, it adds
+    the corresponding paths to the result list.
+
+    Args:
+        sys_block_path (str, optional): The path to the system block directory. Defaults to '/sys/block'.
+
+    Returns:
+        List[str]: A list of strings representing the paths of LVM device mappers.
+                   Each LVM device will have two entries: the /dev/mapper/ path and the /dev/ path.
+    """
+    result: List[str] = []
+    for device in os.listdir(sys_block_path):
+        path: str = os.path.join(sys_block_path, device, 'dm')
+
+        if os.path.exists(path):
+            with open(os.path.join(path, 'uuid'), 'r') as f:
+                mapper_type: str = f.read().split('-')[0]
+
+            if mapper_type == 'LVM':
+                with open(os.path.join(path, 'name'), 'r') as f:
+                    name: str = f.read()
+                    result.append(f'/dev/mapper/{name.strip()}')
+                    result.append(f'/dev/{device}')
+    return result
