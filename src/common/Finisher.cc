@@ -54,6 +54,7 @@ void *Finisher::watchdog_thread_entry()
       auto elapsed = ceph::coarse_mono_clock::now() - last_updated;
       auto elapsed_sec = std::chrono::seconds(ceph::to_seconds<int64_t>(elapsed));
       if (elapsed_sec > std::chrono::seconds(115)) {
+	ldout(cct, 10) << "watchdog crashing for tid:" << gettid() << ", name:" << thread_name << dendl;
 	ceph_assert(false);
       }
     }
@@ -64,7 +65,7 @@ void *Finisher::watchdog_thread_entry()
 void *Finisher::finisher_thread_entry()
 {
   std::unique_lock ul(finisher_lock);
-  ldout(cct, 10) << "finisher_thread start" << dendl;
+  ldout(cct, 10) << "finisher_thread start - tid:" << gettid() << ", name:" << thread_name << dendl;
 
   utime_t start;
   uint64_t count = 0;
@@ -86,9 +87,11 @@ void *Finisher::finisher_thread_entry()
 
       // Now actually process the contexts.
       for (auto p : in_progress_queue) {
+	ldout(cct, 10) << "finisher_thread starting count for tid:" << gettid() << ", name:" << thread_name << dendl;
 	start_counting();
 	p.first->complete(p.second);
 	stop_counting();
+	ldout(cct, 10) << "finisher_thread stopped count for tid:" << gettid() << ", name:" << thread_name << dendl;
       }
       ldout(cct, 10) << "finisher_thread done with " << in_progress_queue
                      << dendl;
