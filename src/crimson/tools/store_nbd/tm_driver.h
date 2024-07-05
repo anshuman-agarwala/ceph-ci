@@ -41,6 +41,8 @@ private:
   using TransactionManagerRef = crimson::os::seastore::TransactionManagerRef;
   TransactionManagerRef tm;
 
+  shard_stats_t shard_stats;
+
   seastar::future<> mkfs();
   void init();
   void clear();
