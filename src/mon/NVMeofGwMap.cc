@@ -41,7 +41,8 @@ void NVMeofGwMap::to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) c
                 gw_state.subsystems.insert({sub.nqn, NqnState(sub.nqn, gw_created.sm_state, gw_created )});
             }
             Gmap[group_key][gw_id] = gw_state;
-        }
+            dout (20) << gw_id << " subs " << gw_state << dendl;
+         }
     }
 }
 
