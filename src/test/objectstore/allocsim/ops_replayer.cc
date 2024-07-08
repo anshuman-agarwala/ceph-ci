@@ -10,8 +10,6 @@
 #include <ctime>
 #include <filesystem>
 #include <mutex>
-#include <rados/buffer_fwd.h>
-#include <rados/librados.hpp>
 #include <atomic>
 #include <fmt/format.h>
 #include <map>
@@ -23,6 +21,9 @@
 
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
+
+#include "rados/buffer_fwd.h"
+#include "rados/librados.hpp"
 
 namespace po = boost::program_options;
 
