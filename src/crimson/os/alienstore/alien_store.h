@@ -131,6 +131,5 @@ private:
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;
   mutable seastar::gate op_gate;
-  std::unordered_map<coll_t, CollectionRef> coll_map;
 };
 }

@@ -165,14 +165,47 @@ public:
     return std::size(snap_trimq);
   }
 
+  /**
+   * complete_rctx
+   *
+   * complete_rctx is responsible for submitting writes and messages
+   * resulting from processing a PeeringState event as well as resolving
+   * any asyncronous actions initiated by the PeeringState::Listener
+   * callbacks below.  The caller is responsible for calling complete_rctx
+   * and waiting for the future to resolve before exiting the
+   * PGPeeringPipeline::process stage (see osd_operations/peering_event.h).
+   */
+  std::vector<seastar::future<>> pending_listener_futures;
+  seastar::future<> complete_rctx(PeeringCtx &&rctx) {
+    decltype(pending_listener_futures) futures;
+    futures.swap(pending_listener_futures);
+    if (get_need_up_thru()) {
+      futures.emplace_back(
+	shard_services.send_alive(get_same_interval_since()));
+    }
+    futures.emplace_back(
+      shard_services.dispatch_context(
+	get_collection_ref(),
+	std::move(rctx)));
+    futures.emplace_back(
+      shard_services.send_pg_temp());
+    return seastar::when_all_succeed(
+      std::move(futures)
+    );
+  }
+
   void send_cluster_message(
     int osd, MessageURef m,
     epoch_t epoch, bool share_map_update=false) final {
-    (void)shard_services.send_to_osd(osd, std::move(m), epoch);
+    pending_listener_futures.emplace_back(
+      shard_services.send_to_osd(osd, std::move(m), epoch)
+    );
   }
 
   void send_pg_created(pg_t pgid) final {
-    (void)shard_services.send_pg_created(pgid);
+    pending_listener_futures.emplace_back(
+      shard_services.send_pg_created(pgid)
+    );
   }
 
   bool try_flush_or_schedule_async() final;
@@ -211,59 +244,59 @@ public:
     unsigned priority,
     PGPeeringEventURef on_grant,
     PGPeeringEventURef on_preempt) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.local_request_reservation(
-      pgid,
-      on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
-	start_peering_event_operation(std::move(*on_grant));
-      }) : nullptr,
-      priority,
-      on_preempt ? make_lambda_context(
-	[this, on_preempt=std::move(on_preempt)] (int) {
-	start_peering_event_operation(std::move(*on_preempt));
-      }) : nullptr);
+    pending_listener_futures.emplace_back(
+      shard_services.local_request_reservation(
+	pgid,
+	on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
+	  start_peering_event_operation(std::move(*on_grant));
+	}) : nullptr,
+	priority,
+	on_preempt ? make_lambda_context(
+	  [this, on_preempt=std::move(on_preempt)] (int) {
+	    start_peering_event_operation(std::move(*on_preempt));
+	  }) : nullptr)
+    );
   }
 
   void update_local_background_io_priority(
     unsigned priority) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.local_update_priority(
-      pgid,
-      priority);
+    pending_listener_futures.emplace_back(
+      shard_services.local_update_priority(
+	pgid,
+	priority)
+    );
+
   }
 
   void cancel_local_background_io_reservation() final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.local_cancel_reservation(
-      pgid);
+    pending_listener_futures.emplace_back(
+      shard_services.local_cancel_reservation(
+	pgid)
+    );
   }
 
   void request_remote_recovery_reservation(
     unsigned priority,
     PGPeeringEventURef on_grant,
     PGPeeringEventURef on_preempt) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.remote_request_reservation(
-      pgid,
-      on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
-	start_peering_event_operation(std::move(*on_grant));
-      }) : nullptr,
-      priority,
-      on_preempt ? make_lambda_context(
-	[this, on_preempt=std::move(on_preempt)] (int) {
-	start_peering_event_operation(std::move(*on_preempt));
-      }) : nullptr);
+    pending_listener_futures.emplace_back(
+      shard_services.remote_request_reservation(
+	pgid,
+	on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
+	  start_peering_event_operation(std::move(*on_grant));
+	}) : nullptr,
+	priority,
+	on_preempt ? make_lambda_context(
+	  [this, on_preempt=std::move(on_preempt)] (int) {
+	    start_peering_event_operation(std::move(*on_preempt));
+	  }) : nullptr)
+    );
   }
 
   void cancel_remote_recovery_reservation() final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore =  shard_services.remote_cancel_reservation(
-      pgid);
+    pending_listener_futures.emplace_back(
+      shard_services.remote_cancel_reservation(pgid)
+    );
   }
 
   void schedule_event_on_commit(
@@ -286,14 +319,14 @@ public:
     // Not needed yet
   }
   void queue_want_pg_temp(const std::vector<int> &wanted) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.queue_want_pg_temp(pgid.pgid, wanted);
+    pending_listener_futures.emplace_back(
+      shard_services.queue_want_pg_temp(pgid.pgid, wanted)
+    );
   }
   void clear_want_pg_temp() final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.remove_want_pg_temp(pgid.pgid);
+    pending_listener_futures.emplace_back(
+      shard_services.remove_want_pg_temp(pgid.pgid)
+    );
   }
   void check_recovery_sources(const OSDMapRef& newmap) final {
     // Not needed yet
@@ -399,10 +432,7 @@ public:
   }
 
   void rebuild_missing_set_with_deletes(PGLog &pglog) final {
-    pglog.rebuild_missing_set_with_deletes_crimson(
-      shard_services.get_store(),
-      coll_ref,
-      peering_state.get_info()).get();
+    ceph_assert(0 == "Impossible for crimson");
   }
 
   PerfCounters &get_peering_perf() final {
@@ -487,12 +517,11 @@ public:
 
   seastar::future<> read_state(crimson::os::FuturizedStore::Shard* store);
 
-  interruptible_future<> do_peering_event(
-    PGPeeringEvent& evt, PeeringCtx &rctx);
+  void do_peering_event(PGPeeringEvent& evt, PeeringCtx &rctx);
 
-  seastar::future<> handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
-  seastar::future<> handle_activate_map(PeeringCtx &rctx);
-  seastar::future<> handle_initialize(PeeringCtx &rctx);
+  void handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
+  void handle_activate_map(PeeringCtx &rctx);
+  void handle_initialize(PeeringCtx &rctx);
 
   static hobject_t get_oid(const hobject_t& hobj);
   static RWState::State get_lock_type(const OpInfo &op_info);
