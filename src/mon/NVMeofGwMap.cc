@@ -41,7 +41,7 @@ void NVMeofGwMap::to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) c
                 gw_state.subsystems.insert({sub.nqn, NqnState(sub.nqn, gw_created.sm_state, gw_created )});
             }
             Gmap[group_key][gw_id] = gw_state;
-            dout (4) << gw_id << " subs " << gw_state << dendl;
+            dout (20) << gw_id << " Gw-Client: " << gw_state << dendl;
         }
     }
 }
@@ -74,8 +74,8 @@ int  NVMeofGwMap::cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_ke
   // Allocate the new group id
     NvmeAnaGrpId i = 0;
     bool was_allocated = false;
-    for(NvmeAnaGrpId elem: allocated) {// "allocated" is a sorted set (!),so if found any gap between numbers, it should be filled
-        if(i != elem) {
+    for (NvmeAnaGrpId elem: allocated) {// "allocated" is a sorted set (!),so if found any gap between numbers, it should be filled
+        if (i != elem) {
             allocated.insert(i);
             was_allocated = true;
             break;
@@ -90,8 +90,8 @@ int  NVMeofGwMap::cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_ke
     NvmeGwMonState gw_created(i);
     created_gws[group_key][gw_id] = gw_created;
     created_gws[group_key][gw_id].performed_full_startup = true;
-    for(NvmeAnaGrpId elem: allocated) {
-        add_grp_id(gw_id, group_key, elem); // add all existed grp_ids to newly created gw
+    for (NvmeAnaGrpId elem: allocated) {
+        add_grp_id(gw_id, group_key, elem); // add all existed grp_ids to newly created gateway
         dout(4) << "adding group " << elem << " to gw " << gw_id << dendl;
     }
     dout(10) << __func__ << " Created GWS:  " << created_gws  <<  dendl;

@@ -147,7 +147,7 @@ struct NqnState {
         for (auto& state_itr: sm_state) {
             if (state_itr.first > i) {
                 uint32_t num_to_add = state_itr.first - i;
-                for (uint32_t j = 0; j<num_to_add; j++){ // add fake elements to the ana_state in order to preserve vector index == correct ana_group_id
+                for (uint32_t j = 0; j<num_to_add; j++) { // add fake elements to the ana_state in order to preserve vector index == correct ana_group_id
                     std::pair<gw_exported_states_per_group_t, epoch_t> state_pair;
                     state_pair.first = gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
                     state_pair.second = 0;
@@ -156,7 +156,7 @@ struct NqnState {
                 i += num_to_add;
             }
             std::pair<gw_exported_states_per_group_t, epoch_t> state_pair;
-            state_pair.first = (  sm_state.at(state_itr.first) == gw_states_per_group_t::GW_ACTIVE_STATE
+            state_pair.first = (sm_state.at(state_itr.first) == gw_states_per_group_t::GW_ACTIVE_STATE
                     || sm_state.at(state_itr.first) == gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL)
                                ? gw_exported_states_per_group_t::GW_EXPORTED_OPTIMIZED_STATE
                                        : gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
