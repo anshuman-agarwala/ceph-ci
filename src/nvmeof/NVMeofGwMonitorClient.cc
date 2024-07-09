@@ -350,15 +350,6 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     dout(10) << "got_old_gw_state: " << old_gw_state << "got_new_gw_state: " << new_gw_state << dendl;
     // Make sure we do not get out of order state changes from the monitor
     ceph_assert(new_gw_state.gw_map_epoch >= old_gw_state.gw_map_epoch);
-
-    // If the monitor previously identified this gateway as accessible but now
-    // flags it as unavailable, it suggests that the gateway lost connection
-    // to the monitor.
-    if (old_gw_state.availability == gw_availability_t::GW_AVAILABLE &&
-	new_gw_state.availability == gw_availability_t::GW_UNAVAILABLE) {
-      dout(4) << "Triggering a panic upon disconnection from the monitor, gw state - unavailable" << dendl;
-      throw std::runtime_error("Lost connection to the monitor (gw map unavailable).");
-    }
   }
 
   // Gather all state changes
