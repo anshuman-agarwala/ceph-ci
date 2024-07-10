@@ -15,6 +15,7 @@ from urllib.error import HTTPError
 from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
+from cephadm.cert_mgr import CertMgr
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -541,7 +542,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         # for serve()
         self.run = True
         self.event = Event()
-
         self.ssh = ssh.SSHManager(self)
 
         if self.get_store('pause'):
@@ -672,6 +672,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.cert_key_store = CertKeyStore(self)
         self.cert_key_store.load()
+
+        self.cert_mgr = CertMgr(self, self.get_mgr_ip())
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
@@ -2608,6 +2610,9 @@ Then run the following:
                 raise OrchestratorError(
                     f'If {service_name} is removed then the following OSDs will remain, --force to proceed anyway\n{msg}')
 
+        if service_name == 'mgmt-gateway':
+            self.set_module_option('secure_monitoring_stack', False)
+
         found = self.spec_store.rm(service_name)
         if found and service_name.startswith('osd.'):
             self.spec_store.finally_rm(service_name)
@@ -2898,7 +2903,7 @@ Then run the following:
             server_port = ''
             try:
                 server_port = str(self.http_server.agent.server_port)
-                root_cert = self.http_server.agent.ssl_certs.get_root_cert()
+                root_cert = self.cert_mgr.get_root_ca()
             except Exception:
                 pass
             deps = sorted([self.get_mgr_ip(), server_port, root_cert,
@@ -2908,7 +2913,7 @@ Then run the following:
             server_port = ''
             try:
                 server_port = str(self.http_server.agent.server_port)
-                root_cert = self.http_server.agent.ssl_certs.get_root_cert()
+                root_cert = self.cert_mgr.get_root_ca()
             except Exception:
                 pass
             deps = sorted([self.get_mgr_ip(), server_port, root_cert])
@@ -2966,7 +2971,8 @@ Then run the following:
             # this daemon type doesn't need deps mgmt
             pass
 
-        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana', 'mgmt-gateway']:
+        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana',
+                           'ceph-exporter']:
             deps.append(f'secure_monitoring_stack:{self.secure_monitoring_stack}')
 
         return sorted(deps)
@@ -3081,6 +3087,21 @@ Then run the following:
         return (user, password)
 
     @handle_orch_error
+    def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
+        import socket
+        supported_moduels = ['dashboard', 'prometheus']
+        if module_name not in supported_moduels:
+            raise OrchestratorError(f'Unsupported modlue {module_name}. Supported moduels are: {supported_moduels}')
+
+        host_fqdns = [socket.getfqdn(self.get_hostname())]
+        node_ip = self.get_mgr_ip()
+        if module_name == 'dashboard':
+            host_fqdns.append('dashboard_servers')
+
+        cert, key = self.cert_mgr.generate_cert(host_fqdns, node_ip)
+        return {'cert': cert, 'key': key}
+
+    @handle_orch_error
     def set_prometheus_access_info(self, user: str, password: str) -> str:
         self.set_store(PrometheusService.USER_CFG_KEY, user)
         self.set_store(PrometheusService.PASS_CFG_KEY, password)
@@ -3137,14 +3158,14 @@ Then run the following:
         user, password = self._get_prometheus_credentials()
         return {'user': user,
                 'password': password,
-                'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
+                'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
     def get_alertmanager_access_info(self) -> Dict[str, str]:
         user, password = self._get_alertmanager_credentials()
         return {'user': user,
                 'password': password,
-                'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
+                'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
     def cert_store_cert_ls(self) -> Dict[str, Any]:
@@ -3268,13 +3289,6 @@ Then run the following:
         self._kick_serve_loop()
         return f'Removed setting {setting} from tuned profile {profile_name}'
 
-    @handle_orch_error
-    def service_discovery_dump_cert(self) -> str:
-        root_cert = self.cert_key_store.get_cert('service_discovery_root_cert')
-        if not root_cert:
-            raise OrchestratorError('No certificate found for service discovery')
-        return root_cert
-
     def set_health_warning(self, name: str, summary: str, count: int, detail: List[str]) -> None:
         self.health_checks[name] = {
             'severity': 'warning',
@@ -3368,6 +3382,9 @@ Then run the following:
 
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
+
+        if spec.service_type == 'mgmt-gateway':
+            self.set_module_option('secure_monitoring_stack', True)
 
         if spec.placement.count is not None:
             if spec.service_type in ['mon', 'mgr']:
