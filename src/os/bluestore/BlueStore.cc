@@ -6014,7 +6014,9 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
 {
   if (!bdev || !bdev->supported_bdev_label()) {
     // skip bdev label section if not supported
-    return ObjectStore::write_meta(key, value);
+    int a = ObjectStore::write_meta(key, value);
+    dout(0) << __func__ << " key=" << key << " value=" << value << " a=" << a << dendl;
+    return a;
   }
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
@@ -6030,7 +6032,9 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
     int r = _write_bdev_label(cct, bdev, p, bdev_label, bdev_label_valid_locations);
     ceph_assert(r == 0);
   }
-  return ObjectStore::write_meta(key, value);
+  int a = ObjectStore::write_meta(key, value);
+  dout(0) << __func__ << " key=" << key << " value=" << value << " a=" << a << dendl;
+  return a;
 }
 
 int BlueStore::read_meta(const std::string& key, std::string *value)
@@ -6053,7 +6057,9 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
   }
   if (!local_bdev->supported_bdev_label()) {
     // skip bdev label section if not supported
-    return ObjectStore::read_meta(key, value);
+    int a =  ObjectStore::read_meta(key, value);
+    dout(0) << __func__ << " key=" << key << " value=" << value << " a=" << a << dendl;
+    return a;
   }
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
@@ -6064,10 +6070,13 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
     auto i = bdev_label.meta.find(key);
     if (i != bdev_label.meta.end()) {
       *value = i->second;
+      dout(0) << __func__ << " key=" << key << " value=" << value << " X" << dendl;
       return 0;
     }
   }
-  return ObjectStore::read_meta(key, value);
+  int a = ObjectStore::read_meta(key, value);
+  dout(0) << __func__ << " key=" << key << " value=" << value << " a=" << a << dendl;
+  return a;
 }
 
 
