@@ -1,5 +1,11 @@
 function(build_uadk)
-    set(configure_cmd ./conf.sh)
+    set(UADK_INSTALL_DIR ${CMAKE_BINARY_DIR}/src/uadk/install)
+    set(UADK_INCLUDE_DIR ${UADK_INSTALL_DIR}/include)
+    set(UADK_LIBRARY_DIR ${UADK_INSTALL_DIR}/lib)
+    set(UADK_WD_LIBRARY ${UADK_LIBRARY_DIR}/libwd.so)
+    set(UADK_WD_COMP_LIBRARY ${UADK_LIBRARY_DIR}/libwd_comp.so)
+    set(configure_cmd env CC=${CMAKE_C_COMPILER} ./configure --prefix=${UADK_INSTALL_DIR})
+    list(APPEND configure_cmd --with-pic --enable-shared --disable-static)
 
     include(ExternalProject)
     ExternalProject_Add(uadk_ext
@@ -8,13 +14,11 @@ function(build_uadk)
             GIT_CONFIG advice.detachedHead=false
             GIT_SHALLOW 1
             GIT_TAG "master"
-            SOURCE_DIR "${CMAKE_BINARY_DIR}/src/uadk"
+            SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/uadk"
             BUILD_IN_SOURCE 1
             CONFIGURE_COMMAND ./autogen.sh COMMAND ${configure_cmd}
             BUILD_COMMAND make
-	    BUILD_BYPRODUCTS
-	        /usr/local/lib/libwd_comp.so
-		/usr/local/lib/libwd.so
+	    BUILD_BYPRODUCTS ${UADK_WD_LIBRARY} ${UADK_WD_COMP_LIBRARY}
             INSTALL_COMMAND make install
             LOG_CONFIGURE ON
             LOG_BUILD ON
@@ -23,9 +27,6 @@ function(build_uadk)
             LOG_OUTPUT_ON_FAILURE ON)
 
     ExternalProject_Get_Property(uadk_ext source_dir)
-    set(UADK_INCLUDE_DIR "/usr/local/include")
-    set(UADK_WD_COMP_LIBRARY "/usr/local/lib/libwd_comp.so")
-    set(UADK_WD_LIBRARY "/usr/local/lib/libwd.so")
     set(UADK_INCLUDE_DIR ${UADK_INCLUDE_DIR} PARENT_SCOPE)
     set(UADK_WD_COMP_LIBRARY ${UADK_LIBRARIES} PARENT_SCOPE)
     set(UADK_WD_LIBRARY ${UADK_WD_LIBRARIES} PARENT_SCOPE)
