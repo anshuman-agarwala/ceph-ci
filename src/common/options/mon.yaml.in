@@ -72,6 +72,13 @@ options:
   default: 30
   services:
   - mon
+- name: mon_nvmeofgw_in_service
+  type: bool
+  level: advanced
+  desc: If need to disable NVMeOfGwMon this flag should be flase
+  default: false
+  services:
+  - mon
 - name: mon_nvmeofgw_beacon_grace
   type: secs
   level: advanced

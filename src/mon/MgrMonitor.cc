@@ -304,13 +304,14 @@ void MgrMonitor::post_paxos_update()
       send = true;
     }
     ceph_assert(prev_health_checks.size() == mon.paxos_service.size());
-    for (auto i = 0u; i < prev_health_checks.size(); i++) {
-      const auto& curr = mon.paxos_service[i]->get_health_checks();
-      if (!send && curr != prev_health_checks[i]) {
-        send = true;
+    for (auto i = 0u; i < prev_health_checks.size(); i++)
+      if (mon.paxos_service[i] != nullptr) {
+        const auto& curr = mon.paxos_service[i]->get_health_checks();
+        if (!send && curr != prev_health_checks[i]) {
+          send = true;
+        }
+        prev_health_checks[i] = curr;
       }
-      prev_health_checks[i] = curr;
-    }
     if (send) {
       if (is_active()) {
         send_digests();
