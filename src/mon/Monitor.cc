@@ -248,7 +248,13 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(*this, *paxos, "health"));
   paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(*this, *paxos, "config"));
   paxos_service[PAXOS_KV].reset(new KVMonitor(*this, *paxos, "kv"));
-  paxos_service[PAXOS_NVMEGW].reset(new NVMeofGwMon(*this, *paxos, "nvmeofgw"));
+  if (g_conf().get_val<bool>("mon_nvmeofgw_in_service")) {
+    paxos_service[PAXOS_NVMEGW].reset(new NVMeofGwMon(*this, *paxos, "nvmeofgw"));
+  }
+  else {
+     paxos_service[PAXOS_NVMEGW] = nullptr;
+     dout(4) << "NvmeOfGwMon is not enabled" << dendl;
+  }
 
   bool r = mon_caps.parse("allow *", NULL);
   ceph_assert(r);
@@ -963,7 +969,8 @@ void Monitor::init_paxos()
 
   // init services
   for (auto& svc : paxos_service) {
-    svc->init();
+    if (svc != nullptr)
+      svc->init();
   }
 
   refresh_from_paxos(NULL);
@@ -988,10 +995,12 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
   }
 
   for (auto& svc : paxos_service) {
-    svc->refresh(need_bootstrap);
+      if (svc != nullptr)
+        svc->refresh(need_bootstrap);
   }
   for (auto& svc : paxos_service) {
-    svc->post_refresh();
+      if (svc != nullptr)
+        svc->post_refresh();
   }
   load_metadata();
 }
@@ -1061,7 +1070,8 @@ void Monitor::shutdown()
   // clean up
   paxos->shutdown();
   for (auto& svc : paxos_service) {
-    svc->shutdown();
+      if (svc != nullptr)
+        svc->shutdown();
   }
 
   finish_contexts(g_ceph_context, waitfor_quorum, -ECANCELED);
@@ -1356,7 +1366,8 @@ void Monitor::_reset()
   paxos->restart();
 
   for (auto& svc : paxos_service) {
-    svc->restart();
+    if (svc != nullptr)
+      svc->restart();
   }
 }
 
@@ -1369,7 +1380,8 @@ set<string> Monitor::get_sync_targets_names()
   set<string> targets;
   targets.insert(paxos->get_name());
   for (auto& svc : paxos_service) {
-    svc->get_store_prefixes(targets);
+      if (svc != nullptr)
+        svc->get_store_prefixes(targets);
   }
   return targets;
 }
@@ -2224,10 +2236,12 @@ void Monitor::_finish_svc_election()
   ceph_assert(state == STATE_LEADER || state == STATE_PEON);
 
   for (auto& svc : paxos_service) {
+    if (svc != nullptr) {
     // we already called election_finished() on monmon(); avoid callig twice
-    if (state == STATE_LEADER && svc.get() == monmon())
-      continue;
-    svc->election_finished();
+      if (state == STATE_LEADER && svc.get() == monmon())
+        continue;
+      svc->election_finished();
+    }
   }
 }
 
@@ -3000,14 +3014,16 @@ void Monitor::log_health(
     // other subsystems
     bool any_checks = false;
     for (auto& svc : paxos_service) {
-      if (&(svc->get_health_checks()) == &(previous)) {
-        // Ignore the ones we're clearing right now
-        continue;
-      }
+      if (svc != nullptr){
+        if (&(svc->get_health_checks()) == &(previous)) {
+          // Ignore the ones we're clearing right now
+          continue;
+        }
 
-      if (svc->get_health_checks().checks.size() > 0) {
-        any_checks = true;
-        break;
+        if (svc->get_health_checks().checks.size() > 0) {
+          any_checks = true;
+          break;
+        }
       }
     }
     if (!any_checks) {
@@ -3620,7 +3636,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
   if (module == "nvme-gw"){
-      nvmegwmon()->dispatch(op);
+      if (nvmegwmon())
+        nvmegwmon()->dispatch(op);
       return;
   }
   if (prefix == "fsid") {
@@ -4671,7 +4688,8 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       return;
 
     case MSG_MNVMEOF_GW_BEACON:
-       paxos_service[PAXOS_NVMEGW]->dispatch(op);
+       if (paxos_service[PAXOS_NVMEGW] != nullptr)
+          paxos_service[PAXOS_NVMEGW]->dispatch(op);
        return;
 
 
@@ -5363,7 +5381,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       kvmon()->check_sub(s->sub_map[p->first]);
     }
     else if (p->first == "NVMeofGw") {
-        nvmegwmon()->check_sub(s->sub_map[p->first]);
+        if (nvmegwmon())
+          nvmegwmon()->check_sub(s->sub_map[p->first]);
     }
   }
 
@@ -5881,36 +5900,37 @@ void Monitor::tick()
   // ok go.
   dout(11) << "tick" << dendl;
   const utime_t now = ceph_clock_now();
-  
+
   // Check if we need to emit any delayed health check updated messages
   if (is_leader()) {
     const auto min_period = g_conf().get_val<int64_t>(
-                              "mon_health_log_update_period");
+        "mon_health_log_update_period");
     for (auto& svc : paxos_service) {
-      auto health = svc->get_health_checks();
+      if (svc != nullptr) {
+        auto health = svc->get_health_checks();
+        for (const auto &i : health.checks) {
+          const std::string &code = i.first;
+          const std::string &summary = i.second.summary;
+          const health_status_t severity = i.second.severity;
 
-      for (const auto &i : health.checks) {
-        const std::string &code = i.first;
-        const std::string &summary = i.second.summary;
-        const health_status_t severity = i.second.severity;
+          auto status_iter = health_check_log_times.find(code);
+          if (status_iter == health_check_log_times.end()) {
+            continue;
+          }
 
-        auto status_iter = health_check_log_times.find(code);
-        if (status_iter == health_check_log_times.end()) {
-          continue;
-        }
+          auto &log_status = status_iter->second;
+          bool const changed = log_status.last_message != summary
+              || log_status.severity != severity;
 
-        auto &log_status = status_iter->second;
-        bool const changed = log_status.last_message != summary
-                             || log_status.severity != severity;
+          if (changed && now - log_status.updated_at > min_period) {
+            log_status.last_message = summary;
+            log_status.updated_at = now;
+            log_status.severity = severity;
 
-        if (changed && now - log_status.updated_at > min_period) {
-          log_status.last_message = summary;
-          log_status.updated_at = now;
-          log_status.severity = severity;
-
-          ostringstream ss;
-          ss << "Health check update: " << summary << " (" << code << ")";
-          clog->health(severity) << ss.str();
+            ostringstream ss;
+            ss << "Health check update: " << summary << " (" << code << ")";
+            clog->health(severity) << ss.str();
+          }
         }
       }
     }
@@ -5918,42 +5938,44 @@ void Monitor::tick()
 
 
   for (auto& svc : paxos_service) {
-    svc->tick();
-    svc->maybe_trim();
+    if (svc != nullptr) {
+      svc->tick();
+      svc->maybe_trim();
+    }
   }
-  
+
   // trim sessions
   {
     std::lock_guard l(session_map_lock);
     auto p = session_map.sessions.begin();
 
     bool out_for_too_long = (!exited_quorum.is_zero() &&
-			     now > (exited_quorum + 2*g_conf()->mon_lease));
+        now > (exited_quorum + 2*g_conf()->mon_lease));
 
     while (!p.end()) {
       MonSession *s = *p;
       ++p;
-    
+
       // don't trim monitors
       if (s->name.is_mon())
-	continue;
+        continue;
 
       if (s->session_timeout < now && s->con) {
-	// check keepalive, too
-	s->session_timeout = s->con->get_last_keepalive();
-	s->session_timeout += g_conf()->mon_session_timeout;
+        // check keepalive, too
+        s->session_timeout = s->con->get_last_keepalive();
+        s->session_timeout += g_conf()->mon_session_timeout;
       }
       if (s->session_timeout < now) {
-	dout(10) << " trimming session " << s->con << " " << s->name
-		 << " " << s->addrs
-		 << " (timeout " << s->session_timeout
-		 << " < now " << now << ")" << dendl;
+        dout(10) << " trimming session " << s->con << " " << s->name
+            << " " << s->addrs
+            << " (timeout " << s->session_timeout
+            << " < now " << now << ")" << dendl;
       } else if (out_for_too_long) {
-	// boot the client Session because we've taken too long getting back in
-	dout(10) << " trimming session " << s->con << " " << s->name
-		 << " because we've been out of quorum too long" << dendl;
+          // boot the client Session because we've taken too long getting back in
+          dout(10) << " trimming session " << s->con << " " << s->name
+            << " because we've been out of quorum too long" << dendl;
       } else {
-	continue;
+          continue;
       }
 
       s->con->mark_down();
