@@ -4,7 +4,7 @@ function(build_uadk)
     set(UADK_LIBRARY_DIR ${UADK_INSTALL_DIR}/lib)
     set(UADK_WD_LIBRARY ${UADK_LIBRARY_DIR}/libwd.so)
     set(UADK_WD_COMP_LIBRARY ${UADK_LIBRARY_DIR}/libwd_comp.so)
-    set(configure_cmd env CC=${CMAKE_C_COMPILER} ./configure --prefix=${UADK_INSTALL_DIR})
+    set(configure_cmd env ./configure --prefix=${UADK_INSTALL_DIR})
     list(APPEND configure_cmd --with-pic --enable-shared --disable-static)
 
     include(ExternalProject)
@@ -16,6 +16,7 @@ function(build_uadk)
             GIT_TAG "master"
             SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/uadk"
             BUILD_IN_SOURCE 1
+            CMAKE_ARGS -DCMAKE_CXX_COMPILER=which g++
             CONFIGURE_COMMAND ./autogen.sh COMMAND ${configure_cmd}
             BUILD_COMMAND make
 	    BUILD_BYPRODUCTS ${UADK_WD_LIBRARY} ${UADK_WD_COMP_LIBRARY}
