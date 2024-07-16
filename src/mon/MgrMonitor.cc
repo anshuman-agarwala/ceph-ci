@@ -304,7 +304,8 @@ void MgrMonitor::post_paxos_update()
       send = true;
     }
     ceph_assert(prev_health_checks.size() == mon.paxos_service.size());
-    for (auto i = 0u; i < prev_health_checks.size(); i++) {
+    for (auto i = 0u; i < prev_health_checks.size(); i++)
+      if (mon.paxos_service[i] != nullptr) {
       const auto& curr = mon.paxos_service[i]->get_health_checks();
       if (!send && curr != prev_health_checks[i]) {
         send = true;
