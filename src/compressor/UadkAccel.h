@@ -13,7 +13,6 @@
 #ifndef CEPH_UadkAccel_H
 #define CEPH_UadkAccel_H
 
-#include <boost/optional.hpp>
 #include "include/buffer.h"
 
 extern "C" {
@@ -25,10 +24,10 @@ extern "C" {
 class UadkAccel {
   public:
       UadkAccel() {  }
-      ~UadkAccel() { destory(); }
+      ~UadkAccel() { destroy(); }
 
       bool init();
-      void destory();
+      void destroy();
 
       int compress(const bufferlist &in, bufferlist &out, std::optional<int32_t> &compressor_message);
       int decompress(const bufferlist &in, bufferlist &out, std::optional<int32_t> compressor_message);

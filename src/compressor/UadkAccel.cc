@@ -34,7 +34,7 @@ using std::string;
 static ostream&
 _prefix(std::ostream* _dout)
 {
-  return *_dout << "Compression--UADK: ";
+  return *_dout << "UadkAccel: ";
 }
 
 static std::atomic<bool> init_called = { false };
@@ -47,7 +47,7 @@ struct UadkEngine {
   int numa_id;
 } engine;
 
-
+// helper function, can be reserved for custom scheduling policy, in here, munged to 0 if ret is postive.
 static int lib_poll_func(__u32 pos, __u32 expect, __u32 *count)
 {
   int ret = wd_comp_poll_ctx(pos, expect, count);
@@ -56,25 +56,20 @@ static int lib_poll_func(__u32 pos, __u32 expect, __u32 *count)
   return 0;
 }
 
-static unsigned int get_uadk_ctx_num()
+static int get_uadk_ctx_num()
 {
-  char *env_set = getenv("WD_SYNC_CTX_NUM");
-  if (env_set == nullptr) {
-    return 2;
+  int ctx_num = g_ceph_context->_conf.get_val<uint64_t>("uadk_wd_sync_ctx_num");
+  if (ctx_num > UADK_PF_SIZE) {
+    ctx_num = UADK_PF_SIZE;
   } else {
-    int num = stoi(string(env_set));
-    if (num > UADK_PF_SIZE) {
-      num = UADK_PF_SIZE;
-    } else {
-      num = std::max(num, 2);
-    }
-    return (unsigned int)num;
+    ctx_num = std::max(ctx_num, 2);
   }
+  return ctx_num;
 }
 
 static int uadk_init()
 {
-  dout(10) << __func__ << ": srqsunrongqi uadk_init()." << dendl;
+  dout(10) << __func__ << ": uadk_init()." << dendl;
   if (init_called) {
     dout(10) << __func__ << ": UADK already init." << dendl;
     return 0;
@@ -93,17 +88,18 @@ static int uadk_init()
   if (uadk_dev == nullptr) {
     derr << __func__ << ": cannot get uadk device " << dendl;
     ret = -ECANCELED;
+    wd_sched_rr_release(engine.sched);
     return ret;
   }
   engine.numa_id = uadk_dev->numa_id;
-  unsigned int CMPRS_CTX_NUM = get_uadk_ctx_num();
-  engine.ctx_cfg.ctx_num = CMPRS_CTX_NUM;
-  engine.ctx_cfg.ctxs = new wd_ctx[CMPRS_CTX_NUM];
+  uint64_t cmprs_ctx_num = get_uadk_ctx_num();
+  engine.ctx_cfg.ctx_num = cmprs_ctx_num;
+  engine.ctx_cfg.ctxs = new wd_ctx[cmprs_ctx_num];
 
   unsigned int i;
 
   /******** request ctxs (compress ctx num + decompress ctx num) ********/
-  for (i = 0; i != CMPRS_CTX_NUM; ++i) {
+  for (i = 0; i != cmprs_ctx_num; ++i) {
     engine.ctx_cfg.ctxs[i].ctx = wd_request_ctx(uadk_dev);
     if (!engine.ctx_cfg.ctxs[i].ctx) {
       derr << __func__ << ": UADK ctx ERROR !" << dendl;
@@ -114,7 +110,7 @@ static int uadk_init()
 
   struct sched_params param;
   /******** create sched instance for compress ctx ********/
-  for(unsigned int m = 0; m != CMPRS_CTX_NUM / 2; ++m) {
+  for(unsigned int m = 0; m != cmprs_ctx_num / 2; ++m) {
     engine.ctx_cfg.ctxs[m].op_type = WD_DIR_COMPRESS;
     engine.ctx_cfg.ctxs[m].ctx_mode = CTX_MODE_SYNC;
   }
@@ -122,7 +118,7 @@ static int uadk_init()
   param.type = WD_DIR_COMPRESS;
   param.mode = CTX_MODE_SYNC;
   param.begin = 0;
-  param.end = CMPRS_CTX_NUM / 2 - 1;
+  param.end = cmprs_ctx_num / 2 - 1;
 
   ret = wd_sched_rr_instance((const struct wd_sched *)engine.sched, &param);
   if (ret < 0) {
@@ -132,14 +128,14 @@ static int uadk_init()
   }
 
   /******** create sched instance for decompress ctx ********/
-  for(unsigned int m = CMPRS_CTX_NUM / 2; m != CMPRS_CTX_NUM; ++m) {
+  for(unsigned int m = cmprs_ctx_num / 2; m != cmprs_ctx_num; ++m) {
     engine.ctx_cfg.ctxs[m].op_type = WD_DIR_DECOMPRESS;
     engine.ctx_cfg.ctxs[m].ctx_mode = CTX_MODE_SYNC;
   }
   param.type = WD_DIR_DECOMPRESS;
   param.mode = CTX_MODE_SYNC;
-  param.begin = CMPRS_CTX_NUM / 2;
-  param.end = CMPRS_CTX_NUM - 1;
+  param.begin = cmprs_ctx_num / 2;
+  param.end = cmprs_ctx_num - 1;
   ret = wd_sched_rr_instance((const struct wd_sched *)engine.sched, &param);
   if (ret < 0) {
     derr << __func__ << ": Fail to fill decompress sched region."
@@ -173,7 +169,7 @@ out_fill:
 
 bool UadkAccel::init()
 {
-  dout(10) << __func__ << ": srqsunrongqi UadkAccel::init" << dendl;
+  dout(10) << __func__ << ": UadkAccel::init" << dendl;
   ++uadk_compressor_thread_num;
 
   if (init_called) {
@@ -428,7 +424,7 @@ int UadkAccel::decompress(const bufferlist &in, bufferlist &out, std::optional<i
   return decompress(i, in.length(), out, compressor_message);
 }
 
-void UadkAccel::destory()
+void UadkAccel::destroy()
 {
   if (!init_called) {
     return;
