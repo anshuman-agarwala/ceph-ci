@@ -460,7 +460,8 @@ bool HealthMonitor::check_mutes()
 void HealthMonitor::gather_all_health_checks(health_check_map_t *all)
 {
   for (auto& svc : mon.paxos_service) {
-    all->merge(svc->get_health_checks());
+    if (svc != nullptr)
+      all->merge(svc->get_health_checks());
   }
 }
 
