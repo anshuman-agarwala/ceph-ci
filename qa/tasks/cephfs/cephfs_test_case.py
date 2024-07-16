@@ -81,6 +81,8 @@ class CephFSTestCase(CephTestCase):
 
     LOAD_SETTINGS = [] # type: ignore
 
+    last_active_mgr = None
+
     def _reqid_tostr(self, reqid):
         """
         Change a json reqid to a string representation.
@@ -204,12 +206,18 @@ class CephFSTestCase(CephTestCase):
                 ['config', 'get', setting], mds_id=list(self.mds_cluster.mds_ids)[0]
             )[setting]))
 
+        if self.last_active_mgr:
+            self.mon_manager.revive_mgr(self.last_active_mgr)
+            self.last_active_mgr = None
         self.configs_set = set()
 
     def tearDown(self):
         self.mds_cluster.clear_firewall()
         for m in self.mounts:
             m.teardown()
+
+        self.last_active_mgr = self.mon_manager.get_mgr_dump()['active_name']
+        self.mon_manager.raw_cluster_cmd('mgr', 'fail', self.last_active_mgr)
 
         # To prevent failover messages during Unwind of ceph task
         self.mds_cluster.delete_all_filesystems()
