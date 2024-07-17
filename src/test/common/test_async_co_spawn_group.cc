@@ -50,8 +50,8 @@ TEST(co_spawn_group, spawn_limit)
 
   auto cr = [] () -> awaitable<void> { co_return; };
 
-  asio::co_spawn(ex, cr(), group);
-  EXPECT_THROW(asio::co_spawn(ex, cr(), group), std::length_error);
+  group.spawn(cr());
+  EXPECT_THROW(group.spawn(cr()), std::length_error);
 }
 
 TEST(co_spawn_group, wait_empty)
@@ -76,7 +76,7 @@ TEST(co_spawn_group, spawn_shutdown)
   auto group = co_spawn_group{ex, 10};
 
   co_waiter<void, executor_type> waiter;
-  asio::co_spawn(ex, waiter.get(), group);
+  group.spawn(waiter.get());
 
   ctx.poll();
   ASSERT_FALSE(ctx.stopped());
@@ -90,7 +90,7 @@ TEST(co_spawn_group, spawn_wait)
   auto group = co_spawn_group{ex, 10};
 
   co_waiter<void, executor_type> waiter;
-  asio::co_spawn(ex, waiter.get(), group);
+  group.spawn(waiter.get());
 
   std::optional<std::exception_ptr> result;
   asio::co_spawn(ex, group.wait(), capture(result));
@@ -115,7 +115,7 @@ TEST(co_spawn_group, spawn_wait_shutdown)
   co_waiter<void, executor_type> waiter;
   auto cr = [ex, &waiter] () -> awaitable<void> {
     auto group = co_spawn_group{ex, 1};
-    asio::co_spawn(ex, waiter.get(), group);
+    group.spawn(waiter.get());
     co_await group.wait();
   };
 
@@ -136,7 +136,7 @@ TEST(co_spawn_group, spawn_wait_cancel)
   co_waiter<void, executor_type> waiter;
   auto cr = [ex, &waiter] () -> awaitable<void> {
     auto group = co_spawn_group{ex, 1};
-    asio::co_spawn(ex, waiter.get(), group);
+    group.spawn(waiter.get());
     co_await group.wait();
   };
 
@@ -171,10 +171,10 @@ TEST(co_spawn_group, spawn_wait_exception_order)
   auto group = co_spawn_group{ex, 2};
 
   co_waiter<void, executor_type> waiter1;
-  asio::co_spawn(ex, waiter1.get(), group);
+  group.spawn(waiter1.get());
 
   co_waiter<void, executor_type> waiter2;
-  asio::co_spawn(ex, waiter2.get(), group);
+  group.spawn(waiter2.get());
 
   std::optional<std::exception_ptr> result;
   asio::co_spawn(ex, group.wait(), capture(result));
@@ -205,7 +205,7 @@ TEST(co_spawn_group, spawn_complete_wait)
   auto group = co_spawn_group{ex, 2};
 
   co_waiter<void, executor_type> waiter;
-  asio::co_spawn(ex, waiter.get(), group);
+  group.spawn(waiter.get());
 
   ctx.poll();
   ASSERT_FALSE(ctx.stopped());
@@ -233,7 +233,7 @@ TEST(co_spawn_group, spawn_wait_wait)
   auto group = co_spawn_group{ex, 1};
 
   co_waiter<void, executor_type> waiter;
-  asio::co_spawn(ex, waiter.get(), group);
+  group.spawn(waiter.get());
 
   std::optional<std::exception_ptr> result;
   asio::co_spawn(ex, group.wait(), capture(result));
@@ -266,7 +266,7 @@ TEST(co_spawn_group, spawn_wait_spawn_wait)
   auto group = co_spawn_group{ex, 1};
 
   co_waiter<void, executor_type> waiter;
-  asio::co_spawn(ex, waiter.get(), group);
+  group.spawn(waiter.get());
 
   std::optional<std::exception_ptr> result;
   asio::co_spawn(ex, group.wait(), capture(result));
@@ -282,7 +282,7 @@ TEST(co_spawn_group, spawn_wait_spawn_wait)
   ASSERT_TRUE(result);
   ASSERT_FALSE(*result);
 
-  asio::co_spawn(ex, waiter.get(), group);
+  group.spawn(waiter.get());
 
   result.reset();
   asio::co_spawn(ex, group.wait(), capture(result));
@@ -307,7 +307,7 @@ TEST(co_spawn_group, spawn_cancel_wait_spawn_wait)
   auto group = co_spawn_group{ex, 1};
 
   co_waiter<void, executor_type> waiter;
-  asio::co_spawn(ex, waiter.get(), group);
+  group.spawn(waiter.get());
 
   ctx.poll();
   ASSERT_FALSE(ctx.stopped());
@@ -333,7 +333,7 @@ TEST(co_spawn_group, spawn_cancel_wait_spawn_wait)
     EXPECT_THROW(throw, boost::system::system_error);
   }
 
-  asio::co_spawn(ex, waiter.get(), group);
+  group.spawn(waiter.get());
 
   result.reset();
   asio::co_spawn(ex, group.wait(), capture(result));
@@ -358,7 +358,7 @@ TEST(co_spawn_group, spawn_wait_cancel_spawn_wait)
   auto group = co_spawn_group{ex, 1};
 
   co_waiter<void, executor_type> waiter;
-  asio::co_spawn(ex, waiter.get(), group);
+  group.spawn(waiter.get());
 
   std::optional<std::exception_ptr> result;
   asio::co_spawn(ex, group.wait(), capture(result));
@@ -382,7 +382,7 @@ TEST(co_spawn_group, spawn_wait_cancel_spawn_wait)
     EXPECT_THROW(throw, boost::system::system_error);
   }
 
-  asio::co_spawn(ex, waiter.get(), group);
+  group.spawn(waiter.get());
 
   result.reset();
   asio::co_spawn(ex, group.wait(), capture(result));
@@ -407,13 +407,13 @@ TEST(co_spawn_group, cancel_on_error_after)
   auto group = co_spawn_group{ex, 3, cancel_on_error::after};
 
   co_waiter<void, executor_type> waiter1;
-  asio::co_spawn(ex, waiter1.get(), group);
+  group.spawn(waiter1.get());
 
   co_waiter<void, executor_type> waiter2;
-  asio::co_spawn(ex, waiter2.get(), group);
+  group.spawn(waiter2.get());
 
   co_waiter<void, executor_type> waiter3;
-  asio::co_spawn(ex, waiter3.get(), group);
+  group.spawn(waiter3.get());
 
   std::optional<std::exception_ptr> result;
   asio::co_spawn(ex, group.wait(), capture(result));
@@ -444,13 +444,13 @@ TEST(co_spawn_group, cancel_on_error_all)
   auto group = co_spawn_group{ex, 3, cancel_on_error::all};
 
   co_waiter<void, executor_type> waiter1;
-  asio::co_spawn(ex, waiter1.get(), group);
+  group.spawn(waiter1.get());
 
   co_waiter<void, executor_type> waiter2;
-  asio::co_spawn(ex, waiter2.get(), group);
+  group.spawn(waiter2.get());
 
   co_waiter<void, executor_type> waiter3;
-  asio::co_spawn(ex, waiter3.get(), group);
+  group.spawn(waiter3.get());
 
   std::optional<std::exception_ptr> result;
   asio::co_spawn(ex, group.wait(), capture(result));

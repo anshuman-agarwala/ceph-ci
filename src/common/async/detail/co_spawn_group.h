@@ -16,6 +16,7 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/execution/executor.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
@@ -96,15 +97,6 @@ class co_spawn_group_impl :
     return ex;
   }
 
-  co_spawn_group_handler<executor_type> completion()
-  {
-    if (spawned >= limit) {
-      throw std::length_error("spawn group maximum size exceeded");
-    }
-    const size_type index = spawned++;
-    return {boost::intrusive_ptr{this}, signals[index].slot(), index};
-  }
-
   void child_complete(size_type index, std::exception_ptr e)
   {
     if (e) {
@@ -120,6 +112,11 @@ class co_spawn_group_impl :
     if (++completed == spawned) {
       complete();
     }
+  }
+
+  void spawn(boost::asio::awaitable<void, executor_type> cr)
+  {
+    boost::asio::co_spawn(get_executor(), std::move(cr), completion());
   }
 
   boost::asio::awaitable<void, executor_type> wait()
@@ -170,6 +167,15 @@ class co_spawn_group_impl :
     if (waiter.waiting()) {
       waiter.complete(nullptr);
     }
+  }
+
+  co_spawn_group_handler<executor_type> completion()
+  {
+    if (spawned >= limit) {
+      throw std::length_error("spawn group maximum size exceeded");
+    }
+    const size_type index = spawned++;
+    return {boost::intrusive_ptr{this}, signals[index].slot(), index};
   }
 };
 

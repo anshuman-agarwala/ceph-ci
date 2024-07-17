@@ -21,9 +21,6 @@ namespace ceph::async {
 
 /// \brief Tracks a group of coroutines to await all of their completions.
 ///
-/// This class functions as a CompletionToken for calls to co_spawn(), attaching
-/// a handler that notifies the group upon the child coroutine's completion.
-///
 /// The wait() function can be used to await the completion of all children.
 /// If any child coroutines exit with an exception, the first such exception
 /// is rethrown by wait(). The cancel_on_error option controls whether these
@@ -47,7 +44,7 @@ namespace ceph::async {
 ///   auto group = co_spawn_group{ex, tasks.size()};
 ///
 ///   for (auto& t : tasks) {
-///     boost::asio::co_spawn(ex, child(t), group);
+///     group.spawn(child(t));
 ///   }
 ///   co_await group.wait();
 /// }
@@ -75,20 +72,17 @@ class co_spawn_group {
     return impl->get_executor();
   }
 
-  /// Return a cancellable co_spawn() completion handler with signature
-  /// void(std::exception_ptr). Throws a std::length_error exception if the
-  /// number of outstanding completion handlers would exceed the group's limit.
-  ///
-  /// As a convenience, you can avoid calling this function by using the
-  /// co_spawn_group itself as a CompletionToken for co_spawn().
-  auto completion()
+  /// Spawn the given coroutine \ref cr on the group's executor. Throws a
+  /// std::length_error exception if the number of outstanding coroutines
+  /// would exceed the group's limit.
+  void spawn(boost::asio::awaitable<void, executor_type> cr)
   {
-    return impl->completion();
+    impl->spawn(std::move(cr));
   }
 
-  /// Wait for all outstanding completion handlers before returning. If any
-  /// of the spawned coroutines exit with an exception, the first exception
-  /// is rethrown.
+  /// Wait for all outstanding coroutines before returning. If any of the
+  /// spawned coroutines exit with an exception, the first exception is
+  /// rethrown.
   ///
   /// After wait() completes, whether by exception or co_return, the spawn
   /// group can be reused to spawn and await additional coroutines.
@@ -105,27 +99,3 @@ class co_spawn_group {
 };
 
 } // namespace ceph::async
-
-namespace boost::asio {
-
-// Allow co_spawn_group to be used as a CompletionToken.
-template <typename Executor, typename Signature>
-struct async_result<ceph::async::co_spawn_group<Executor>, Signature>
-{
-  using completion_handler_type =
-      ceph::async::detail::co_spawn_group_handler<Executor>;
-  async_result(completion_handler_type&) {}
-
-  using return_type = void;
-  return_type get() {}
-
-  template <typename Initiation, typename... Args>
-  static return_type initiate(Initiation&& init,
-                              ceph::async::co_spawn_group<Executor>& group,
-                              Args&& ...args)
-  {
-    return std::move(init)(group.completion(), std::forward<Args>(args)...);
-  }
-};
-
-} // namespace boost::asio
