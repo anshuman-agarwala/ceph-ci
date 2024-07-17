@@ -15,7 +15,9 @@ if (HAVE_UADK)
   add_library(uadk_compressor OBJECT UadkAccel.cc)
   target_link_libraries(uadk_compressor PUBLIC
 	                uadk::uadk
-			uadk::uadkwd)
+			uadk::uadkwd
+			uadk::uadkzip
+			numa)
 endif()
 
 ## compressor plugins
