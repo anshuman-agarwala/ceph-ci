@@ -4748,6 +4748,7 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
     });
     tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
     if (lease_cr && !lease_cr->is_locked()) {
+      drain_all();
       tn->log(1, "no lease or lease is lost, abort");
       yield call(marker_tracker.flush());
       if (retcode < 0) {
