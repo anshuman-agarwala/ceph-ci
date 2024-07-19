@@ -7964,6 +7964,56 @@ class TestCloneProgressReporter(TestVolumesHelper):
         # and not cancelling these clone doesnt affect this test case.
         self.cancel_clones_and_ignore_if_finished(c)
 
+    def test_clone_after_subvol_is_removed(self):
+        '''
+        Initiate cloning after source subvolume has been deleted and then test
+        that, when this clone is in progress, one progress bar is printed in
+        output of command "ceph status" that shows progress of this clone.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        # XXX: "clone" must be part of clone name for sake of tearDown()
+        c = 'ss1clone1'
+
+        self.config_set('mds', 'mds_snap_rstat', 'true')
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        size = self._do_subvolume_io(sv, None, None, 10, 1024)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.wait_till_rbytes_is_right(v, sv, size)
+
+        self.run_ceph_cmd(f'fs subvolume rm {v} {sv} --retain-snapshots')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+
+        with safe_while(tries=10, sleep=1) as proceed:
+            while proceed():
+                pev = self.get_pevs_from_ceph_status(c)
+
+                if len(pev) < 1:
+                   continue
+                elif len(pev) > 1:
+                    raise RuntimeError('For 1 clone "ceph status" output has 2 '
+                                       'progress bars, it should have only 1 '
+                                       f'progress bar.\npev -\n{pev}')
+
+                # ensure that exactly 1 progress bar for cloning is present in
+                # "ceph status" output
+                msg = ('"progress_events" dict in "ceph status" output must have '
+                       f'exactly one entry.\nprogress_event dict -\n{pev}')
+                self.assertEqual(len(pev), 1, msg)
+
+                pev_msg = tuple(pev.values())[0]['message']
+                self.assertIn('1 ongoing clones', pev_msg)
+                break
+
+        # allowing clone jobs to finish will consume too much time and space
+        # and not cancelling these clone doesnt affect this test case.
+        self.cancel_clones_and_ignore_if_finished(c)
+
+        time.sleep(5)
+
     def test_clones_equal_to_cloner_threads(self):
         '''
         Test that one progress bar is printed in output of "ceph status" output
