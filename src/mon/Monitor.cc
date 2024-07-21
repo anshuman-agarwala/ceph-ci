@@ -250,10 +250,11 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_KV].reset(new KVMonitor(*this, *paxos, "kv"));
   if (g_conf().get_val<bool>("mon_nvmeofgw_in_service")) {
     paxos_service[PAXOS_NVMEGW].reset(new NVMeofGwMon(*this, *paxos, "nvmeofgw"));
+    dout(4) << "NvmeOfGwMon is enabled" << dendl;
   }
   else {
-     paxos_service[PAXOS_NVMEGW] = nullptr;
-     dout(4) << "NvmeOfGwMon is not enabled" << dendl;
+    paxos_service[PAXOS_NVMEGW] = nullptr;
+    dout(4) << "NvmeOfGwMon is not enabled" << dendl;
   }
 
   bool r = mon_caps.parse("allow *", NULL);
@@ -3636,9 +3637,14 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
   if (module == "nvme-gw"){
-    if (nvmegwmon())
+    if (nvmegwmon()) {
       nvmegwmon()->dispatch(op);
-    return;
+      return;
+    }
+    else{
+      dout(4) << "Dispatch: NvmeOfGwMon is not enabled" << dendl;
+    }
+
   }
   if (prefix == "fsid") {
     if (f) {
@@ -4688,10 +4694,13 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       return;
 
     case MSG_MNVMEOF_GW_BEACON:
-       if (paxos_service[PAXOS_NVMEGW] != nullptr)
+       if (paxos_service[PAXOS_NVMEGW] != nullptr) {
          paxos_service[PAXOS_NVMEGW]->dispatch(op);
-       return;
-
+	 return;
+       }
+       else {
+	 dout(4) << "NVMeOf beacon but monitor is not enabled" << dendl;
+       }
 
     // MgrStat
     case MSG_MON_MGR_REPORT:
