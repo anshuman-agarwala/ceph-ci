@@ -288,6 +288,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
 Monitor::~Monitor()
 {
+  dout(4) << "Monitor destructed" << dendl;
   op_tracker.on_shutdown();
   delete logger;
   ceph_assert(session_map.sessions.empty());
