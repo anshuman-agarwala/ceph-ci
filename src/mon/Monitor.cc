@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -251,10 +251,12 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   if (g_conf().get_val<bool>("mon_nvmeofgw_in_service")) {
     paxos_service[PAXOS_NVMEGW].reset(new NVMeofGwMon(*this, *paxos, "nvmeofgw"));
     dout(4) << "NvmeOfGwMon is enabled" << dendl;
+    printf("NvmeOfGwMon is enabled\n");
   }
   else {
     paxos_service[PAXOS_NVMEGW] = nullptr;
     dout(4) << "NvmeOfGwMon is not enabled" << dendl;
+    printf("NvmeOfGwMon is not enabled\n");
   }
 
   bool r = mon_caps.parse("allow *", NULL);
@@ -289,6 +291,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 Monitor::~Monitor()
 {
   dout(4) << "Monitor destructed" << dendl;
+  printf("Monitor destructed\n");
   op_tracker.on_shutdown();
   delete logger;
   ceph_assert(session_map.sessions.empty());
