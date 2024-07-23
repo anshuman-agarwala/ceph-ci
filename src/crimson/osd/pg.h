@@ -176,23 +176,21 @@ public:
    * and waiting for the future to resolve before exiting the
    * PGPeeringPipeline::process stage (see osd_operations/peering_event.h).
    */
-  std::vector<seastar::future<>> pending_listener_futures;
+  ShardServices::singleton_orderer_t orderer;
   seastar::future<> complete_rctx(PeeringCtx &&rctx) {
-    decltype(pending_listener_futures) futures;
-    futures.swap(pending_listener_futures);
+    shard_services.send_pg_temp(orderer);
     if (get_need_up_thru()) {
-      futures.emplace_back(
-	shard_services.send_alive(get_same_interval_since()));
+      shard_services.send_alive(orderer, get_same_interval_since());
     }
-    futures.emplace_back(
+
+    ShardServices::singleton_orderer_t o;
+    std::swap(o, orderer);
+    return seastar::when_all(
       shard_services.dispatch_context(
 	get_collection_ref(),
-	std::move(rctx)));
-    futures.emplace_back(
-      shard_services.send_pg_temp());
-    return seastar::when_all_succeed(
-      std::move(futures)
-    );
+	std::move(rctx)),
+      shard_services.run_orderer(std::move(o))
+    ).then([](auto) {});
   }
 
   void send_cluster_message(
@@ -202,17 +200,21 @@ public:
     SUBDEBUGDPP(
       osd, "message {} to {} share_map_update {}",
       *this, *m, osd, share_map_update);
-    pending_listener_futures.emplace_back(
-      shard_services.send_to_osd(osd, std::move(m), epoch)
-    );
+    /* We don't bother to queue this one in the orderer because capturing the
+     * message ref in std::function is problematic as it isn't copyable.  This
+     * is solvable, but it's not quite worth the effort at the moment as we
+     * aren't worried about ordering of message send events except between
+     * messages to the same target within an interval, which doesn't really
+     * happen while processing a single event.  It'll probably be worth
+     * generalizing the orderer structure to fix this in the future, probably
+     * by using std::move_only_function once widely available. */
+    std::ignore = shard_services.send_to_osd(osd, std::move(m), epoch);
   }
 
   void send_pg_created(pg_t pgid) final {
     LOG_PREFIX(PG::send_pg_created);
     SUBDEBUGDPP(osd, "pgid {}", *this, pgid);
-    pending_listener_futures.emplace_back(
-      shard_services.send_pg_created(pgid)
-    );
+    shard_services.send_pg_created(orderer, pgid);
   }
 
   bool try_flush_or_schedule_async() final;
@@ -257,17 +259,17 @@ public:
     SUBDEBUGDPP(
       osd, "priority {} on_grant {} on_preempt {}",
       *this, on_grant->get_desc(), on_preempt->get_desc());
-    pending_listener_futures.emplace_back(
-      shard_services.local_request_reservation(
-	pgid,
-	on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
-	  start_peering_event_operation(std::move(*on_grant));
-	}) : nullptr,
-	priority,
-	on_preempt ? make_lambda_context(
-	  [this, on_preempt=std::move(on_preempt)] (int) {
-	    start_peering_event_operation(std::move(*on_preempt));
-	  }) : nullptr)
+    shard_services.local_request_reservation(
+      orderer,
+      pgid,
+      on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
+	start_peering_event_operation(std::move(*on_grant));
+      }) : nullptr,
+      priority,
+      on_preempt ? make_lambda_context(
+	[this, on_preempt=std::move(on_preempt)] (int) {
+	  start_peering_event_operation(std::move(*on_preempt));
+	}) : nullptr
     );
   }
 
@@ -275,21 +277,18 @@ public:
     unsigned priority) final {
     LOG_PREFIX(PG::update_local_background_io_priority);
     SUBDEBUGDPP(osd, "priority {}", *this, priority);
-    pending_listener_futures.emplace_back(
-      shard_services.local_update_priority(
-	pgid,
-	priority)
-    );
-
+    shard_services.local_update_priority(
+      orderer,
+      pgid,
+      priority);
   }
 
   void cancel_local_background_io_reservation() final {
     LOG_PREFIX(PG::cancel_local_background_io_reservation);
     SUBDEBUGDPP(osd, "", *this);
-    pending_listener_futures.emplace_back(
-      shard_services.local_cancel_reservation(
-	pgid)
-    );
+    shard_services.local_cancel_reservation(
+      orderer,
+      pgid);
   }
 
   void request_remote_recovery_reservation(
@@ -300,26 +299,24 @@ public:
     SUBDEBUGDPP(
       osd, "priority {} on_grant {} on_preempt {}",
       *this, on_grant->get_desc(), on_preempt->get_desc());
-    pending_listener_futures.emplace_back(
-      shard_services.remote_request_reservation(
-	pgid,
-	on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
-	  start_peering_event_operation(std::move(*on_grant));
-	}) : nullptr,
-	priority,
-	on_preempt ? make_lambda_context(
-	  [this, on_preempt=std::move(on_preempt)] (int) {
-	    start_peering_event_operation(std::move(*on_preempt));
-	  }) : nullptr)
+    shard_services.remote_request_reservation(
+      orderer,
+      pgid,
+      on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
+	start_peering_event_operation(std::move(*on_grant));
+      }) : nullptr,
+      priority,
+      on_preempt ? make_lambda_context(
+	[this, on_preempt=std::move(on_preempt)] (int) {
+	  start_peering_event_operation(std::move(*on_preempt));
+      }) : nullptr
     );
   }
 
   void cancel_remote_recovery_reservation() final {
     LOG_PREFIX(PG::cancel_remote_recovery_reservation);
     SUBDEBUGDPP(osd, "", *this);
-    pending_listener_futures.emplace_back(
-      shard_services.remote_cancel_reservation(pgid)
-    );
+    shard_services.remote_cancel_reservation(orderer, pgid);
   }
 
   void schedule_event_on_commit(
@@ -346,16 +343,12 @@ public:
   void queue_want_pg_temp(const std::vector<int> &wanted) final {
     LOG_PREFIX(PG::queue_want_pg_temp);
     SUBDEBUGDPP(osd, "wanted {}", *this, wanted);
-    pending_listener_futures.emplace_back(
-      shard_services.queue_want_pg_temp(pgid.pgid, wanted)
-    );
+    shard_services.queue_want_pg_temp(orderer, pgid.pgid, wanted);
   }
   void clear_want_pg_temp() final {
     LOG_PREFIX(PG::clear_want_pg_temp);
     SUBDEBUGDPP(osd, "", *this);
-    pending_listener_futures.emplace_back(
-      shard_services.remove_want_pg_temp(pgid.pgid)
-    );
+    shard_services.remove_want_pg_temp(orderer, pgid.pgid);
   }
   void check_recovery_sources(const OSDMapRef& newmap) final {
     // Not needed yet

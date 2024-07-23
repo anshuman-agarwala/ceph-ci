@@ -359,6 +359,39 @@ class ShardServices : public OSDMapService {
     );
   }
 
+public:
+  struct singleton_orderer_t {
+    using remote_func_t = std::function<seastar::future<>(OSDSingletonState&)>;
+    std::vector<remote_func_t> queue;
+  };
+
+  template <typename F, typename... Args>
+  void schedule_for_singleton(
+    singleton_orderer_t &orderer, F &&f, Args&&... args) {
+    orderer.queue.push_back(
+      [f=std::forward<F>(f),
+       args=std::make_tuple(
+	 std::forward<Args>(args)...)](OSDSingletonState &state) -> seastar::future<> {
+	return seastar::futurize_apply<>(
+	  std::move(f),
+	  std::tuple_cat(std::make_tuple(std::ref(state)), std::move(args)));
+      });
+  }
+
+  seastar::future<> run_orderer(singleton_orderer_t &&orderer) {
+    return with_singleton([](auto &singleton, auto &&orderer) {
+      return seastar::do_with(
+	std::move(orderer),
+	[&singleton](auto &orderer) {
+	  return seastar::do_for_each(
+	    orderer.queue,
+	    [&singleton](auto &func) {
+	      return std::invoke(func, singleton);
+	    });
+	});
+    }, std::move(orderer));
+  }
+
 #define FORWARD_CONST(FROM_METHOD, TO_METHOD, TARGET)		\
   template <typename... Args>					\
   auto FROM_METHOD(Args&&... args) const {			\
@@ -387,7 +420,19 @@ class ShardServices : public OSDMapService {
 #define FORWARD_TO_OSD_SINGLETON(METHOD) \
   FORWARD_TO_OSD_SINGLETON_TARGET(METHOD, METHOD)
 
-public:
+#define QUEUE_FOR_OSD_SINGLETON_TARGET(METHOD, TARGET)			\
+  template <typename... Args>						\
+  auto METHOD(singleton_orderer_t &orderer, Args&&... args) {		\
+    return schedule_for_singleton(					\
+      orderer,								\
+      [](auto &local_state, auto&&... args) {				\
+        return local_state.TARGET(					\
+	  std::forward<decltype(args)>(args)...);			\
+      }, std::forward<Args>(args)...);					\
+  }
+#define QUEUE_FOR_OSD_SINGLETON(METHOD) \
+  QUEUE_FOR_OSD_SINGLETON_TARGET(METHOD, METHOD)
+
   template <typename... PSSArgs>
   ShardServices(
     seastar::sharded<OSDSingletonState> &osd_singleton_state,
@@ -527,12 +572,12 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_incremental_map_to_osd)
 
   FORWARD_TO_OSD_SINGLETON(osdmap_subscribe)
-  FORWARD_TO_OSD_SINGLETON(queue_want_pg_temp)
-  FORWARD_TO_OSD_SINGLETON(remove_want_pg_temp)
+  QUEUE_FOR_OSD_SINGLETON(queue_want_pg_temp)
+  QUEUE_FOR_OSD_SINGLETON(remove_want_pg_temp)
   FORWARD_TO_OSD_SINGLETON(requeue_pg_temp)
-  FORWARD_TO_OSD_SINGLETON(send_pg_created)
-  FORWARD_TO_OSD_SINGLETON(send_alive)
-  FORWARD_TO_OSD_SINGLETON(send_pg_temp)
+  QUEUE_FOR_OSD_SINGLETON(send_pg_created)
+  QUEUE_FOR_OSD_SINGLETON(send_alive)
+  QUEUE_FOR_OSD_SINGLETON(send_pg_temp)
   FORWARD_TO_LOCAL_CONST(get_mnow)
   FORWARD_TO_LOCAL(get_hb_stamps)
   FORWARD_TO_LOCAL(update_shard_superblock)
@@ -544,41 +589,58 @@ public:
     snap_dump_reservations,
     snap_reserver.dump)
 
-  auto local_update_priority(spg_t pgid, unsigned newprio) {
+
+  auto local_update_priority(
+    singleton_orderer_t &orderer,
+    spg_t pgid, unsigned newprio) {
     LOG_PREFIX(ShardServices::local_update_priority);
     SUBDEBUG(osd, "sending to singleton pgid {} newprio {}", pgid, newprio);
-    return with_singleton([FNAME, pgid, newprio](auto &singleton) {
-      SUBDEBUG(osd, "on singleton pgid {} newprio {}", pgid, newprio);
-      return singleton.local_reserver.update_priority(pgid, newprio);
-    });
+    return schedule_for_singleton(
+      orderer,
+      [FNAME, pgid, newprio](auto &singleton) {
+	SUBDEBUG(osd, "on singleton pgid {} newprio {}", pgid, newprio);
+	return singleton.local_reserver.update_priority(pgid, newprio);
+      });
   }
-  auto local_cancel_reservation(spg_t pgid) {
+  auto local_cancel_reservation(
+    singleton_orderer_t &orderer,
+    spg_t pgid) {
     LOG_PREFIX(ShardServices::local_cancel_reservation);
     SUBDEBUG(osd, "sending to singleton pgid {}", pgid);
-    return with_singleton([FNAME, pgid](auto &singleton) {
-      SUBDEBUG(osd, "on singleton pgid {}", pgid);
-      return singleton.local_reserver.cancel_reservation(pgid);
-    });
+    return schedule_for_singleton(
+      orderer,
+      [FNAME, pgid](auto &singleton) {
+	SUBDEBUG(osd, "on singleton pgid {}", pgid);
+	return singleton.local_reserver.cancel_reservation(pgid);
+      });
   }
   FORWARD_TO_OSD_SINGLETON_TARGET(
     local_dump_reservations,
     local_reserver.dump)
 
-  auto remote_update_priority(spg_t pgid, unsigned newprio) {
+  auto remote_update_priority(
+    singleton_orderer_t &orderer,
+    spg_t pgid, unsigned newprio) {
     LOG_PREFIX(ShardServices::remote_update_priority);
     SUBDEBUG(osd, "sending to singleton pgid {} newprio {}", pgid, newprio);
-    return with_singleton([FNAME, pgid, newprio](auto &singleton) {
-      SUBDEBUG(osd, "on singleton pgid {} newprio {}", pgid, newprio);
-      return singleton.remote_reserver.update_priority(pgid, newprio);
-    });
+    return schedule_for_singleton(
+      orderer,
+      [FNAME, pgid, newprio](auto &singleton) {
+	SUBDEBUG(osd, "on singleton pgid {} newprio {}", pgid, newprio);
+	return singleton.remote_reserver.update_priority(pgid, newprio);
+      });
   }
-  auto remote_cancel_reservation(spg_t pgid) {
+  auto remote_cancel_reservation(
+    singleton_orderer_t &orderer,
+    spg_t pgid) {
     LOG_PREFIX(ShardServices::remote_cancel_reservation);
     SUBDEBUG(osd, "sending to singleton pgid {}", pgid);
-    return with_singleton([FNAME, pgid](auto &singleton) {
-      SUBDEBUG(osd, "on singleton pgid {}", pgid);
-      return singleton.remote_reserver.cancel_reservation(pgid);
-    });
+    return schedule_for_singleton(
+      orderer,
+      [FNAME, pgid](auto &singleton) {
+	SUBDEBUG(osd, "on singleton pgid {}", pgid);
+	return singleton.remote_reserver.cancel_reservation(pgid);
+      });
   }
   FORWARD_TO_OSD_SINGLETON_TARGET(
     remote_dump_reservations,
@@ -594,14 +656,16 @@ public:
 	});
     });
   }
-  seastar::future<> local_request_reservation(
+  void local_request_reservation(
+    singleton_orderer_t &orderer,
     spg_t item,
     Context *on_reserved,
     unsigned prio,
     Context *on_preempt) {
     LOG_PREFIX(ShardServices::local_request_reservation);
     SUBDEBUG(osd, "sending to singleton pgid {} prio {}", item, prio);
-    return with_singleton(
+    return schedule_for_singleton(
+      orderer,
       [FNAME, item, prio](
 	OSDSingletonState &singleton,
 	Context *wrapped_on_reserved, Context *wrapped_on_preempt) {
@@ -615,14 +679,16 @@ public:
       invoke_context_on_core(seastar::this_shard_id(), on_reserved),
       invoke_context_on_core(seastar::this_shard_id(), on_preempt));
   }
-  seastar::future<> remote_request_reservation(
+  void remote_request_reservation(
+    singleton_orderer_t &orderer,
     spg_t item,
     Context *on_reserved,
     unsigned prio,
     Context *on_preempt) {
     LOG_PREFIX(ShardServices::remote_request_reservation);
     SUBDEBUG(osd, "sending to singleton pgid {} prio {}", item, prio);
-    return with_singleton(
+    return schedule_for_singleton(
+      orderer,
       [FNAME, item, prio](
 	OSDSingletonState &singleton,
 	Context *wrapped_on_reserved, Context *wrapped_on_preempt) {
@@ -636,11 +702,13 @@ public:
       invoke_context_on_core(seastar::this_shard_id(), on_reserved),
       invoke_context_on_core(seastar::this_shard_id(), on_preempt));
   }
-  seastar::future<> snap_request_reservation(
+  void snap_request_reservation(
+    singleton_orderer_t &orderer,
     spg_t item,
     Context *on_reserved,
     unsigned prio) {
-    return with_singleton(
+    return schedule_for_singleton(
+      orderer,
       [item, prio](OSDSingletonState &singleton,
 		   Context *wrapped_on_reserved) {
 	return singleton.snap_reserver.request_reservation(
