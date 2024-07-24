@@ -567,10 +567,14 @@ class TestMirroring(CephFSTestCase):
                                "client.mirror_remote@ceph", '/d0', 'snap0', 1)
         self.verify_snapshot('d0', 'snap0')
 
-        # check snaps_synced
+        # check perf counters
         res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
         second = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         self.assertGreater(second["counters"]["snaps_synced"], first["counters"]["snaps_synced"])
+        self.assertGreater(second["counters"]["last_synced_start"], first["counters"]["last_synced_start"])
+        self.assertGreater(second["counters"]["last_synced_end"], second["counters"]["last_synced_start"])
+        self.assertGreater(second["counters"]["last_synced_duration"], 0)
+        self.assertGreater(second["counters"]["last_synced_bytes"], 0)
 
         # some more IO
         self.mount_a.run_shell(["mkdir", "d0/d00"])
@@ -587,10 +591,14 @@ class TestMirroring(CephFSTestCase):
                                "client.mirror_remote@ceph", '/d0', 'snap1', 2)
         self.verify_snapshot('d0', 'snap1')
 
-        # check snaps_synced
+        # check perf counters
         res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
         third = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         self.assertGreater(third["counters"]["snaps_synced"], second["counters"]["snaps_synced"])
+        self.assertGreater(third["counters"]["last_synced_start"], second["counters"]["last_synced_end"])
+        self.assertGreater(third["counters"]["last_synced_end"], third["counters"]["last_synced_start"])
+        self.assertGreater(third["counters"]["last_synced_duration"], 0)
+        self.assertGreater(third["counters"]["last_synced_bytes"], 0)
 
         # delete a snapshot
         self.mount_a.run_shell(["rmdir", "d0/.snap/snap0"])
