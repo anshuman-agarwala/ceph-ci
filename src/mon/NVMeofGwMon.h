@@ -42,7 +42,7 @@ class NVMeofGwMon: public PaxosService,
     ceph::coarse_mono_clock::time_point last_tick;
 
 public:
-    NVMeofGwMon(Monitor &mn, Paxos &p, const std::string& service_name): PaxosService(mn, p, service_name) {map.mon = &mn;}
+    NVMeofGwMon(Monitor &mn, Paxos &p, const std::string& service_name): PaxosService(mn, p, service_name) {map.mon = &mn; is_enabled = true;}
     ~NVMeofGwMon() override {}
 
 
@@ -60,7 +60,6 @@ public:
     void on_restart() override;
     void update_from_paxos(bool *need_bootstrap) override;
 
-    version_t get_trim_to() const override;
 
     bool preprocess_query(MonOpRequestRef op) override;
     bool prepare_update(MonOpRequestRef op) override;
@@ -80,7 +79,9 @@ public:
     void check_sub(Subscription *sub);
 
 private:
+    bool is_enabled;
     void synchronize_last_beacon();
+    void on_disabled();
 
 };
 

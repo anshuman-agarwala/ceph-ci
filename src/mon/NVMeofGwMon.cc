@@ -28,11 +28,24 @@ void NVMeofGwMon::init() {
     dout(10) <<  "called " << dendl;
 }
 
+void NVMeofGwMon::on_disabled() {
+  if (is_enabled) {
+    is_enabled = false;
+    //TODO destruct
+    dout(4) << "NVMeofGwMon is not in service" <<dendl; // temporary just for check
+  }
+}
+
 void NVMeofGwMon::on_restart() {
-    dout(10) <<  "called " << dendl;
-    last_beacon.clear();
-    last_tick = ceph::coarse_mono_clock::now();
-    synchronize_last_beacon();
+    if (g_conf().get_val<bool>("mon_nvmeofgw_in_service")) {
+      dout(10) <<  "called " << dendl;
+      last_beacon.clear();
+      last_tick = ceph::coarse_mono_clock::now();
+      synchronize_last_beacon();
+    }
+    else{
+        on_disabled();
+    }
 }
 
 
@@ -58,6 +71,12 @@ void NVMeofGwMon::on_shutdown() {
 }
 
 void NVMeofGwMon::tick() {
+
+    if (!g_conf().get_val<bool>("mon_nvmeofgw_in_service")) {
+        on_disabled();
+        return;
+    }
+    is_enabled = true;
     if (!is_active() || !mon.is_leader()) {
         dout(10) << "NVMeofGwMon leader : " << mon.is_leader() << "active : " << is_active()  << dendl;
         return;
@@ -120,18 +139,13 @@ const char **NVMeofGwMon::get_tracked_conf_keys() const
   return KEYS;
 }
 
-version_t NVMeofGwMon::get_trim_to() const
-{
-  // we don't actually need *any* old states, but keep a few.
-  int64_t max = g_conf().get_val<int64_t>("mon_max_nvmeof_epochs");
-  if (map.epoch > max) {
-    return map.epoch - max;
-  }
-  return 0;
-}
-
 void NVMeofGwMon::create_pending() {
 
+    if (!g_conf().get_val<bool>("mon_nvmeofgw_in_service")) {
+       on_disabled();
+       return;
+    }
+    is_enabled = true;
     pending_map = map;// deep copy of the object
     pending_map.epoch++;
     dout(10) << " pending " << pending_map  << dendl;
@@ -139,6 +153,11 @@ void NVMeofGwMon::create_pending() {
 
 void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t) {
 
+    if (!g_conf().get_val<bool>("mon_nvmeofgw_in_service")) {
+       on_disabled();
+       return;
+    }
+    is_enabled = true;
     dout(10) <<  dendl;
     ceph_assert(get_last_committed() + 1 == pending_map.epoch);
     bufferlist bl;
@@ -148,8 +167,13 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t) {
 }
 
 void NVMeofGwMon::update_from_paxos(bool *need_bootstrap) {
-    version_t version = get_last_committed();
 
+    if (!g_conf().get_val<bool>("mon_nvmeofgw_in_service")) {
+       on_disabled();
+       return;
+    }
+    is_enabled = true;
+    version_t version = get_last_committed();
     if (version != map.epoch) {
         dout(10) << " NVMeGW loading version " << version  << " " << map.epoch << dendl;
 
@@ -168,6 +192,11 @@ void NVMeofGwMon::update_from_paxos(bool *need_bootstrap) {
 
 void NVMeofGwMon::check_sub(Subscription *sub)
 {
+    if (!g_conf().get_val<bool>("mon_nvmeofgw_in_service")) {
+       on_disabled();
+       return;
+    }
+    is_enabled = true;
     dout(10) << "sub->next , map-epoch " << sub->next << " " << map.epoch << dendl;
     if (sub->next <= map.epoch)
     {
@@ -196,6 +225,13 @@ void NVMeofGwMon::check_subs(bool t)
 }
 
 bool NVMeofGwMon::preprocess_query(MonOpRequestRef op) {
+
+    if (!g_conf().get_val<bool>("mon_nvmeofgw_in_service")) {
+       on_disabled();
+       mon.no_reply(op);
+       return true;
+    }
+    is_enabled = true;
     dout(20) << dendl;
 
     auto m = op->get_req<PaxosServiceMessage>();
