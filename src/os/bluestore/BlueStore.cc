@@ -10572,6 +10572,32 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   return _fsck_on_open(depth, repair);
 }
 
+int BlueStore::migrate_wal_to_v1() {
+  int r = _mount_readonly();
+  if (r < 0) {
+    return r;
+  }
+  
+  if (int r = _open_super_meta(); r < 0) {
+    return r;
+  }
+  
+  if (int r = _open_fm(nullptr, false, false); r < 0) {
+    return r;
+  }
+
+  if (int r = _init_alloc(nullptr); r < 0) {
+    return r;
+    
+  }
+  r = bluefs->migrate_wal_to_v1();
+  _close_alloc();
+  _close_fm();
+  _umount_readonly();
+  return r;
+  
+}
+
 int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 {
   uint64_t sb_hash_size = uint64_t(
