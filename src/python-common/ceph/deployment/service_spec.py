@@ -1473,6 +1473,9 @@ class NvmeofServiceSpec(ServiceSpec):
         if not self.pool:
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
 
+        if not self.group:
+            raise SpecValidationError('Cannot add NVMEOF: No group specified')
+
         if self.enable_auth:
             if not all([self.server_key, self.server_cert, self.client_key,
                         self.client_cert, self.root_ca_cert]):
