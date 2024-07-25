@@ -43,9 +43,10 @@ inline std::ostream& operator<<(std::ostream& os, const gw_states_per_group_t va
 inline std::ostream& operator<<(std::ostream& os, const gw_availability_t value) {
     switch (value) {
 
-        case gw_availability_t::GW_CREATED: os << "CREATED"; break;
-        case gw_availability_t::GW_AVAILABLE: os << "AVAILABLE"; break;
+        case gw_availability_t::GW_CREATED:     os << "CREATED"; break;
+        case gw_availability_t::GW_AVAILABLE:   os << "AVAILABLE"; break;
         case gw_availability_t::GW_UNAVAILABLE: os << "UNAVAILABLE"; break;
+        case gw_availability_t::GW_DELETING:    os << "DELETING"; break;
 
         default: os << "Invalid " << (int)value << " ";
     }
