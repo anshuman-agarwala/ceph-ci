@@ -594,6 +594,7 @@ TEST_P(StoreTest, SimpleRemount) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  ch.reset();
 }
 
 TEST_P(StoreTest, IORemount) {
@@ -3963,6 +3964,7 @@ TEST_P(StoreTest, BlueStoreUnshareBlobTest) {
     ASSERT_EQ(r, 0);
 
     {
+      ch.reset();
       // this trims hoid one out of onode cache
       EXPECT_EQ(store->umount(), 0);
       EXPECT_EQ(store->mount(), 0);
@@ -3976,6 +3978,7 @@ TEST_P(StoreTest, BlueStoreUnshareBlobTest) {
     ASSERT_EQ(r, 0);
 
     {
+      ch.reset();
       // this ensures remove operation submitted to kv store
       EXPECT_EQ(store->umount(), 0);
       EXPECT_EQ(store->mount(), 0);
@@ -4010,6 +4013,7 @@ TEST_P(StoreTest, BlueStoreUnshareBlobTest) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  ch.reset();
 }
 
 TEST_P(StoreTest, BlueStoreUnshareBlobBugTest) {
@@ -4057,6 +4061,7 @@ TEST_P(StoreTest, BlueStoreUnshareBlobBugTest) {
     ASSERT_EQ(r, 0);
 
     {
+      ch.reset();
       // this trims hoid one out of onode cache
       EXPECT_EQ(store->umount(), 0);
       EXPECT_EQ(store->mount(), 0);
@@ -10589,6 +10594,7 @@ TEST_P(StoreTest, BluestoreStrayOmapDetection)
   // inject stray omap
   bstore->inject_stray_omap(123456, "somename");
 
+  ch.reset();
   bstore->umount();
   // check we detect injected stray omap..
 
@@ -10629,6 +10635,7 @@ TEST_P(StoreTest, BluestorePerPoolOmapFixOnMount)
   bstore->inject_legacy_omap(cid, oid);
   bstore->inject_legacy_omap(cid, oid2);
 
+  ch.reset();
   bstore->umount();
 
   // check we injected an issue
@@ -10677,6 +10684,7 @@ TEST_P(StoreTest, BluestorePerPoolOmapFixOnMount)
     int r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  ch.reset();
   bstore->umount();
   // check omap's been fixed.
   ASSERT_EQ(bstore->fsck(false), 0); // this will fail without fix for #43824
@@ -10803,6 +10811,7 @@ TEST_P(StoreTest, SpuriousReadErrorTest) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
     // force cache clear
+    ch.reset();
     EXPECT_EQ(store->umount(), 0);
     EXPECT_EQ(store->mount(), 0);
   }
