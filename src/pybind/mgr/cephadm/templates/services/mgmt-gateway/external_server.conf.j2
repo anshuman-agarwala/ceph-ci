@@ -44,7 +44,6 @@ server {
     add_header X-XSS-Protection "1; mode=block";
     ## Content-Security-Policy (CSP): FIXME
     # add_header Content-Security-Policy "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; require-trusted-types-for 'script'; frame-ancestors 'self';";
-
 {% endif %}
 
 {% if oauth2_proxy_url %}
@@ -73,7 +72,6 @@ server {
     location / {
         proxy_pass {{ dashboard_scheme }}://dashboard_servers;
         proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
-
 	{% if oauth2_proxy_url %}
 	auth_request /oauth2/auth;
 	error_page 401 = /oauth2/sign_in;
@@ -107,7 +105,6 @@ server {
 	proxy_set_header X-Forwarded-Proto "https";
 	proxy_ssl_verify off;
 	{% endif %}
-
     }
 {% endif %}
 
@@ -118,14 +115,24 @@ server {
         # clear any Authorization header as Prometheus and Alertmanager are using basic-auth browser
         # will send this header if Grafana is running on the same node as one of those services
         proxy_set_header Authorization "";
-
 	{% if oauth2_proxy_url %}
+	auth_request /oauth2/auth;
+	error_page 401 = /oauth2/sign_in;
+
 	proxy_set_header X-Original-URI "/";
 
 	auth_request_set $user $upstream_http_x_auth_request_user;
 	auth_request_set $email $upstream_http_x_auth_request_email;
-	proxy_set_header X-User $user;
-	proxy_set_header X-Email $email;
+        proxy_set_header X-WEBAUTH-USER $user;
+        proxy_set_header X-WEBAUTH-EMAIL $email;
+
+        # Pass role header to Grafana
+        proxy_set_header X-WEBAUTH-ROLE $http_x_auth_request_role;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+	proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
 
 	auth_request_set $auth_cookie $upstream_http_set_cookie;
 	add_header Set-Cookie $auth_cookie;
@@ -145,7 +152,6 @@ server {
         proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
         proxy_ssl_verify on;
         proxy_ssl_verify_depth 2;
-
 	{% if oauth2_proxy_url %}
 	auth_request /oauth2/auth;
 	error_page 401 = /oauth2/sign_in;
@@ -158,7 +164,6 @@ server {
 	auth_request_set $auth_cookie $upstream_http_set_cookie;
 	add_header Set-Cookie $auth_cookie;
 	{% endif %}
-
     }
 {% endif %}
 
@@ -171,7 +176,6 @@ server {
         proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
         proxy_ssl_verify on;
         proxy_ssl_verify_depth 2;
-
 	{% if oauth2_proxy_url %}
 	auth_request /oauth2/auth;
 	error_page 401 = /oauth2/sign_in;
@@ -184,7 +188,6 @@ server {
 	auth_request_set $auth_cookie $upstream_http_set_cookie;
 	add_header Set-Cookie $auth_cookie;
 	{% endif %}
-
     }
 {% endif %}
 }
