@@ -478,6 +478,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_parquet(const char* query)
   if (!m_s3_parquet_object.is_set()) {
     //parsing the SQL statement.
     s3select_syntax.parse_query(m_sql_query.c_str());
+    parquet_object::csv_definitions parquet;
 
   m_s3_parquet_object.set_external_system_functions(fp_s3select_continue,
 						fp_s3select_result_format,
@@ -486,7 +487,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_parquet(const char* query)
 
     try {
       //at this stage the Parquet-processing requires for the meta-data that reside on Parquet object 
-      m_s3_parquet_object.set_parquet_object(std::string("s3object"), &s3select_syntax, &m_rgw_api);
+      m_s3_parquet_object.set_parquet_object(std::string("s3object"), &s3select_syntax, &m_rgw_api, parquet);
     } catch(base_s3select_exception& e) {
       ldpp_dout(this, 10) << "S3select: failed upon parquet-reader construction: " << e.what() << dendl;
       fp_result_header_format(m_aws_response_handler.get_sql_result());
