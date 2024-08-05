@@ -3488,7 +3488,7 @@ class TestMgmtGateway:
                                       client_id='my_client_id',
                                       client_secret='my_client_secret',
                                       oidc_issuer_url='http://192.168.10.10:8888/dex',
-                                      cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ',
+                                      cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
                                       ssl_certificate=ceph_generated_cert,
                                       ssl_certificate_key=ceph_generated_key)
         expected = {
@@ -3540,7 +3540,7 @@ class TestMgmtGateway:
                                          set_xauthrequest= true
 
                                          # Secret value for encrypting cookies.
-                                         cookie_secret= "kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ"
+                                         cookie_secret= "kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ="
                                          email_domains= "*"
                                          whitelist_domains= "1::4,ceph-node\""""),
                     "oauth2-proxy.crt": f"{ceph_generated_cert}",

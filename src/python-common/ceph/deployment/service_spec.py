@@ -1941,13 +1941,21 @@ class OAuth2ProxySpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
         )
+        #: The address for HTTPS connections, formatted as 'host:port'.
         self.https_address = https_address
+        #: The display name for the identity provider (IDP) in the UI.
         self.provider_display_name = provider_display_name
+        #: The client ID for authenticating with the identity provider.
         self.client_id = client_id
+        #: The client secret for authenticating with the identity provider.
         self.client_secret = client_secret
+        #: The URL of the OpenID Connect (OIDC) issuer.
         self.oidc_issuer_url = oidc_issuer_url
+        #: The secret key used for signing cookies.
         self.cookie_secret = cookie_secret
+        #: The multi-line SSL certificate for encrypting communications.
         self.ssl_certificate = ssl_certificate
+        #: The multi-line SSL certificate private key for decrypting communications.
         self.ssl_certificate_key = ssl_certificate_key
         self.unmanaged = unmanaged
 
