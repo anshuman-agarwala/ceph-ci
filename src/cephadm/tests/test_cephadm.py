@@ -282,7 +282,8 @@ class TestCephAdm(object):
     @mock.patch('cephadmlib.firewalld.Firewalld', mock_bad_firewalld)
     @mock.patch('cephadm.Firewalld', mock_bad_firewalld)
     @mock.patch('cephadm.logger')
-    def test_skip_firewalld(self, _logger, cephadm_fs):
+    @mock.patch('cephadm.json_loads_retry', return_value=None)
+    def test_skip_firewalld(self, _logger, _jlr, cephadm_fs):
         """
         test --skip-firewalld actually skips changing firewall
         """
@@ -379,6 +380,7 @@ class TestCephAdm(object):
         _deploy_daemon = funkypatch.patch('cephadm.deploy_daemon')
         funkypatch.patch('cephadm.make_var_run')
         funkypatch.patch('cephadmlib.file_utils.make_run_dir')
+        funkypatch.patch('os.mkdir')
         _migrate_sysctl = funkypatch.patch('cephadm.migrate_sysctl_dir')
         funkypatch.patch(
             'cephadm.check_unit',
