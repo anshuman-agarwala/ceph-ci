@@ -3,7 +3,7 @@ import pytest
 from copy import deepcopy
 from ceph_volume.util import device
 from ceph_volume.api import lvm as api
-from mock.mock import patch, mock_open
+from mock.mock import patch, mock_open, Mock, MagicMock
 
 
 class TestDevice(object):
@@ -318,7 +318,9 @@ class TestDevice(object):
                                          m_os_path_islink,
                                          m_os_path_realpath,
                                          device_info,
-                                         fake_call):
+                                         fake_call,
+                                         monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         m_os_path_islink.return_value = True
         m_os_path_realpath.return_value = '/dev/mapper/vg-lv'
         lv = {"lv_path": "/dev/vg/lv", "vg_name": "vg", "name": "lv"}
@@ -416,6 +418,7 @@ class TestDevice(object):
     @pytest.mark.parametrize("ceph_type", ["data", "block"])
     def test_used_by_ceph(self, fake_call, device_info,
                           monkeypatch, ceph_type):
+        monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "NAME": "sda", "PKNAME": "sda"}
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000",
