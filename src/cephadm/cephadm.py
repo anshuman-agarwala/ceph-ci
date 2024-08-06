@@ -167,6 +167,7 @@ from cephadmlib import templating
 from cephadmlib.daemons.ceph import get_ceph_mounts_for_type, ceph_daemons
 from cephadmlib.daemons import (
     Ceph,
+    CephExporter,
     CephIscsi,
     CephNvmeof,
     CustomContainer,
@@ -866,6 +867,10 @@ def create_daemon_dirs(
     elif daemon_type == NodeProxy.daemon_type:
         node_proxy = NodeProxy.init(ctx, fsid, ident.daemon_id)
         node_proxy.create_daemon_dirs(data_dir, uid, gid)
+
+    elif daemon_type == CephExporter.daemon_type:
+        ceph_exporter = CephExporter.init(ctx, fsid, ident.daemon_id)
+        ceph_exporter.create_daemon_dirs(data_dir, uid, gid)
 
     else:
         daemon = daemon_form_create(ctx, ident)
@@ -2421,11 +2426,23 @@ def prepare_dashboard(
             pathify(ctx.dashboard_crt.name): '/tmp/dashboard.crt:z',
             pathify(ctx.dashboard_key.name): '/tmp/dashboard.key:z'
         }
-        cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
-        cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
     else:
-        logger.info('Generating a dashboard self-signed certificate...')
-        cli(['dashboard', 'create-self-signed-cert'])
+        logger.info('Using certmgr to generate dashboard self-signed certificate...')
+        cert_key = json_loads_retry(lambda: cli(['orch', 'certmgr', 'generate-certificates', 'dashboard'],
+                                                verbosity=CallVerbosity.QUIET_UNLESS_ERROR))
+        mounts = {}
+        if cert_key:
+            cert_file = write_tmp(cert_key['cert'], uid, gid)
+            key_file = write_tmp(cert_key['key'], uid, gid)
+            mounts = {
+                cert_file.name: '/tmp/dashboard.crt:z',
+                key_file.name: '/tmp/dashboard.key:z'
+            }
+        else:
+            logger.error('Cannot generate certificates for Ceph dashboard.')
+
+    cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
+    cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
 
     logger.info('Creating initial admin user...')
     password = ctx.initial_dashboard_password or generate_password()
@@ -3155,7 +3172,7 @@ def command_shell(ctx):
             daemon_type = ctx.name
             daemon_id = None
     else:
-        daemon_type = 'osd'  # get the most mounts
+        daemon_type = 'shell'  # get limited set of mounts
         daemon_id = None
 
     if ctx.fsid and daemon_type in ceph_daemons():
@@ -3293,7 +3310,7 @@ def command_ceph_volume(ctx):
         lock.acquire()
 
     (uid, gid) = (0, 0)  # ceph-volume runs as root
-    mounts = get_container_mounts_for_type(ctx, ctx.fsid, 'osd')
+    mounts = get_container_mounts_for_type(ctx, ctx.fsid, 'ceph-volume')
 
     tmp_config = None
     tmp_keyring = None
