@@ -55,6 +55,7 @@ class TestFindAssociatedDevices(object):
         return self.mock_single_volumes[p]
 
     def test_lv_is_matched_id(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,ceph.osd_fsid=1234'
         vol = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='',
                          lv_path='/dev/VolGroup/lv1', lv_tags=tags)
@@ -77,6 +78,7 @@ class TestFindAssociatedDevices(object):
         assert result[0][1] == 'block'
 
     def test_lv_is_matched_id2(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,ceph.osd_fsid=1234'
         vol = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='vg',
                          lv_path='/dev/VolGroup/lv1', lv_tags=tags)
@@ -108,6 +110,7 @@ class TestFindAssociatedDevices(object):
             assert False
 
     def test_lv_is_matched_id3(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,ceph.osd_fsid=1234'
         vol = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='vg',
                          lv_path='/dev/VolGroup/lv1', lv_tags=tags)
