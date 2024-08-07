@@ -27,7 +27,7 @@ using std::string;
 #undef dout_prefix
 #define dout_prefix *_dout << "nvmeofgw " << __PRETTY_FUNCTION__ << " "
 
-void NVMeofGwMap::to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const {
+void NVMeofGwMap::to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap, bool gw_version_last) const {
     Gmap.clear();
     for (const auto& created_map_pair: created_gws) {
         const auto& group_key = created_map_pair.first;
@@ -38,7 +38,14 @@ void NVMeofGwMap::to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) c
 
             auto gw_state = NvmeGwClientState(gw_created.ana_grp_id, epoch, gw_created.availability);
             for (const auto& sub: gw_created.subsystems) {
-                gw_state.subsystems.insert({sub.nqn, NqnState(sub.nqn, gw_created.sm_state, gw_created )});
+              if (gw_version_last) {
+                gw_state.subsystems.insert({sub.nqn, NqnState(sub.nqn, gw_created.sm_state, gw_created)});
+              }
+              else {
+                uint8_t backward_compat = 1;
+                dout(10) << "send to GW map build by backward compatible rules " << dendl;
+                gw_state.subsystems.insert({sub.nqn, NqnState(sub.nqn, gw_created.sm_state, gw_created, backward_compat)});
+              }
             }
             Gmap[group_key][gw_id] = gw_state;
             dout (20) << gw_id << " Gw-Client: " << gw_state << dendl;
