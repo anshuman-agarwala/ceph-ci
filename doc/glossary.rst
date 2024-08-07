@@ -42,6 +42,11 @@
                 Ceph is a distributed network storage and file system with
                 distributed metadata management and POSIX semantics.
 
+        `ceph-ansible <https://docs.ceph.com/projects/ceph-ansible/en/latest/index.html>`_
+                A GitHub repository, supported from the Jewel release to the
+                Quincy release, that facilitates the installation of a Ceph
+                cluster.
+                
 	Ceph Block Device
                 Also called "RADOS Block Device" and :term:`RBD`. A software
                 instrument that orchestrates the storage of block-based data in
@@ -89,6 +94,11 @@
                 POSIX-compliant file system built on top of Ceph’s distributed
                 object store, RADOS.  See :ref:`CephFS Architecture
                 <arch-cephfs>` for more details.
+
+        :ref:`ceph-fuse <man-ceph-fuse>`
+                :ref:`ceph-fuse <man-ceph-fuse>` is a FUSE ("**F**\ilesystem in
+                **USE**\rspace") client for CephFS. ceph-fuse mounts a Ceph FS
+                ata  specified mount point. 
 
 	Ceph Interim Release
                 See :term:`Releases`.
@@ -391,6 +401,12 @@
                 OSD") in an acting set. Primary affinity was introduced in
                 Firefly (v. 0.80). See :ref:`Primary Affinity
                 <rados_ops_primary_affinity>`.
+
+        :ref:`Prometheus <mgr-prometheus>`
+                An open-source monitoring and alerting toolkit. Ceph offers a
+                :ref:`"Prometheus module" <mgr-prometheus>`, which provides a
+                Prometheus exporter that passes performance counters from a
+                collection point in ``ceph-mgr`` to Prometheus.
 
         Quorum	
                 Quorum is the state that exists when a majority of the
