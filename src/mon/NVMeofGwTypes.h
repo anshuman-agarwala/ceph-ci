@@ -168,7 +168,7 @@ struct NqnState {
     NqnState(const std::string& _nqn, const SmState& sm_state, const NvmeGwMonState & gw_created, uint8_t bc) : nqn(_nqn) {
 #define MAX_SUPPORTED_ANA_GROUPS 16
       std::pair<gw_exported_states_per_group_t, epoch_t> state_pair[MAX_SUPPORTED_ANA_GROUPS];
-      for (int i= 0; i < MAX_SUPPORTED_ANA_GROUPS; i++){
+      for (int i= 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) {
         state_pair[i].first = gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
         state_pair[i].second = 0;
       }
@@ -177,6 +177,7 @@ struct NqnState {
              || sm_state.at(state_itr.first) == gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL)
                         ? gw_exported_states_per_group_t::GW_EXPORTED_OPTIMIZED_STATE
                                 : gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
+         state_pair[state_itr.first].second = gw_created.blocklist_data.at(state_itr.first).osd_epoch;
       }
       for (int i= 0; i < MAX_SUPPORTED_ANA_GROUPS; i++){
         ana_state.push_back(state_pair[i]);
