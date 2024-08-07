@@ -176,3 +176,22 @@ scrape_configs:
     - targets: {{ external_prometheus_targets }}
 {% endif %}
 
+{% if nfs_sd_url %}
+  - job_name: 'nfs'
+{% if secure_monitoring_stack %}
+    honor_labels: true
+    scheme: https
+    tls_config:
+      ca_file: root_cert.pem
+    http_sd_configs:
+    - url: {{ nfs_sd_url }}
+      basic_auth:
+        username: {{ service_discovery_username }}
+        password: {{ service_discovery_password }}
+      tls_config:
+        ca_file: root_cert.pem
+{% else %}
+    http_sd_configs:
+    - url: {{ nfs_sd_url }}
+{% endif %}
+{% endif %}
