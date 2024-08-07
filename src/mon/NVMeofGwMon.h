@@ -80,6 +80,7 @@ public:
     void check_sub(Subscription *sub);
 
 private:
+    bool get_gmap_version(MonSession *session, std::string gw_id = "");
     void synchronize_last_beacon();
 
 };

@@ -20,8 +20,8 @@
 
 class MNVMeofGwMap final : public Message {
 private:
-  static constexpr int VERSION = 1;
-
+  static int constexpr VERSION = 2;
+  int encode_version;
 protected:
   std::map<NvmeGroupKey, NvmeGwMonClientStates> map;
   epoch_t                           gwmap_epoch;
@@ -35,9 +35,16 @@ private:
     Message{MSG_MNVMEOF_GW_MAP} {}
   MNVMeofGwMap(const NVMeofGwMap &map_) :
     Message{MSG_MNVMEOF_GW_MAP}, gwmap_epoch(map_.epoch)
-  {
-    map_.to_gmap(map);
-  }
+    {
+      map_.to_gmap(map, VERSION);
+      encode_version = VERSION;
+    }
+  MNVMeofGwMap(const NVMeofGwMap &map_ , bool is_gw_last_version) :
+    Message{MSG_MNVMEOF_GW_MAP}, gwmap_epoch(map_.epoch)
+    {
+      encode_version = (is_gw_last_version )? VERSION : VERSION-1;
+      map_.to_gmap(map, is_gw_last_version); // Beacon version 0 corresponds to the gmap version 1 ( 1 correspods to 2)
+    }
   ~MNVMeofGwMap() final {}
 
 public:
@@ -54,7 +61,7 @@ public:
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
-    encode(VERSION, payload);
+    encode(encode_version, payload);
     encode(gwmap_epoch, payload);
     encode(map, payload);
   }
