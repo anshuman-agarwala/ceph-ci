@@ -3174,6 +3174,8 @@ class TestSMB:
                 'config': '',
                 'keyring': '[client.smb.config.tango.briskly]\nkey = None\n',
                 'config_auth_entity': 'client.smb.config.tango.briskly',
+                'metrics_image': 'quay.io/samba.org/samba-metrics:latest',
+                'metrics_port': 9922,
             },
         }
         with with_host(cephadm_module, 'hostx'):
@@ -3244,6 +3246,8 @@ class TestSMB:
                     '[client.smb.fs.fs2.share3]\nkey = None\n'
                 ),
                 'config_auth_entity': 'client.smb.config.tango.briskly',
+                'metrics_image': 'quay.io/samba.org/samba-metrics:latest',
+                'metrics_port': 9922,
             },
         }
         with with_host(cephadm_module, 'hostx'):
