@@ -147,10 +147,11 @@ public:
    * @param [out] propose_pending set to true if map is mutated
    */
   void handle_abandoned_ana_groups(bool &propose_pending);
+
+private:
   void start_timer(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId anagrpid, uint8_t value);
-private:
   void add_grp_id(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     const NvmeAnaGrpId grpid);
