@@ -3398,8 +3398,9 @@ class TestMgmtGateway:
                                                  listen              [::]:29443 ssl;
                                                  ssl_certificate     /etc/nginx/ssl/nginx_internal.crt;
                                                  ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
-                                                 ssl_protocols       TLSv1.2 TLSv1.3;
-                                                 ssl_ciphers         AES128-SHA:AES256-SHA:RC4-SHA:DES-CBC3-SHA:RC4-MD5;
+                                                 ssl_protocols       TLSv1.3;
+                                                 # from:  https://ssl-config.mozilla.org/#server=nginx
+                                                 ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
                                                  ssl_prefer_server_ciphers on;
 
                                                  location /internal/dashboard {
@@ -3702,8 +3703,9 @@ class TestMgmtGateway:
                                                  listen              [::]:29443 ssl;
                                                  ssl_certificate     /etc/nginx/ssl/nginx_internal.crt;
                                                  ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
-                                                 ssl_protocols       TLSv1.2 TLSv1.3;
-                                                 ssl_ciphers         AES128-SHA:AES256-SHA:RC4-SHA:DES-CBC3-SHA:RC4-MD5;
+                                                 ssl_protocols       TLSv1.3;
+                                                 # from:  https://ssl-config.mozilla.org/#server=nginx
+                                                 ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
                                                  ssl_prefer_server_ciphers on;
 
                                                  location /internal/dashboard {
