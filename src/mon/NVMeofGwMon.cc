@@ -443,15 +443,15 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op) {
         else {
             dout(10) << "GW  prepares the full startup " << gw_id << " GW availability: " << pending_map.created_gws[group_key][gw_id].availability << dendl;
             if (pending_map.created_gws[group_key][gw_id].availability == gw_availability_t::GW_AVAILABLE) {
-                dout(4) << " Warning :GW marked as Available in the NVmeofGwMon database, performed full startup - Force gw to exit!" << gw_id <<dendl;
-                avail = gw_availability_t::GW_UNAVAILABLE;
+                dout(4) << " Warning :GW marked as Available in the NVmeofGwMon database, performed full startup - Apply this GW!" << gw_id <<dendl;
                 // Monitor performs Force Failover for this GW in process_gw_map_gw_down
+                pending_map.handle_gw_performing_fast_reboot(gw_id, group_key, propose);
             }
             else if (pending_map.created_gws[group_key][gw_id].performed_full_startup == false) {
                 pending_map.created_gws[group_key][gw_id].performed_full_startup = true;
                 propose = true;
-                goto set_propose;
             }
+            if (propose)  goto set_propose;
         }
     }
     else { // gw already created
