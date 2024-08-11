@@ -43,7 +43,7 @@ private:
     Message{MSG_MNVMEOF_GW_MAP}, gwmap_epoch(map_.epoch)
     {
       encode_version = (is_gw_last_version )? VERSION : VERSION-1;
-      map_.to_gmap(map, is_gw_last_version); // Beacon version 0 corresponds to the gmap version 1 ( 1 correspods to 2)
+      map_.to_gmap(map, is_gw_last_version);
     }
   ~MNVMeofGwMap() final {}
 
