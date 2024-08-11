@@ -47,6 +47,7 @@ public:
     void  update_active_timers          (bool &propose_pending);
     void  handle_abandoned_ana_groups   (bool &propose_pending);
     void  handle_removed_subsystems     (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const std::vector<NvmeNqnId> &current_subsystems, bool &propose_pending);
+    void  handle_gw_performing_fast_reboot(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &map_modified);
     void  start_timer (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid, uint8_t value);
 private:
     void add_grp_id   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const NvmeAnaGrpId grpid);
@@ -56,6 +57,7 @@ private:
     void fsm_handle_gw_alive   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  NvmeGwMonState & gw_state, gw_states_per_group_t state,
                                                                                    NvmeAnaGrpId grpid, epoch_t& last_osd_epoch, bool &map_modified);
     void fsm_handle_to_expired (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  NvmeAnaGrpId grpid,  bool &map_modified);
+    void fsm_handle_gw_fast_reboot (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId grpid, bool &map_modified);
 
     void find_failover_candidate(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  NvmeAnaGrpId grpid, bool &propose_pending);
     void find_failback_gw       (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  bool &propose_pending);
