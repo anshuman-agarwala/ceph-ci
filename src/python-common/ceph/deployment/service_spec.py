@@ -1281,7 +1281,7 @@ class RGWSpec(ServiceSpec):
                  rgw_zonegroup: Optional[str] = None,
                  rgw_zone: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
-                 rgw_frontend_ssl_certificate: Optional[List[str]] = None,
+                 rgw_frontend_ssl_certificate: Optional[Union[str, List[str]]] = None,
                  rgw_frontend_type: Optional[str] = None,
                  rgw_frontend_extra_args: Optional[List[str]] = None,
                  unmanaged: bool = False,
@@ -1296,13 +1296,14 @@ class RGWSpec(ServiceSpec):
                  rgw_realm_token: Optional[str] = None,
                  update_endpoints: Optional[bool] = False,
                  zone_endpoints: Optional[str] = None,  # comma separated endpoints list
-                 zonegroup_hostnames: Optional[str] = None,
+                 zonegroup_hostnames: Optional[List[str]] = None,
                  data_pool_attributes: Optional[Dict[str, str]] = None,
                  rgw_user_counters_cache: Optional[bool] = False,
                  rgw_user_counters_cache_size: Optional[int] = None,
                  rgw_bucket_counters_cache: Optional[bool] = False,
                  rgw_bucket_counters_cache_size: Optional[int] = None,
                  disable_multisite_sync_traffic: bool = False,
+                 generate_cert: bool = False,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1332,7 +1333,7 @@ class RGWSpec(ServiceSpec):
         #: Port of the RGW daemons
         self.rgw_frontend_port: Optional[int] = rgw_frontend_port
         #: List of SSL certificates
-        self.rgw_frontend_ssl_certificate: Optional[List[str]] = rgw_frontend_ssl_certificate
+        self.rgw_frontend_ssl_certificate: Optional[Union[str, List[str]]] = rgw_frontend_ssl_certificate
         #: civetweb or beast (default: beast). See :ref:`rgw_frontends`
         self.rgw_frontend_type: Optional[str] = rgw_frontend_type
         #: List of extra arguments for rgw_frontend in the form opt=value. See :ref:`rgw_frontends`
@@ -1356,6 +1357,8 @@ class RGWSpec(ServiceSpec):
         self.disable_multisite_sync_traffic = disable_multisite_sync_traffic
         #: Attributes for <zone-name>.rgw.buckets.data pool created in rgw realm bootstrap command
         self.data_pool_attributes = data_pool_attributes
+        #: Whether we should generate a cert/key for the user if not provided
+        self.generate_cert = generate_cert
 
     def get_port_start(self) -> List[int]:
         return [self.get_port()]
@@ -1383,6 +1386,9 @@ class RGWSpec(ServiceSpec):
                     'Invalid rgw_frontend_type value. Valid values are: beast, civetweb.\n'
                     'Additional rgw type parameters can be passed using rgw_frontend_extra_args.'
                 )
+
+        if self.generate_cert and not self.ssl:
+            raise SpecValidationError('"ssl" field must be set to true when "generate_cert" is set to true')
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
