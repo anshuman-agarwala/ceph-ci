@@ -3612,7 +3612,7 @@ def list_daemons(
                                     version = MgmtGateway.get_version(ctx, container_id)
                                     seen_versions[image_id] = version
                                 elif daemon_type == OAuth2Proxy.daemon_type:
-                                    version = OAuth2Proxy.get_version(ctx, fsid, daemon_id)
+                                    version = OAuth2Proxy.get_version(ctx, container_id)
                                     seen_versions[image_id] = version
                                 else:
                                     logger.warning('version for unknown daemon type %s' % daemon_type)

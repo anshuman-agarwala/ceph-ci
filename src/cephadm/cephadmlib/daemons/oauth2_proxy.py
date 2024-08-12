@@ -1,15 +1,17 @@
 import logging
 import os
 from typing import Dict, List, Tuple, Optional
+import re
 
+from ..call_wrappers import call, CallVerbosity
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer, extract_uid_gid
+from ..container_types import CephContainer
 from ..context import CephadmContext
 from ..context_getters import fetch_configs
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
-from ..constants import DEFAULT_OAUTH2_PROXY_IMAGE
+from ..constants import DEFAULT_OAUTH2_PROXY_IMAGE, UID_NOBODY, GID_NOGROUP
 from ..data_utils import dict_get, is_fsid
 from ..file_utils import populate_files, makedirs, recursive_chown
 from ..exceptions import Error
@@ -70,7 +72,7 @@ class OAuth2Proxy(ContainerDaemonForm):
         return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
-        return extract_uid_gid(ctx, file_path='/bin/oauth2-proxy')
+        return UID_NOBODY, GID_NOGROUP
 
     def get_daemon_args(self) -> List[str]:
         return [
@@ -109,12 +111,25 @@ class OAuth2Proxy(ContainerDaemonForm):
                     )
 
     @staticmethod
-    def get_version(
-        ctx: CephadmContext, fsid: str, daemon_id: str
-    ) -> Optional[str]:
-        """Return the version of the notifier from it's http endpoint"""
-        # Redo(TODO): fix version
-        return 'TODO'
+    def get_version(ctx: CephadmContext, container_id: str) -> Optional[str]:
+        """Return the version of the oauth2-proxy container"""
+        version = None
+        out, err, code = call(
+            ctx,
+            [
+                ctx.container_engine.path,
+                'exec',
+                container_id,
+                'oauth2-proxy',
+                '--version',
+            ],
+            verbosity=CallVerbosity.QUIET,
+        )
+        if code == 0:
+            match = re.search(r'oauth2-proxy (v\d+\.\d+\.\d+)', out)
+            if match:
+                version = match.group(1)
+        return version
 
     def customize_container_mounts(
         self, ctx: CephadmContext, mounts: Dict[str, str]
