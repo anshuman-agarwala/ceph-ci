@@ -3285,7 +3285,7 @@ def command_enter(ctx):
         image=ctx.image,
         entrypoint='doesnotmatter',
         container_args=container_args,
-        cname='ceph-%s-%s.%s' % (ctx.fsid, daemon_type, daemon_id),
+        cname='ceph-%s@%s.%s' % (ctx.fsid, daemon_type, daemon_id),
     )
     command = c.exec_cmd(command)
     return call_timeout(ctx, command, ctx.timeout)
