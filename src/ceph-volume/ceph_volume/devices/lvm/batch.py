@@ -224,7 +224,7 @@ class Batch(object):
             action='store_true',
             help=('deploy multi-device OSDs if rotational and non-rotational drives '
                   'are passed in DEVICES'),
-            default=True
+            default=False
         )
         parser.add_argument(
             '--no-auto',
@@ -232,6 +232,7 @@ class Batch(object):
             dest='auto',
             help=('deploy standalone OSDs if rotational and non-rotational drives '
                   'are passed in DEVICES'),
+            default=False
         )
         parser.add_argument(
             '--objectstore',
@@ -377,7 +378,6 @@ class Batch(object):
         '''
         mlogger.warning('DEPRECATION NOTICE')
         mlogger.warning('You are using the legacy automatic disk sorting behavior')
-        mlogger.warning('The Pacific release will change the default to --no-auto')
         rotating = []
         ssd = []
         for d in self.args.devices:
