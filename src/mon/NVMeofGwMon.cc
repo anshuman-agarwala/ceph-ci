@@ -26,6 +26,7 @@ using std::string;
 
 void NVMeofGwMon::init()
 {
+
   dout(10) <<  "called " << dendl;
 }
 
