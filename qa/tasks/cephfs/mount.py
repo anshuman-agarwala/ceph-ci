@@ -701,6 +701,7 @@ class CephFSMount(object):
         if sudo:
             args.insert(0, 'sudo')
 
+        log.info("lxb- run_shell -----------------------")
         return self.client_remote.run(args=args, cwd=cwd, timeout=timeout,
                                       stdout=stdout, stderr=stderr,
                                       omit_sudo=omit_sudo, **kwargs)

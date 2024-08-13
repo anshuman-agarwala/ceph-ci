@@ -96,11 +96,16 @@ class CapsHelper(CephFSTestCase):
 
                 # open the file and hold it. The MDS will issue CEPH_CAP_EXCL_*
                 # to mount
-                proc = mount.open_background(path)
+                log.info("lxb- _conduct_neg_test_for_root_squash_caps 1-----------------------")
+                proc = mount.open_background(path, write=False)
 
+                log.info("lxb- _conduct_neg_test_for_root_squash_caps 2-----------------------")
                 cmdargs.append(path)
-                mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
+                log.info("lxb- _conduct_neg_test_for_root_squash_caps 3-----------------------")
+                mount.negtestcmd(args=cmdargs, retval=1, errmsg="permission denied")
+                log.info("lxb- _conduct_neg_test_for_root_squash_caps 4-----------------------")
                 cmdargs.pop(-1)
+                log.info("lxb- _conduct_neg_test_for_root_squash_caps 5-----------------------")
 
                 mount._kill_background(proc)
 
