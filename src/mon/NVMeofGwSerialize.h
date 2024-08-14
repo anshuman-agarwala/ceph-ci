@@ -323,7 +323,7 @@ inline  void decode(
 inline  void encode(const NvmeGwTimerState& state,  ceph::bufferlist &bl,
   uint64_t features) {
   uint8_t version = 1;
-  if (HAVE_FEATURE(features, SERVER_SQUID)) {
+  if (HAVE_FEATURE(features, NVMEOFHA)) {
     version = 2;
   }
   ENCODE_START(version, 1, bl);
@@ -443,7 +443,7 @@ inline void decode(
 inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
   uint64_t features) {
   uint8_t version = 1;
-  if (HAVE_FEATURE(features, SERVER_SQUID)) {
+  if (HAVE_FEATURE(features, NVMEOFHA)) {
     version = 2;
   }
   ENCODE_START(version, version, bl);
