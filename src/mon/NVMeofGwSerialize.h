@@ -261,12 +261,12 @@ inline void encode(
   if (HAVE_FEATURE(features, SERVER_SQUID)) {
     version = 2;
   }
-  ENCODE_START(version, version, bl);
+  ENCODE_START(version, 1, bl);
   encode((uint32_t)subsystems.size(), bl);
   for (const auto& sub: subsystems) {
     encode(sub.second.nqn, bl);
     if (version == 1) {
-      dout(10) << "decode ana_state vector version1 = " << version << dendl;
+      dout(10) << "encode ana_state vector version1 = " << version << dendl;
       /* Version 1 requires exactly 16 entries */
       ana_state_t filled(sub.second.ana_state);
       filled.resize(
@@ -276,7 +276,7 @@ inline void encode(
 	  0));
       encode(filled, bl);
     } else {
-      dout(10) << "decode ana_state vector version2 = " << version << dendl;
+      dout(10) << "encode ana_state vector version2 = " << version << dendl;
       encode(sub.second.ana_state, bl);
     }
   }

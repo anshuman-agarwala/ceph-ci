@@ -20,7 +20,7 @@
 
 class MNVMeofGwMap final : public Message {
 private:
-  static constexpr int VERSION = 1;
+  static constexpr int VERSION = 2;
 
 protected:
   std::map<NvmeGroupKey, NvmeGwMonClientStates> map;
