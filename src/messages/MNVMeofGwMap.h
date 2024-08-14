@@ -20,7 +20,7 @@
 
 class MNVMeofGwMap final : public Message {
 private:
-  static constexpr int VERSION = 2;
+  static constexpr int VERSION = 1;
 
 protected:
   std::map<NvmeGroupKey, NvmeGwMonClientStates> map;
@@ -54,6 +54,7 @@ public:
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
+    //features = 1;//simulate encode for REEF
     encode(VERSION, payload);
     encode(gwmap_epoch, payload);
     encode(map, payload, features);
