@@ -87,7 +87,7 @@ def lock_timeout_log(lock: Lock, timeout: int = 5) -> Iterator[None]:
     while True:
         logger.debug("locking {} with {} timeout".format(lock, timeout))
         if lock.acquire(timeout=timeout):
-            logger.debug("locked {}".format(lock))
+            logger.debug(f"locked {lock} by {threading.current_thread().name}")
             yield
             lock.release()
             break
