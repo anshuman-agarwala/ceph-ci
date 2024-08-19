@@ -34,12 +34,12 @@ class CapsHelper(CephFSTestCase):
     def run_mds_cap_tests(self, filepaths, filedata, mounts, perm):
         self.conduct_pos_test_for_read_caps(filepaths, filedata, mounts)
         self.conduct_pos_test_for_open_caps(filepaths, filedata, mounts)
-        self.conduct_neg_test_for_chown_caps(filepaths, filedata, mounts)
-        self.conduct_neg_test_for_truncate_caps(filepaths, filedata, mounts)
 
         if perm == 'rw':
             self.conduct_pos_test_for_write_caps(filepaths, mounts)
         elif perm == 'r':
+            self.conduct_neg_test_for_chown_caps(filepaths, filedata, mounts)
+            self.conduct_neg_test_for_truncate_caps(filepaths, filedata, mounts)
             self.conduct_neg_test_for_write_caps(filepaths, mounts)
         else:
             raise RuntimeError(f'perm = {perm}\nIt should be "r" or "rw".')
