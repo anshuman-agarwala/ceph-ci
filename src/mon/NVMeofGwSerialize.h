@@ -286,7 +286,7 @@ inline void encode(
 inline  void decode(
   GwSubsystems& subsystems, ceph::bufferlist::const_iterator& bl) {
   uint32_t num_subsystems;
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   decode(num_subsystems, bl);
   subsystems.clear();
   for (uint32_t i=0; i<num_subsystems; i++) {
