@@ -1557,9 +1557,14 @@ void ECBackend::objects_read_async(
 
   uint32_t flags = 0;
   extent_set es;
+  // FIXME: there is a known issue on the intersection of partial reads
+  // and multi-region reads. Unfortunately, the latter lack coverage in
+  // rados suite, so let's disable this combination for now.
+  const bool is_multi_region_read = to_read.size() > 1;
   for (const auto& [read, ctx] : to_read) {
     pair<uint64_t, uint64_t> tmp;
     if (!cct->_conf->osd_ec_partial_reads ||
+        is_multi_region_read ||
 	!should_partial_read(sinfo, read.offset, read.size, fast_read)) {
       tmp = sinfo.offset_len_to_stripe_bounds(make_pair(read.offset, read.size));
     } else {
