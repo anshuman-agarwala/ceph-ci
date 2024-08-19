@@ -258,10 +258,10 @@ inline void decode(ana_state_t& st, ceph::buffer::list::const_iterator &bl) {
 inline void encode(
   const GwSubsystems& subsystems,  ceph::bufferlist &bl, uint64_t features) {
   uint8_t version = 1;
-  if (HAVE_FEATURE(features, SERVER_SQUID)) {
+  if (HAVE_FEATURE(features, NVMEOFHA)) {
     version = 2;
   }
-  ENCODE_START(version, 1, bl);
+  ENCODE_START(version, version, bl);
   encode((uint32_t)subsystems.size(), bl);
   for (const auto& sub: subsystems) {
     encode(sub.second.nqn, bl);
@@ -326,7 +326,7 @@ inline  void encode(const NvmeGwTimerState& state,  ceph::bufferlist &bl,
   if (HAVE_FEATURE(features, NVMEOFHA)) {
     version = 2;
   }
-  ENCODE_START(version, 1, bl);
+  ENCODE_START(version, version, bl);
 
   if (version >= 2) {
     encode((uint32_t)state.data.size(), bl);
