@@ -9,7 +9,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import cephfs
 
-from ceph.fs.earmarking import CephFSVolumeEarmarking
+from ceph.fs.earmarking import CephFSVolumeEarmarking  # type: ignore
 
 from mgr_util import CephfsClient
 
@@ -225,7 +225,7 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
-        earmark    = kwargs['earmark']
+        earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
 
         oct_mode = octal_str_to_decimal_int(mode)
 
@@ -249,7 +249,7 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
-        earmark    = kwargs['earmark']
+        earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -615,7 +615,7 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.USER_METADATA_GET) as subvolume:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.EARMARK_GET) as subvolume:
                         log.info("getting for subvolume %s", subvolume.path)
                         fs_earmark = CephFSVolumeEarmarking(fs_handle, subvolume.path)
                         earmark = fs_earmark.get_earmark()
@@ -635,7 +635,7 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.USER_METADATA_REMOVE) as subvolume:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.EARMARK_SET) as subvolume:
                         log.info("Setting earmark %s for subvolume %s", earmark, subvolume.path)
                         fs_earmark = CephFSVolumeEarmarking(fs_handle, subvolume.path)
                         fs_earmark.set_earmark(earmark)
@@ -644,7 +644,7 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
-    def remove_earmark(self, **kwargs):
+    def clear_earmark(self, **kwargs):
         ret       = 0, "", ""
         volname   = kwargs['vol_name']
         subvolname = kwargs['sub_name']
@@ -654,10 +654,10 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.USER_METADATA_REMOVE) as subvolume:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.EARMARK_CLEAR) as subvolume:
                         log.info("Rm earmark for subvolume %s", subvolume.path)
                         fs_earmark = CephFSVolumeEarmarking(fs_handle, subvolume.path)
-                        fs_earmark.remove_earmark()
+                        fs_earmark.clear_earmark()
         except VolumeException as ve:
             if not (ve.errno == -errno.ENOENT and force):
                 ret = self.volume_exception_to_retval(ve)
