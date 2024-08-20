@@ -48,6 +48,8 @@ public:
     void  handle_abandoned_ana_groups   (bool &propose_pending);
     void  handle_removed_subsystems     (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const std::vector<NvmeNqnId> &current_subsystems, bool &propose_pending);
     void  start_timer (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid, uint8_t value);
+    void handle_gw_performing_fast_reboot(const NvmeGwId &gw_id,
+             const NvmeGroupKey& group_key, bool &map_modified);
 private:
     void add_grp_id   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const NvmeAnaGrpId grpid);
     void remove_grp_id(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const NvmeAnaGrpId grpid);
@@ -61,7 +63,8 @@ private:
     void find_failback_gw       (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  bool &propose_pending);
     void set_failover_gw_for_ANA_group (const NvmeGwId &failed_gw_id, const NvmeGroupKey& group_key, const NvmeGwId &gw_id,
                                                                                                      NvmeAnaGrpId groupid);
-
+    void fsm_handle_gw_fast_reboot(const NvmeGwId &gw_id,
+          const NvmeGroupKey& group_key, NvmeAnaGrpId grpid, bool &map_modified);
 
     int  get_timer   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid);
     void cancel_timer(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid);
