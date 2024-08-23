@@ -2071,19 +2071,20 @@ void OSDService::_queue_for_recovery(
     }
   }();
 
-  enqueue_back(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(
-	new PGRecovery(
-	  p.pg->get_pgid(),
-	  p.epoch_queued,
-          reserved_pushes,
-	  p.priority)),
-      cost_for_queue,
-      cct->_conf->osd_recovery_priority,
-      ceph_clock_now(),
-      0,
-      p.epoch_queued));
+  std::unique_ptr<OpSchedulerItem::OpQueueable> pg_recovery(new PGRecovery(
+    p.pg->get_pgid(), p.epoch_queued, reserved_pushes, p.priority, this));
+
+  dout(3) << __func__ << " starting " << reserved_pushes
+          << ", recovery_ops_reserved " << recovery_ops_reserved
+          << " -> " << (recovery_ops_reserved + reserved_pushes)
+          << " awaiting_throttle list size " << awaiting_throttle.size()
+          << " Address of object " << pg_recovery.get()
+          << dendl;
+
+  enqueue_back(OpSchedulerItem(std::move(pg_recovery),
+    cost_for_queue,
+    cct->_conf->osd_recovery_priority,
+    ceph_clock_now(), 0, p.epoch_queued));
 }
 
 // ====================================================================
@@ -9458,7 +9459,7 @@ void OSDService::_maybe_queue_recovery() {
       cct->_conf->osd_recovery_max_single_start);
     _queue_for_recovery(awaiting_throttle.front(), to_start);
     awaiting_throttle.pop_front();
-    dout(3) << __func__ << " starting " << to_start
+    dout(10) << __func__ << " starting " << to_start
 	     << ", recovery_ops_reserved " << recovery_ops_reserved
 	     << " -> " << (recovery_ops_reserved + to_start)
              << " awaiting_throttle list size " << awaiting_throttle.size()
@@ -10842,7 +10843,8 @@ OSDShard::OSDShard(
     shard_lock{make_mutex(shard_lock_name)},
     scheduler(ceph::osd::scheduler::make_scheduler(
       cct, osd->whoami, osd->num_shards, id, osd->store->is_rotational(),
-      osd->store->get_type(), osd_op_queue, osd_op_queue_cut_off, osd->monc)),
+      osd->store->get_type(), osd_op_queue, osd_op_queue_cut_off, osd->monc,
+      osd->logger)),
     context_queue(sdata_wait_lock, sdata_cond)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;
@@ -10985,6 +10987,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
   // Access the stored item
   auto item = std::move(std::get<OpSchedulerItem>(work_item));
+  if (item.get_reserved_pushes() > 0) {
+    osd->logger->inc(l_osd_robjdeq);
+  }
   if (osd->is_stopping()) {
     sdata->shard_lock.unlock();
     for (auto c : oncommits) {
@@ -11244,6 +11249,7 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
 
   OSDShard* sdata = osd->shards[shard_index];
   assert (NULL != sdata);
+  uint64_t reserved_pushes = item.get_reserved_pushes();
 
   dout(20) << fmt::format("{} {}", __func__, item) << dendl;
 
@@ -11252,6 +11258,9 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
     std::lock_guard l{sdata->shard_lock};
     empty = sdata->scheduler->empty();
     sdata->scheduler->enqueue(std::move(item));
+    if (reserved_pushes > 0) {
+      osd->logger->inc(l_osd_robjenq);
+    }
   }
 
   {
