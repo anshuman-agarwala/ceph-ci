@@ -115,10 +115,12 @@
 %ifarch x86_64
 %if 0%{?fedora} || 0%{?rhel} >= 9
 %bcond_without system_qat
-%else # not fedora/rhel
+%else
+# not fedora/rhel
 %bcond_with system_qat
 %endif
-%else # not x86_64
+%else
+# not x86_64
 %bcond_with system_qat
 %endif
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8 || 0%{?openEuler}
@@ -440,6 +442,7 @@ BuildRequires:	libibverbs-devel
 BuildRequires:  librdmacm-devel
 BuildRequires:  ninja-build
 BuildRequires:  openldap-devel
+BuildRequires:  numactl-devel
 #BuildRequires:  krb5-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
@@ -509,7 +512,6 @@ BuildRequires:  openEuler-rpm-config
 %if 0%{with seastar}
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 BuildRequires:  cryptopp-devel
-BuildRequires:  numactl-devel
 %endif
 %if 0%{?suse_version}
 BuildRequires:  libcryptopp-devel
@@ -977,7 +979,6 @@ Requires: parted
 Requires: util-linux
 Requires: xfsprogs
 Requires: python%{python3_pkgversion}-setuptools
-Requires: python%{python3_pkgversion}-packaging
 Requires: python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
 %description volume
 This package contains a tool to deploy OSD with different devices like
