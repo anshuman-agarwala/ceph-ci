@@ -55,6 +55,7 @@ public:
     inodeno_t remote_ino = 0;
     unsigned char remote_d_type = 0;
     CInode *referent_inode = nullptr;
+    inodeno_t referent_ino = 0;
     
     linkage_t() {}
 
@@ -72,6 +73,7 @@ public:
     std::string get_remote_d_type_string() const;
     CInode *get_referent_inode() { return referent_inode; }
     const CInode *get_referent_inode() const { return referent_inode; }
+    inodeno_t get_referent_ino() const { return referent_ino; }
 
     void set_remote(inodeno_t ino, unsigned char d_type) {
       remote_ino = ino;
@@ -113,6 +115,7 @@ public:
     name(n),
     alternate_name(std::move(alternate_name))
   {}
+
   CDentry(std::string_view n, __u32 h,
           mempool::mds_co::string alternate_name,
           inodeno_t ino, unsigned char dt,
@@ -188,7 +191,7 @@ public:
     p->remote_d_type = d_type;
   }
   void push_projected_linkage(CInode *inode);
-  void push_projected_linkage(CInode *referent_inode, inodeno_t remote_ino);
+  void push_projected_linkage(CInode *referent_inode, inodeno_t remote_ino, inodeno_t referent_ino);
   linkage_t *pop_projected_linkage();
 
   bool is_projected() const { return !projected.empty(); }
