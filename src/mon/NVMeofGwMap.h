@@ -27,6 +27,7 @@
 #include "NVMeofGwTypes.h"
 
 using ceph::coarse_mono_clock;
+
 class Monitor;
 /*-------------------*/
 class NVMeofGwMap
