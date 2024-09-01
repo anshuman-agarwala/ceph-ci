@@ -227,8 +227,9 @@ void NVMeofGwMonitorClient::send_beacon()
   NVMeofGwClient gw_client(
      grpc::CreateChannel(gateway_address, gw_creds()));
   subsystems_info gw_subsystems;
+  dout(4) << "call get subsystem" << dendl;
   bool ok = gw_client.get_subsystems(gw_subsystems);
-  dout(4) << "get subsystem complete, ok" << ok << dendl;
+  dout(4) << "get subsystems complete, ok: " << ok << dendl;
   if (ok) {
     for (int i = 0; i < gw_subsystems.subsystems_size(); i++) {
       const subsystem& sub = gw_subsystems.subsystems(i);
