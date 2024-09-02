@@ -4,7 +4,7 @@ import logging
 import mgr_util
 import inspect
 import functools
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
 import cephfs
@@ -606,8 +606,8 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
-    def get_earmark(self, **kwargs):
-        ret        = 0, "", ""
+    def get_earmark(self, **kwargs) -> Tuple[int, str, str]:
+        ret: Tuple[int, str, str] = 0, "", ""
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname  = kwargs['group_name']
@@ -627,8 +627,8 @@ class VolumeClient(CephfsClient["Module"]):
             ret = ee.to_tuple()
         return ret
 
-    def set_earmark(self, **kwargs):
-        ret       = 0, "", ""
+    def set_earmark(self, **kwargs) -> Tuple[int, str, str]:
+        ret: Tuple[int, str, str] = 0, "", ""
         volname   = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname = kwargs['group_name']
@@ -648,8 +648,8 @@ class VolumeClient(CephfsClient["Module"]):
             ret = ee.to_tuple()
         return ret
 
-    def clear_earmark(self, **kwargs):
-        ret       = 0, "", ""
+    def clear_earmark(self, **kwargs) -> Tuple[int, str, str]:
+        ret: Tuple[int, str, str] = 0, "", ""
         volname   = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname = kwargs['group_name']
