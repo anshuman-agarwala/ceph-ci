@@ -277,8 +277,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolume earmark get '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=group_name,type=CephString,req=false '
-                   'name=force,type=CephBool,req=false ',
+                   'name=group_name,type=CephString,req=false ',
             'desc': "Get earmark for a subvolume",
             'perm': 'r'
         },
@@ -287,8 +286,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
                    'name=group_name,type=CephString,req=false '
-                   'name=earmark,type=CephString '
-                   'name=force,type=CephBool,req=false ',
+                   'name=earmark,type=CephString ',
             'desc': "Set earmark for a subvolume",
             'perm': 'rw'
         },
@@ -296,8 +294,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolume earmark rm '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=group_name,type=CephString,req=false '
-                   'name=force,type=CephBool,req=false ',
+                   'name=group_name,type=CephString,req=false ',
             'desc': "Remove earmark from a subvolume",
             'perm': 'rw'
         },
@@ -798,23 +795,20 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_subvolume_earmark_get(self, inbuf, cmd):
         return self.vc.get_earmark(vol_name=cmd['vol_name'],
                                    sub_name=cmd['sub_name'],
-                                   group_name=cmd.get('group_name', None),
-                                   force=cmd.get('force', False))
+                                   group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_earmark_set(self, inbuf, cmd):
         return self.vc.set_earmark(vol_name=cmd['vol_name'],
                                       sub_name=cmd['sub_name'],
                                       group_name=cmd.get('group_name', None),
-                                      earmark=cmd['earmark'],
-                                      force=cmd.get('force', False))
+                                      earmark=cmd['earmark'])
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_earmark_rm(self, inbuf, cmd):
         return self.vc.clear_earmark(vol_name=cmd['vol_name'],
                                       sub_name=cmd['sub_name'],
-                                      group_name=cmd.get('group_name', None),
-                                      force=cmd.get('force', False))
+                                      group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_quiesce(self, inbuf, cmd):

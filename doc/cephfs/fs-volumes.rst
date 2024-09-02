@@ -539,7 +539,7 @@ Use a command of the following form to get the earmark of a subvolume:
 
 .. prompt:: bash #
 
-   ceph fs subvolume earmark get <vol_name> <subvol_name> [--group_name <subvol_group_name>] [--force]
+   ceph fs subvolume earmark get <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
 Setting earmark of a subvolume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -548,7 +548,7 @@ Use a command of the following form to set the earmark of a subvolume:
 
 .. prompt:: bash #
 
-   ceph fs subvolume earmark set <vol_name> <subvol_name> [--group_name <subvol_group_name>] <earmark> [--force]
+   ceph fs subvolume earmark set <vol_name> <subvol_name> [--group_name <subvol_group_name>] <earmark>
 
 Removing earmark of a subvolume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -557,7 +557,7 @@ Use a command of the following form to remove the earmark of a subvolume:
 
 .. prompt:: bash #
 
-   ceph fs subvolume earmark rm <vol_name> <subvol_name> [--group_name <subvol_group_name>] [--force]
+   ceph fs subvolume earmark rm <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
 Creating a Snapshot of a Subvolume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

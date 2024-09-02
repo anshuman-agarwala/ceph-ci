@@ -2,10 +2,10 @@
 Module: CephFS Volume Earmarking
 
 This module provides the `CephFSVolumeEarmarking` class, which is designed to manage the earmarking
-of subvolumes and subvolume groups within a CephFS filesystem. The earmarking mechanism allows
+of subvolumes within a CephFS filesystem. The earmarking mechanism allows
 administrators to tag specific subvolumes with identifiers that indicate their intended use
 such as NFS or SMB, ensuring that only one file service is assigned to a particular subvolume
-or subvolume group at a time. This is crucial to prevent data corruption in environments where
+at a time. This is crucial to prevent data corruption in environments where
 mixed protocol support (NFS and SMB) is not yet available.
 
 Key Features:
