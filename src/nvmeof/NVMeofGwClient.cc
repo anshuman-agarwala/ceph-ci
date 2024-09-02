@@ -17,6 +17,10 @@ bool NVMeofGwClient::get_subsystems(subsystems_info& reply) {
   get_subsystems_req request;
   ClientContext context;
 
+  // Set a timeout
+  auto deadline = std::chrono::system_clock::now() + ti_;
+  context.set_deadline(deadline);
+
   Status status = stub_->get_subsystems(&context, request, &reply);
 
   return status.ok();

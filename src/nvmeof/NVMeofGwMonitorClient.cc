@@ -225,7 +225,8 @@ void NVMeofGwMonitorClient::send_beacon()
   gw_availability_t gw_availability = gw_availability_t::GW_CREATED;
   BeaconSubsystems subs;
   NVMeofGwClient gw_client(
-     grpc::CreateChannel(gateway_address, gw_creds()));
+     grpc::CreateChannel(gateway_address, gw_creds()),
+     g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period"));
   subsystems_info gw_subsystems;
   dout(4) << "call get subsystem" << dendl;
   bool ok = gw_client.get_subsystems(gw_subsystems);
@@ -423,7 +424,8 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     bool set_ana_state = false;
     while (!set_ana_state) {
       NVMeofGwClient gw_client(
-          grpc::CreateChannel(gateway_address, gw_creds()));
+          grpc::CreateChannel(gateway_address, gw_creds()),
+          g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period"));
       set_ana_state = gw_client.set_ana_state(ai);
       if (!set_ana_state) {
 	dout(10) << "GRPC set_ana_state failed" << dendl;

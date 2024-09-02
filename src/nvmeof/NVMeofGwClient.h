@@ -17,6 +17,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <chrono>
 
 #include <grpcpp/grpcpp.h>
 
@@ -28,13 +29,14 @@ using grpc::Status;
 
 class NVMeofGwClient {
  public:
-  NVMeofGwClient(std::shared_ptr<Channel> channel)
-      : stub_(Gateway::NewStub(channel)) {}
+  NVMeofGwClient(std::shared_ptr<Channel> channel, std::chrono::seconds ti)
+      : stub_(Gateway::NewStub(channel)), ti_(ti) {}
 
   bool get_subsystems(subsystems_info& reply);
   bool set_ana_state(const ana_info& info);
 
  private:
   std::unique_ptr<Gateway::Stub> stub_;
+  std::chrono::seconds ti_;
 };
 #endif
