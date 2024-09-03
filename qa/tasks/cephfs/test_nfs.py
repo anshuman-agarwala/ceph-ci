@@ -1222,8 +1222,10 @@ class TestNFS(MgrTestCase):
         """
         Test that ensure cmount_path is present in FSAL block
         """
+        self._create_cluster_with_fs(self.fs_name)
+
         pseudo_path = '/test_without_cmount'
-        self._create_export(export_id='1234',
+        self._create_export(export_id='1',
                             extra_cmd=['--pseudo-path', pseudo_path])
         nfs_output = self._get_export(pseudo_path)
         self.assertIn('cmount_path', nfs_output['fsal'])
@@ -1234,6 +1236,8 @@ class TestNFS(MgrTestCase):
         """
         Test that exports with same FSAL share same user_id
         """
+        self._create_cluster_with_fs(self.fs_name)
+
         pseudo_path_1 = '/test1'
         pseudo_path_2 = '/test2'
         pseudo_path_3 = '/test3'
@@ -1245,10 +1249,10 @@ class TestNFS(MgrTestCase):
         fs_path_1 = self._cmd('fs', 'subvolume', 'getpath', self.fs_name, 'sub_vol_1').strip()
         fs_path_2 = self._cmd('fs', 'subvolume', 'getpath', self.fs_name, 'sub_vol_2').strip()
         # Both exports should have same user_id(since cmount_path=/ & fs_name is same)
-        self._create_export(export_id='21',
+        self._create_export(export_id='1',
                             extra_cmd=['--pseudo-path', pseudo_path_1,
                                        '--path', fs_path_1])
-        self._create_export(export_id='22',
+        self._create_export(export_id='2',
                             extra_cmd=['--pseudo-path', pseudo_path_2,
                                        '--path', fs_path_2])
 
@@ -1259,7 +1263,7 @@ class TestNFS(MgrTestCase):
         self.assertEqual(nfs_output_1['fsal']['user_id'], 'nfs.test.nfs-cephfs.3746f603')
 
         cmount_path = '/volumes'
-        self._create_export(export_id='23',
+        self._create_export(export_id='3',
                             extra_cmd=['--pseudo-path', pseudo_path_3,
                                        '--path', fs_path_1,
                                        '--cmount-path', cmount_path])
