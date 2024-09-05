@@ -1,6 +1,6 @@
 import os
 
-from ceph.fs.earmarking import (
+from ceph.fs.earmarking import (  # type: ignore
     CephFSVolumeEarmarking,
     EarmarkParseError,
     EarmarkTopScope,
@@ -398,6 +398,7 @@ class CephFSEarmarkResolver:
             except EarmarkException as e:
                 logger.error(f"Failed to manage earmark: {e}")
                 return None
+        return None
 
     def get_earmark(self, path: str, volume: str) -> Optional[str]:
         """
