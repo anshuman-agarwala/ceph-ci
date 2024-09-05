@@ -15,7 +15,7 @@ from typing import (
 import sys
 
 from ceph.deployment.service_spec import SMBSpec
-from ceph.fs.earmarking import EarmarkTopScope
+from ceph.fs.earmarking import EarmarkTopScope  # type: ignore
 
 # this uses a version check as opposed to a try/except because this
 # form makes mypy happy and try/except doesn't.

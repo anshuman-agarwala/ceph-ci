@@ -114,6 +114,39 @@ class _FakePathResolver:
     resolve_exists = resolve
 
 
+class _FakeEarmarkResolver:
+    """A stub EarmarkResolver for unit testing."""
+
+    def __init__(self) -> None:
+        self._earmarks: Dict[Tuple[str, str], str] = {}
+
+    def get_earmark(self, path: str, volume: str) -> Optional[str]:
+        """Simulates fetching the earmark for a given path in a volume."""
+        key = (volume, path)
+        return self._earmarks.get(key)
+
+    def set_earmark(self, path: str, volume: str, earmark: str) -> None:
+        """Simulates setting the earmark for a given path in a volume."""
+        key = (volume, path)
+        self._earmarks[key] = earmark
+
+    def check_earmark(self, earmark: str, top_level_scope: str) -> bool:
+        """
+        Simulates checking if the earmark belongs to the mentioned top-level scope.
+
+        :param earmark: The earmark string to check.
+        :param top_level_scope: The expected top-level scope.
+        :return: True if the earmark matches the top-level scope, False otherwise.
+        """
+        try:
+            # Split the earmark to check if it starts with the expected scope
+            parsed_top_level_scope = earmark.split('.')[0]
+            return parsed_top_level_scope == top_level_scope
+        except Exception:
+            # Handle parsing errors or other issues gracefully
+            return False
+
+
 class _FakeAuthorizer:
     """A stub AccessAuthorizer for unit testing."""
 
@@ -339,7 +372,9 @@ class ClusterConfigHandler:
             authorizer = _FakeAuthorizer()
         self._authorizer: AccessAuthorizer = authorizer
         self._orch = orch  # if None, disables updating the spec via orch
-        self._earmark_resolver = earmark_resolver
+        if earmark_resolver is None:
+            earmark_resolver = _FakeEarmarkResolver()
+        self._earmark_resolver: EarmarkResolver = earmark_resolver
         log.info(
             'Initialized new ClusterConfigHandler with'
             f' internal store {self.internal_store!r},'
@@ -859,7 +894,9 @@ def _check_share(
                 smb_earmark,
             )
         else:
-            if not earmark_resolver.check_earmark(earmark, EarmarkTopScope.SMB):
+            if not earmark_resolver.check_earmark(
+                earmark, EarmarkTopScope.SMB
+            ):
                 raise ErrorResult(
                     share,
                     msg=f"earmark has already been set by {earmark.split('.')[0]}",
