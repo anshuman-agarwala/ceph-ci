@@ -151,7 +151,6 @@ private:
       rid,
       mt,
       return_code);
-    osd_op_p.at_version.version++;
   }
 
   Ref<PG> pg;
