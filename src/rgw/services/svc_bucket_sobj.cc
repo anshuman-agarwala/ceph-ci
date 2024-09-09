@@ -135,12 +135,9 @@ class BucketInstanceLister : public RGWMetadataLister {
                         std::list<std::string>& keys) override
   {
     // transform instance oids to metadata keys
-    constexpr auto convert = [] (const std::string& oid) {
-                               return instance_oid_to_meta_key(oid);
-                             };
     std::transform(oids.begin(), oids.end(),
                    std::back_inserter(keys),
-                   convert);
+                   instance_oid_to_meta_key);
   }
 };
 
