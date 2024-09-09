@@ -2759,9 +2759,8 @@ int RGWBucketInstanceMetadataHandler::put(std::string& entry, RGWMetadataObject*
   // write updated instance
   RGWBucketInfo* old_info = (old ? &old->info : nullptr);
   auto mtime = obj->get_mtime();
-  auto pattrs = obj->get_pattrs();
   ret = svc_bucket->store_bucket_instance_info(entry, bci.info, old_info, false,
-                                               mtime, pattrs, y, dpp);
+                                               mtime, &bci.attrs, y, dpp);
   if (ret < 0) {
     return ret;
   }
