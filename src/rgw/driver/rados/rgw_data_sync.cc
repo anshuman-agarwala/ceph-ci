@@ -2159,6 +2159,7 @@ public:
         yield call(marker_tracker->flush());
         return set_cr_error(-EBUSY);
       } else if (lost_lock) {
+        yield call(marker_tracker->flush());
         return set_cr_error(-ECANCELED);
       }
 
