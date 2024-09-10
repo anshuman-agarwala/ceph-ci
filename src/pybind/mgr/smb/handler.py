@@ -121,30 +121,13 @@ class _FakeEarmarkResolver:
         self._earmarks: Dict[Tuple[str, str], str] = {}
 
     def get_earmark(self, path: str, volume: str) -> Optional[str]:
-        """Simulates fetching the earmark for a given path in a volume."""
-        key = (volume, path)
-        return self._earmarks.get(key)
+        return None
 
     def set_earmark(self, path: str, volume: str, earmark: str) -> None:
-        """Simulates setting the earmark for a given path in a volume."""
-        key = (volume, path)
-        self._earmarks[key] = earmark
+        pass
 
     def check_earmark(self, earmark: str, top_level_scope: str) -> bool:
-        """
-        Simulates checking if the earmark belongs to the mentioned top-level scope.
-
-        :param earmark: The earmark string to check.
-        :param top_level_scope: The expected top-level scope.
-        :return: True if the earmark matches the top-level scope, False otherwise.
-        """
-        try:
-            # Split the earmark to check if it starts with the expected scope
-            parsed_top_level_scope = earmark.split('.')[0]
-            return parsed_top_level_scope == top_level_scope
-        except Exception:
-            # Handle parsing errors or other issues gracefully
-            return False
+        return True
 
 
 class _FakeAuthorizer:
@@ -382,7 +365,8 @@ class ClusterConfigHandler:
             f' priv store {self.priv_store!r},'
             f' path resolver {self._path_resolver!r},'
             f' authorizer {self._authorizer!r},'
-            f' orch {self._orch!r}'
+            f' orch {self._orch!r},'
+            f' earmark resolver {self._earmark_resolver!r}'
         )
 
     def apply(

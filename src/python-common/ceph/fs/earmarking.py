@@ -138,7 +138,8 @@ class CephFSVolumeEarmarking:
                 errno.EINVAL,
                 f"Invalid earmark specified: '{earmark}'. "
                 "A valid earmark should either be empty or start with 'nfs' or 'smb', "
-                "followed by dot-separated non-empty components."
+                "followed by dot-separated non-empty components or simply set "
+                "'smb.cluster.{cluster_id}' for the smb intra-cluster scope."
                 )
 
         try:
