@@ -994,6 +994,9 @@ class TestRenameCommand(TestAdminCommands):
         """
         That renaming a file system without '--yes-i-really-mean-it' flag fails.
         """
+        # Failing the file system breaks this mount
+        self.mount_a.umount_wait(require_clean=True)
+
         self.run_ceph_cmd(f'fs fail {self.fs.name}')
         self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
         sleep(5)
@@ -1016,6 +1019,9 @@ class TestRenameCommand(TestAdminCommands):
         """
         That renaming a non-existent file system fails.
         """
+        # Failing the file system breaks this mount
+        self.mount_a.umount_wait(require_clean=True)
+
         self.run_ceph_cmd(f'fs fail {self.fs.name}')
         self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
         sleep(5)
@@ -1035,6 +1041,9 @@ class TestRenameCommand(TestAdminCommands):
         That renaming a file system fails if the new name refers to an existing file system.
         """
         self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
+
+        # let's unmount the client before failing the FS
+        self.mount_a.umount_wait(require_clean=True)
 
         self.run_ceph_cmd(f'fs fail {self.fs.name}')
         self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
@@ -1058,6 +1067,9 @@ class TestRenameCommand(TestAdminCommands):
         """
         orig_fs_name = self.fs.name
         new_fs_name = 'new_cephfs'
+
+        # let's unmount the client before failing the FS
+        self.mount_a.umount_wait(require_clean=True)
 
         self.run_ceph_cmd(f'fs mirror enable {orig_fs_name}')
         self.run_ceph_cmd(f'fs fail {self.fs.name}')
@@ -1817,6 +1829,28 @@ class TestFsAuthorize(CephFSTestCase):
 
         self._remount(keyring)
         self.captester.run_mds_cap_tests(PERM)
+
+    def test_fs_read_and_single_path_rw(self):
+        """
+        Tests the file creation using 'touch' cmd on a specific path
+        which has 'rw' caps and 'r' caps on the rest of the fs.
+
+        The mds auth caps with 'rw' caps on a specific path and 'r' caps
+        on the rest of the fs has an issue. The file creation using 'touch'
+        cmd on the fuse client used to fail while doing setattr.
+        Please see https://tracker.ceph.com/issues/67212
+
+        The new file creation test using 'touch' cmd is added to
+        'MdsCapTester.run_mds_cap_tests' which eventually gets
+        called by '_remount_and_run_tests'
+        """
+        FS_AUTH_CAPS = (('/', 'r'), ('/dir2', 'rw'))
+        self.mount_a.run_shell('mkdir -p ./dir2')
+        self.captesters = (CapTester(self.mount_a, '/'),
+                           CapTester(self.mount_a, '/dir2'))
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
+
+        self._remount_and_run_tests(FS_AUTH_CAPS, keyring)
 
     def test_multiple_path_r(self):
         PERM = 'r'

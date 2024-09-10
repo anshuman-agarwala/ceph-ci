@@ -6140,11 +6140,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 						  info.pgid.shard),
 				   op.extent.offset, op.extent.length, bl);
-	osd_op.outdata = std::move(bl);
+	auto bl_length = bl.length();
+        osd_op.outdata = std::move(bl);
 	if (r < 0)
 	  result = r;
 	else
-	  ctx->delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
+	  ctx->delta_stats.num_rd_kb += shift_round_up(bl_length, 10);
 	ctx->delta_stats.num_rd++;
 	dout(10) << " map_extents done on object " << soid << dendl;
       }
@@ -11843,6 +11844,10 @@ void PrimaryLogPG::handle_watch_timeout(WatchRef watch)
   object_info_t& oi = ctx->new_obs.oi;
   oi.watchers.erase(make_pair(watch->get_cookie(),
 			      watch->get_entity()));
+
+  osd->logger->inc(l_osd_watch_timeouts);
+  dout(3) << __func__ << " watcher " << watch->get_peer_addr()
+	  << " object " << obc->obs.oi.soid << dendl;
 
   list<watch_disconnect_t> watch_disconnects = {
     watch_disconnect_t(watch->get_cookie(), watch->get_entity(), true)

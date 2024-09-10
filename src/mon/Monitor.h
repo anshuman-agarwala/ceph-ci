@@ -61,6 +61,9 @@ using namespace TOPNSPC::common;
 
 #define CEPH_MON_PROTOCOL     13 /* cluster internal */
 
+// NVMe-oF gateway monitor and HA is disabled by default upstream for now.
+// see doc/nvmeof/ha.md for more details
+//#define WITH_NVMEOF_GATEWAY_MONITOR
 
 enum {
   l_cluster_first = 555000,
@@ -712,6 +715,15 @@ public:
     return (class KVMonitor*) paxos_service[PAXOS_KV].get();
   }
 
+  class NVMeofGwMon *nvmegwmon() {
+#ifdef WITH_NVMEOF_GATEWAY_MONITOR
+      return (class NVMeofGwMon*) paxos_service[PAXOS_NVMEGW].get();
+#else
+      return nullptr;
+#endif
+  }
+
+
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
@@ -957,7 +969,7 @@ public:
   MonCap mon_caps;
   bool get_authorizer(int dest_type, AuthAuthorizer **authorizer);
 public: // for AuthMonitor msgr1:
-  int ms_handle_fast_authentication(Connection *con) override;
+  bool ms_handle_fast_authentication(Connection *con) override;
 private:
   void ms_handle_accept(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;

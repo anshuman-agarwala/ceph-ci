@@ -2333,6 +2333,118 @@ class TestSubvolumes(TestVolumesHelper):
 
         # verify trash dir is clean.
         self._wait_for_trash_empty()
+    
+    def test_subvolume_create_with_earmark(self):
+        # create subvolume with earmark
+        subvolume = self._gen_subvol_name()
+        earmark = "nfs.test"
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--earmark", earmark)
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolume)
+        self.assertNotEqual(subvolpath, None)
+
+        # verify the earmark
+        get_earmark = self._fs_cmd("subvolume", "earmark", "get", self.volname, subvolume)
+        self.assertEqual(get_earmark, earmark)
+    
+    def test_subvolume_set_and_get_earmark(self):
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # set earmark
+        earmark = "smb.test"
+        self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, earmark)
+
+        # get earmark
+        get_earmark = self._fs_cmd("subvolume", "earmark", "get", self.volname, subvolume)
+        self.assertEqual(get_earmark, earmark)
+    
+    def test_subvolume_clear_earmark(self):
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # set earmark
+        earmark = "smb.test"
+        self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, earmark)
+
+        # remove earmark
+        self._fs_cmd("subvolume", "earmark", "rm", self.volname, subvolume)
+
+        # get earmark
+        get_earmark = self._fs_cmd("subvolume", "earmark", "get", self.volname, subvolume)
+        self.assertEqual(get_earmark, "")
+
+    def test_earmark_on_non_existing_subvolume(self):
+        subvolume = "non_existing_subvol"
+        earmark = "nfs.test"
+        commands = [
+            ("set", earmark),
+            ("get", None),
+            ("rm", None),
+        ]
+
+        for action, arg in commands:
+            try:
+                if arg is not None:
+                    self._fs_cmd("subvolume", "earmark", action, self.volname, subvolume, arg)
+                else:
+                    self._fs_cmd("subvolume", "earmark", action, self.volname, subvolume)
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.ENOENT)
+
+    def test_get_remove_earmark_when_not_set(self):
+        # Create a subvolume without setting an earmark
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # Attempt to get an earmark when it's not set
+        get_earmark = self._fs_cmd("subvolume", "earmark", "get", self.volname, subvolume)
+        self.assertEqual(get_earmark, "")
+
+        # Attempt to remove an earmark when it's not set
+        self._fs_cmd("subvolume", "earmark", "rm", self.volname, subvolume)
+    
+    def test_set_invalid_earmark(self):
+        # Create a subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # Attempt to set an invalid earmark
+        invalid_earmark = "invalid_format"
+        expected_message = (
+            f"Invalid earmark specified: '{invalid_earmark}'. A valid earmark should "
+            "either be empty or start with 'nfs' or 'smb', followed by dot-separated "
+            "non-empty components."
+        )
+        try:
+            self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, invalid_earmark)
+        except CommandFailedError as ce:
+            self.assertIn(expected_message, ce.output)
+    
+    def test_earmark_on_deleted_subvolume_with_retained_snapshot(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # Create subvolume and snapshot
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Delete subvolume while retaining the snapshot
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--retain-snapshots")
+
+        # Define the expected error message
+        error_message = f'subvolume "{subvolume}" is removed and has only snapshots retained'
+
+        # Test cases for setting, getting, and removing earmarks
+        for operation in ["set", "get", "rm"]:
+            try:
+                self._fs_cmd("subvolume", "earmark", operation, self.volname, subvolume, "smb" if operation == "set" else "")
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.ENOENT)
+                self.assertIn(error_message, ce.output)
 
     def test_subvolume_expand(self):
         """
@@ -2406,6 +2518,12 @@ class TestSubvolumes(TestVolumesHelper):
         for feature in ['snapshot-clone', 'snapshot-autoprotect', 'snapshot-retention']:
             self.assertIn(feature, subvol_info["features"], msg="expected feature '{0}' in subvolume".format(feature))
 
+        # set earmark
+        earmark = "smb.test"
+        self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, earmark)
+
+        self.assertEqual(subvol_info["earmark"], earmark)
+        
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 

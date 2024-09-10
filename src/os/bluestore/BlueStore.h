@@ -53,6 +53,7 @@
 #include "os/ObjectStore.h"
 
 #include "bluestore_types.h"
+#include "bluestore_common.h"
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 
@@ -273,6 +274,22 @@ public:
     virtual ~AioContext() {}
   };
 
+  static constexpr uint32_t OBJECT_MAX_SIZE = 0xffffffff; // 32 bits
+  struct printer {
+    static constexpr uint16_t PTR = 1;   // pointer to Blob
+    static constexpr uint16_t NICK = 2;  // a nickname of this Blob
+    static constexpr uint16_t DISK = 4;  // disk allocations of Blob
+    static constexpr uint16_t SDISK = 8; // shortened version of disk allocaitons
+    static constexpr uint16_t USE = 16;  // use tracker
+    static constexpr uint16_t SUSE = 32; // shortened use tracker
+    static constexpr uint16_t CHK = 64;  // checksum, full dump
+    static constexpr uint16_t SCHK = 128; // only base checksum info
+    static constexpr uint16_t BUF = 256;  // print Blob's buffers (takes cache lock)
+    static constexpr uint16_t SBUF = 512; // short print Blob's buffers (takes cache lock)
+    static constexpr uint16_t ATTRS = 1024; // print attrs in onode
+    static constexpr uint16_t JUSTID = 2048; // used to suppress printing length, spanning and shared blob
+  };
+
   /// cached buffer
   struct Buffer {
     MEMPOOL_CLASS_HELPERS();
@@ -287,6 +304,16 @@ public:
       case STATE_EMPTY: return "empty";
       case STATE_CLEAN: return "clean";
       case STATE_WRITING: return "writing";
+      default: return "???";
+      }
+    }
+    // Short version of state name.
+    // Not print "clean", as it is most frequent.
+    static const char *get_state_name_short(int s) {
+      switch (s) {
+      case STATE_EMPTY: return ",empty";
+      case STATE_CLEAN: return "";
+      case STATE_WRITING: return ",writing";
       default: return "???";
       }
     }
@@ -636,7 +663,16 @@ public:
 
     void dump(ceph::Formatter* f) const;
     friend std::ostream& operator<<(std::ostream& out, const Blob &b);
-
+    struct printer : public BlueStore::printer {
+      const Blob& blob;
+      uint16_t mode;
+      printer(const Blob& blob, uint16_t mode)
+      :blob(blob), mode(mode) {}
+    };
+    friend std::ostream& operator<<(std::ostream& out, const printer &p);
+    printer print(uint16_t mode) const {
+      return printer(*this, mode);
+    }
     const bluestore_blob_use_tracker_t& get_blob_use_tracker() const {
       return used_in_blob;
     }
@@ -840,6 +876,16 @@ public:
       if (blob) {
 	blob->get_cache()->rm_extent();
       }
+    }
+    struct printer : public BlueStore::printer {
+      const Extent& ext;
+      uint16_t mode;
+      printer(const Extent& ext, uint16_t mode)
+      :ext(ext), mode(mode) {}
+    };
+    friend std::ostream& operator<<(std::ostream& out, const printer &p);
+    printer print(uint16_t mode) const {
+      return printer(*this, mode);
     }
 
     void dump(ceph::Formatter* f) const;
@@ -1404,8 +1450,20 @@ public:
 
     void finish_write(TransContext* txc, uint32_t offset, uint32_t length);
 
-private:
-    void _decode(const ceph::buffer::list& v);
+    struct printer : public BlueStore::printer {
+      const Onode &onode;
+      uint16_t mode;
+      uint32_t from = 0;
+      uint32_t end = OBJECT_MAX_SIZE;
+      printer(const Onode &onode, uint16_t mode) : onode(onode), mode(mode) {}
+      printer(const Onode &onode, uint16_t mode, uint32_t from, uint32_t end)
+          : onode(onode), mode(mode), from(from), end(end) {}
+    };
+    friend std::ostream &operator<<(std::ostream &out, const printer &p);
+    printer print(uint16_t mode) const { return printer(*this, mode); }
+    printer print(uint16_t mode, uint32_t from, uint32_t end) const {
+      return printer(*this, mode, from, end);
+    }
   };
 
   /// A generic Cache Shard
@@ -2426,6 +2484,13 @@ private:
   double max_defer_interval = 0; ///< Time to wait between last deferred submit
   std::atomic<uint32_t> config_changed = {0}; ///< Counter to determine if there is a configuration change.
 
+  // caching of bdev_label
+  bluestore_bdev_label_t bdev_label;                 // this value is valid if
+  std::vector<uint64_t>  bdev_label_valid_locations; // this has any elements
+  bool bdev_label_multi = false;
+  int64_t bdev_label_epoch = -1;
+  bool bluestore_bdev_label_require_all = false;
+
   typedef std::map<uint64_t, volatile_statfs> osd_pools_map;
 
   ceph::mutex vstatfs_lock = ceph::make_mutex("BlueStore::vstatfs_lock");
@@ -2745,15 +2810,32 @@ public:
     std::lock_guard l(deferred_lock);
     return deferred_last_submitted;
   }
-
-  static int _write_bdev_label(CephContext* cct,
-			       const std::string &path, bluestore_bdev_label_t label);
-  static int _read_bdev_label(CephContext* cct, const std::string &path,
-			      bluestore_bdev_label_t *label);
 private:
-  int _check_or_set_bdev_label(std::string path, uint64_t size, std::string desc,
-			       bool create);
+  static int _write_bdev_label(
+    CephContext* cct,
+    BlockDevice* bdev,
+    const std::string &path,
+    bluestore_bdev_label_t label,
+    std::vector<uint64_t> locations = std::vector<uint64_t>({BDEV_FIRST_LABEL_POSITION}));
+  static int _read_bdev_label(
+    CephContext* cct, BlockDevice* bdev, const std::string &path,
+    bluestore_bdev_label_t *label, uint64_t disk_position = BDEV_FIRST_LABEL_POSITION);
+  int _check_or_set_bdev_label(BlockDevice* bdev, const std::string& path,
+                               const std::string& desc, bool create);
+  int _set_main_bdev_label();
+  int _check_main_bdev_label();
+  static int _read_multi_bdev_label(
+    CephContext* cct,
+    BlockDevice* bdev,
+    const std::string& path,
+    uuid_d fsid,
+    bluestore_bdev_label_t *out_label,
+    std::vector<uint64_t>* out_valid_positions = nullptr,
+    bool* out_is_multi = nullptr,
+    int64_t* out_epoch = nullptr);
   int _set_bdev_label_size(const std::string& path, uint64_t size);
+  void _main_bdev_label_try_reserve();
+  void _main_bdev_label_remove(Allocator* alloc);
 
   int _open_super_meta();
 
@@ -3356,6 +3438,9 @@ public:
   KeyValueDB* get_kv() {
     return db;
   }
+  BlockDevice* get_bdev() {
+    return bdev;
+  }
 
   int queue_transactions(
     CollectionHandle& ch,
@@ -3374,6 +3459,8 @@ public:
   }
 
   /// methods to inject various errors fsck can repair
+  int get_shared_blob(const std::string& key,
+		       ceph::buffer::list& bl);
   void inject_broken_shared_blob_key(const std::string& key,
 			 const ceph::buffer::list& bl);
   void inject_no_shared_blob_key();
@@ -3413,6 +3500,28 @@ public:
     o->extent_map.punch_hole(c, off, len, &wctx.old_extents);
     _wctx_finish(&txc, c, o, &wctx, nullptr);
   }
+
+  static int debug_read_bdev_label(
+    CephContext* cct, BlockDevice* bdev, const std::string &path,
+    bluestore_bdev_label_t *label, uint64_t disk_position) {
+      return _read_bdev_label(cct, bdev, path, label, disk_position);
+    }
+  static int debug_write_bdev_label(
+    CephContext* cct, BlockDevice* bdev, const std::string &path,
+    const bluestore_bdev_label_t& label, uint64_t disk_position) {
+      return _write_bdev_label(cct, bdev, path, label,
+        std::vector<uint64_t>({disk_position}));
+    }
+  static int read_bdev_label(
+    CephContext* cct,
+    const std::string &path,
+    bluestore_bdev_label_t *out_label,
+    std::vector<uint64_t>* out_valid_positions = nullptr,
+    bool* out_is_cloned = nullptr,
+    int64_t* out_epoch = nullptr);
+  static int write_bdev_label(
+    CephContext* cct, const std::string &path,
+    const bluestore_bdev_label_t& label, uint64_t disk_position = 0);
 
   inline void log_latency(const char* name,
     int idx,

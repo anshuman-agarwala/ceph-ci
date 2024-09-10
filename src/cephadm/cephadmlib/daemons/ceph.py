@@ -16,7 +16,14 @@ from ..constants import DEFAULT_IMAGE
 from ..context import CephadmContext
 from ..deployment_utils import to_deployment_container
 from ..exceptions import Error
-from ..file_utils import make_run_dir, pathify
+from ..file_utils import (
+    make_run_dir,
+    pathify,
+    populate_files,
+    makedirs,
+    recursive_chown,
+)
+from ..data_utils import dict_get
 from ..host_facts import HostFacts
 from ..logging import Highlight
 from ..net_utils import get_hostname, get_ip_addresses
@@ -298,6 +305,8 @@ class CephExporter(ContainerDaemonForm):
         self.port = config_json.get('port', self.DEFAULT_PORT)
         self.prio_limit = config_json.get('prio-limit', 5)
         self.stats_period = config_json.get('stats-period', 5)
+        self.https_enabled: bool = config_json.get('https_enabled', False)
+        self.files = dict_get(config_json, 'files', {})
 
     @classmethod
     def init(
@@ -323,6 +332,15 @@ class CephExporter(ContainerDaemonForm):
             f'--prio-limit={self.prio_limit}',
             f'--stats-period={self.stats_period}',
         ]
+        if self.https_enabled:
+            args.extend(
+                [
+                    '--cert-file',
+                    '/etc/certs/ceph-exporter.crt',
+                    '--key-file',
+                    '/etc/certs/ceph-exporter.key',
+                ]
+            )
         return args
 
     def validate(self) -> None:
@@ -348,6 +366,9 @@ class CephExporter(ContainerDaemonForm):
     ) -> None:
         cm = Ceph.get_ceph_mounts(ctx, self.identity)
         mounts.update(cm)
+        if self.https_enabled:
+            data_dir = self.identity.data_dir(ctx.data_dir)
+            mounts.update({os.path.join(data_dir, 'etc/certs'): '/etc/certs'})
 
     def customize_process_args(
         self, ctx: CephadmContext, args: List[str]
@@ -376,6 +397,23 @@ class CephExporter(ContainerDaemonForm):
         # it until now
         self.validate()
 
+    def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
+        """Create files under the container data dir"""
+        if not os.path.isdir(data_dir):
+            raise OSError('data_dir is not a directory: %s' % (data_dir))
+        logger.info('Writing ceph-exporter config...')
+        config_dir = os.path.join(data_dir, 'etc/')
+        ssl_dir = os.path.join(data_dir, 'etc/certs')
+        for ddir in [config_dir, ssl_dir]:
+            makedirs(ddir, uid, gid, 0o755)
+            recursive_chown(ddir, uid, gid)
+        cert_files = {
+            fname: content
+            for fname, content in self.files.items()
+            if fname.endswith('.crt') or fname.endswith('.key')
+        }
+        populate_files(ssl_dir, cert_files, uid, gid)
+
 
 def get_ceph_mounts_for_type(
     ctx: CephadmContext, fsid: str, daemon_type: str
@@ -386,12 +424,17 @@ def get_ceph_mounts_for_type(
     """
     mounts = dict()
 
-    if daemon_type in ceph_daemons():
+    if daemon_type in ceph_daemons() or daemon_type in [
+        'ceph-volume',
+        'shell',
+    ]:
         if fsid:
             run_path = os.path.join('/var/run/ceph', fsid)
             if os.path.exists(run_path):
                 mounts[run_path] = '/var/run/ceph:z'
             log_dir = os.path.join(ctx.log_dir, fsid)
+            if not os.path.exists(log_dir):
+                os.mkdir(log_dir)
             mounts[log_dir] = '/var/log/ceph:z'
             crash_dir = '/var/lib/ceph/%s/crash' % fsid
             if os.path.exists(crash_dir):
@@ -400,14 +443,19 @@ def get_ceph_mounts_for_type(
                 journald_sock_dir = '/run/systemd/journal'
                 mounts[journald_sock_dir] = journald_sock_dir
 
-    if daemon_type in ['mon', 'osd', 'clusterless-ceph-volume']:
+    if daemon_type in [
+        'mon',
+        'osd',
+        'ceph-volume',
+        'clusterless-ceph-volume',
+    ]:
         mounts['/dev'] = '/dev'  # FIXME: narrow this down?
         mounts['/run/udev'] = '/run/udev'
-    if daemon_type in ['osd', 'clusterless-ceph-volume']:
+    if daemon_type in ['osd', 'ceph-volume', 'clusterless-ceph-volume']:
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
-    if daemon_type == 'osd':
+    if daemon_type in ['osd', 'ceph-volume']:
         # selinux-policy in the container may not match the host.
         if HostFacts(ctx).selinux_enabled:
             cluster_dir = f'{ctx.data_dir}/{fsid}'
@@ -420,7 +468,10 @@ def get_ceph_mounts_for_type(
                 logger.error(
                     f'Cluster direcotry {cluster_dir} does not exist.'
                 )
+    if daemon_type == 'osd':
         mounts['/'] = '/rootfs'
+    elif daemon_type == 'ceph-volume':
+        mounts['/'] = '/rootfs:rslave'
 
     try:
         if (

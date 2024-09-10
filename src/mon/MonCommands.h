@@ -1212,6 +1212,25 @@ COMMAND("osd pool application get "
         "name=key,type=CephString,req=false",
         "get value of key <key> of application <app> on pool <poolname>",
         "osd", "r")
+COMMAND("osd pool stretch show "
+        "name=pool,type=CephPoolname",
+        "show all the stretch related information for the pool",
+        "osd", "r")
+COMMAND("osd pool stretch set "
+        "name=pool,type=CephPoolname "
+		"name=peering_crush_bucket_count,type=CephInt,range=0 "
+		"name=peering_crush_bucket_target,type=CephInt,range=0 "
+		"name=peering_crush_bucket_barrier,type=CephString "
+		"name=crush_rule,type=CephString "
+		"name=size,type=CephInt,range=0 "
+		"name=min_size,type=CephInt,range=0 "
+		"name=yes_i_really_mean_it,type=CephBool,req=false",
+        "make the pool stretched across the specified number of CRUSH buckets",
+        "osd", "rw")
+COMMAND("osd pool stretch unset "
+		"name=pool,type=CephPoolname",
+		"unset the stretch mode for the pool",
+		"osd", "rw")
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r")
@@ -1390,8 +1409,25 @@ COMMAND("config generate-minimal-conf",
 	"Generate a minimal ceph.conf file",
 	"config", "r")
 
+/* NVMeofGwMon*/
+COMMAND("nvme-gw create"
+    " name=id,type=CephString"
+    " name=pool,type=CephString"
+    " name=group,type=CephString",
+    "create nvmeof gateway id for (pool, group)",
+    "mgr", "rw")
+COMMAND("nvme-gw delete"
+    " name=id,type=CephString"
+    " name=pool,type=CephString"
+    " name=group,type=CephString",
+    "delete nvmeof gateway id for (pool, group)",
+    "mgr", "rw")
 
-
+COMMAND("nvme-gw show"
+   " name=pool,type=CephString"
+   " name=group,type=CephString",
+   " show nvmeof gateways within (pool, group)",
+   "mon", "r")
 
 // these are tell commands that were implemented as CLI commands in
 // the broken pre-octopus way that we want to allow to work when a
