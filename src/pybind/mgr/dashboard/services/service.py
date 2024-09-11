@@ -153,28 +153,40 @@ class RgwServiceManager:
         access_key = ''
         secret_key = ''
         try:
+            # Fetch the list of realms
             _, out, err = mgr.send_rgwadmin_command(['realm', 'list'])
             if out:
                 realms = out.get('realms', [])
             if err:
                 logger.error('Unable to list RGW realms: %s', err)
+
+            realm_access_keys = {}
+            realm_secret_keys = {}
+
+            # If realms exist, fetch credentials for each realm and store them with keys
             if realms:
-                realm_access_keys = {}
-                realm_secret_keys = {}
                 for realm in realms:
                     realm_access_key, realm_secret_key = self._get_user_keys(user, realm)
                     if realm_access_key:
                         realm_access_keys[realm] = realm_access_key
                         realm_secret_keys[realm] = realm_secret_key
-                if realm_access_keys:
-                    access_key = json.dumps(realm_access_keys)
-                    secret_key = json.dumps(realm_secret_keys)
+
+                # Store default dashboard user credentials with empty key when realms exist
+                default_access_key, default_secret_key = self._get_user_keys(user)
+                realm_access_keys[''] = default_access_key or ''
+                realm_secret_keys[''] = default_secret_key or ''
+
+                # Convert the credentials dictionary to JSON
+                access_key = json.dumps(realm_access_keys)
+                secret_key = json.dumps(realm_secret_keys)
             else:
+                # When no realms exist, store credentials as plain text
                 access_key, secret_key = self._get_user_keys(user)
 
             assert access_key and secret_key
             Settings.RGW_API_ACCESS_KEY = access_key
             Settings.RGW_API_SECRET_KEY = secret_key
+
         except (AssertionError, SubprocessError) as error:
             logger.exception(error)
             raise NoCredentialsException

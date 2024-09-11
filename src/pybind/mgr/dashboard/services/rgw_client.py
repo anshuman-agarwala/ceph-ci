@@ -236,18 +236,33 @@ class RgwClient(RestClient):
     def _get_daemon_connection_info(daemon_name: str) -> dict:
         try:
             realm_name = RgwClient._daemons[daemon_name].realm_name
-            access_key = Settings.RGW_API_ACCESS_KEY[realm_name]
-            secret_key = Settings.RGW_API_SECRET_KEY[realm_name]
+
+            # Check if credentials exist for the specific realm
+            if realm_name in Settings.RGW_API_ACCESS_KEY and realm_name in Settings.RGW_API_SECRET_KEY:  # noqa E501  # pylint: disable=line-too-long
+                access_key = Settings.RGW_API_ACCESS_KEY[realm_name]
+                secret_key = Settings.RGW_API_SECRET_KEY[realm_name]
+            else:
+                # If the realm exists but no credentials,
+                # fall back to default credentials
+                access_key = Settings.RGW_API_ACCESS_KEY['']
+                secret_key = Settings.RGW_API_SECRET_KEY['']
+
+        except KeyError as error:
+            raise DashboardException(
+                msg=f'Credentials not found for RGW Daemon: {error}',
+                http_status_code=404,
+                component='rgw'
+            )
         except TypeError:
-            # Legacy string values.
+            # Handle the legacy case where credentials are stored as
+            # plain strings (before realm-based storage)
             access_key = Settings.RGW_API_ACCESS_KEY
             secret_key = Settings.RGW_API_SECRET_KEY
-        except KeyError as error:
-            raise DashboardException(msg='Credentials not found for RGW Daemon: {}'.format(error),
-                                     http_status_code=404,
-                                     component='rgw')
 
-        return {'access_key': access_key, 'secret_key': secret_key}
+        return {
+            'access_key': access_key,
+            'secret_key': secret_key
+        }
 
     def _get_daemon_zone_info(self):  # type: () -> dict
         return json_str_to_object(self.proxy('GET', 'config?type=zone', None, None))
