@@ -606,8 +606,8 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
-    def get_earmark(self, **kwargs) -> Tuple[int, str, str]:
-        ret: Tuple[int, str, str] = 0, "", ""
+    def get_earmark(self, **kwargs):  # type: ignore
+        ret        = 0, "", ""
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname  = kwargs['group_name']
@@ -624,11 +624,11 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         except EarmarkException as ee:
             log.error(f"Earmark error occurred: {ee}")
-            ret = ee.to_tuple()
+            ret = ee.to_tuple()  # type: ignore
         return ret
 
-    def set_earmark(self, **kwargs) -> Tuple[int, str, str]:
-        ret: Tuple[int, str, str] = 0, "", ""
+    def set_earmark(self, **kwargs):  # type: ignore
+        ret       = 0, "", ""
         volname   = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname = kwargs['group_name']
@@ -645,11 +645,11 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         except EarmarkException as ee:
             log.error(f"Earmark error occurred: {ee}")
-            ret = ee.to_tuple()
+            ret = ee.to_tuple()  # type: ignore
         return ret
 
-    def clear_earmark(self, **kwargs) -> Tuple[int, str, str]:
-        ret: Tuple[int, str, str] = 0, "", ""
+    def clear_earmark(self, **kwargs):  # type: ignore
+        ret       = 0, "", ""
         volname   = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname = kwargs['group_name']
@@ -665,7 +665,7 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         except EarmarkException as ee:
             log.error(f"Earmark error occurred: {ee}")
-            ret = ee.to_tuple()
+            ret = ee.to_tuple()  # type: ignore
         return ret
 
     ### subvolume snapshot

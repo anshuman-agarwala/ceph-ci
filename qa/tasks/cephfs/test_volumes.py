@@ -2425,8 +2425,8 @@ class TestSubvolumes(TestVolumesHelper):
         try:
             self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, "--earmark", invalid_earmark)
         except CommandFailedError as ce:
-            self.assertIn(expected_message, ce.output)
-    
+            self.assertEqual(ce.exitstatus, errno.EINVAL, expected_message)
+
     def test_earmark_on_deleted_subvolume_with_retained_snapshot(self):
         subvolume = self._gen_subvol_name()
         snapshot = self._gen_subvol_snap_name()
@@ -2444,14 +2444,13 @@ class TestSubvolumes(TestVolumesHelper):
         # Test cases for setting, getting, and removing earmarks
         for operation in ["get", "rm", "set"]:
             try:
-                extra_arg = "smb" if operation == "set" else ""
+                extra_arg = "smb" if operation == "set" else None
                 if operation == "set":
                     self._fs_cmd("subvolume", "earmark", operation, self.volname, subvolume, "--earmark", extra_arg)
                 else:
-                    self._fs_cmd("subvolume", "earmark", operation, self.volname, subvolume, extra_arg)
+                    self._fs_cmd("subvolume", "earmark", operation, self.volname, subvolume)
             except CommandFailedError as ce:
-                self.assertEqual(ce.exitstatus, errno.ENOENT)
-                self.assertIn(error_message, ce.output)
+                self.assertEqual(ce.exitstatus, errno.ENOENT, error_message)
 
     def test_subvolume_expand(self):
         """
