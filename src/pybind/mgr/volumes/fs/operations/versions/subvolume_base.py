@@ -18,7 +18,7 @@ from ...exception import MetadataMgrException, VolumeException
 from .auth_metadata import AuthMetadataManager
 from .subvolume_attrs import SubvolumeStates
 
-from ceph.fs.earmarking import CephFSVolumeEarmarking  # type: ignore
+from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -198,7 +198,9 @@ class SubvolumeBase(object):
             fs_earmark = CephFSVolumeEarmarking(self.fs, pathname)
             attrs["earmark"] = fs_earmark.get_earmark()
         except cephfs.NoData:
-            attrs["earmark"] = None
+            attrs["earmark"] = ''
+        except EarmarkException:
+            attrs["earmark"] = ''
 
         return attrs
 
@@ -436,7 +438,9 @@ class SubvolumeBase(object):
             fs_earmark = CephFSVolumeEarmarking(self.fs, subvolpath)
             earmark = fs_earmark.get_earmark()
         except cephfs.NoData:
-            earmark = None
+            earmark = ''
+        except EarmarkException:
+            earmark = ''
 
         return {'path': subvolpath,
                 'type': etype.value,
