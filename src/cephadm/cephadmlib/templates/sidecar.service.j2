@@ -5,7 +5,6 @@ After=network-online.target local-fs.target time-sync.target
 Wants=network-online.target local-fs.target time-sync.target
 {%- if has_docker_engine %}
 After=docker.service
-Requires=docker.service
 {%- endif %}
 After={{ primary.service_name }}
 

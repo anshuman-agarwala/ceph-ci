@@ -8,9 +8,6 @@ Description=Ceph %i for {{fsid}}
 # configuration.
 After=network-online.target local-fs.target time-sync.target{% if has_docker_engine %} docker.service{% endif %}
 Wants=network-online.target local-fs.target time-sync.target
-{%- if has_docker_engine %}
-Requires=docker.service
-{%- endif %}
 
 PartOf=ceph-{{fsid}}.target
 Before=ceph-{{fsid}}.target
