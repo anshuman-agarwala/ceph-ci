@@ -30,6 +30,7 @@ Synopsis
 | **ceph-bluestore-tool** reshard --path *osd path* --sharding *new sharding* [ --sharding-ctrl *control string* ]
 | **ceph-bluestore-tool** show-sharding --path *osd path*
 | **ceph-bluestore-tool** trim --path *osd path*
+| **ceph-bluestore-tool** zap --path *osd path*
 
 
 Description
@@ -106,7 +107,10 @@ Commands
 
 :command:`show-label` --dev *device* [...]
 
-   Show device label(s).	   
+   Show device label(s). Label is a special 4K area that plays the role of superblock,
+   provides metadata that exposes version, creation time, size, etc.
+   There are multiple copies of the block at offsets: 0, 1G, 10G, 100G and 1000G.
+   As an exception, label can be printed even if an OSD is running.
 
 :command:`free-dump` --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
 
@@ -138,6 +142,10 @@ Commands
    This operation uses TRIM / discard to free unused blocks from BlueStore and BlueFS block devices,
    and allows the drive to perform more efficient internal housekeeping.
    If BlueStore runs with discard enabled, this option may not be useful.
+
+:command: `zap` --path *osd path*
+
+   Zeros all device label locations. This effectively makes device appear empty.
 
 Options
 =======
