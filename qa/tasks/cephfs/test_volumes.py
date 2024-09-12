@@ -4185,6 +4185,62 @@ class TestSubvolumes(TestVolumesHelper):
         # verify trash dir is clean.
         self._wait_for_trash_empty()
 
+    def test_subvolume_rm_when_cluster_is_full(self):
+        # create a subvolume
+        subvolname = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--mode=777")
+
+        pool_capacity = 32 * 1024 * 1024
+        # number of files required to fill up 99% of the pool
+        nr_files = int((pool_capacity * 0.99) / (TestVolumes.DEFAULT_FILE_SIZE * 1024 * 1024))
+
+        # do some IO
+        self._do_subvolume_io(subvolname, number_of_files=nr_files)
+
+        # add data pool
+        new_pool = "new_pool"
+        self.fs.add_data_pool(new_pool)
+
+        self.run_ceph_cmd("osd", "pool", "set-quota", new_pool,
+                          "max_bytes", f"{pool_capacity // 4}")
+        
+
+        # pool_capacity = self.fs.get_pool_df(self._data_pool_name())['max_avail']
+        # fill_mb = (self.pool_capacity // (1024 * 1024))
+
+        # osd_mon_report_interval = int(self.fs.get_config("osd_mon_report_interval", service_type='osd'))
+
+        # log.info("Writing {0}MB should fill this cluster".format(fill_mb))
+
+        # # Fill up the cluster.  This dd may or may not fail, as it depends on
+        # # how soon the cluster recognises its own fullness
+        # self.mount_a.write_n_mb("large_file_a", fill_mb // 2)
+        # try:
+        #     self.mount_a.write_n_mb("large_file_b", (fill_mb * 1.1) // 2)
+        # except CommandFailedError:
+        #     log.info("Writing file B failed (full status happened already)")
+        #     assert self.is_full()
+        # else:
+        #     log.info("Writing file B succeeded (full status will happen soon)")
+        #     self.wait_until_true(lambda: self.is_full(),
+        #                          timeout=osd_mon_report_interval * 120)
+
+        # Attempting to write more data should give me ENOSPC
+        # with self.assertRaises(CommandFailedError) as ar:
+        #     self.mount_a.write_n_mb("large_file_b", 50, seek=fill_mb // 2)
+        # self.assertEqual(ar.exception.exitstatus, 1)  # dd returns 1 on "No space"
+
+        # check subvolume exists
+        ret = self._fs_cmd("subvolume", "exist", self.volname)
+        self.assertEqual(ret.strip('\n'), "subvolume exists")
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+        
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+
 class TestSubvolumeGroupSnapshots(TestVolumesHelper):
     """Tests for FS subvolume group snapshot operations."""
     @unittest.skip("skipping subvolumegroup snapshot tests")
