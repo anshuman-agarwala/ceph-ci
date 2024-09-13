@@ -625,7 +625,7 @@ class VolumeClient(CephfsClient["Module"]):
         except EarmarkException as ee:
             log.error(f"Earmark error occurred: {ee}")
             ret = ee.to_tuple()  # type: ignore
-        return ret
+        return ret  # type: ignore
 
     def set_earmark(self, **kwargs):  # type: ignore
         ret       = 0, "", ""
