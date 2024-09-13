@@ -424,7 +424,7 @@ BackfillState::PrimaryScanning::react(ObjectPushed evt)
   LOG_PREFIX(BackfillState::PrimaryScanning::react::ObjectPushed);
   DEBUGDPP("PrimaryScanning::react() on ObjectPushed; evt.object={}",
     pg(), evt.object);
-  backfill_state().progress_tracker->complete_to(evt.object, evt.stat);
+  backfill_state().progress_tracker->complete_to(evt.object, evt.stat, true);
   return discard_event();
 }
 
@@ -521,7 +521,7 @@ BackfillState::ReplicasScanning::react(ObjectPushed evt)
   LOG_PREFIX(BackfillState::ReplicasScanning::react::ObjectPushed);
   DEBUGDPP("ReplicasScanning::react() on ObjectPushed; evt.object={}",
     pg(), evt.object);
-  backfill_state().progress_tracker->complete_to(evt.object, evt.stat);
+  backfill_state().progress_tracker->complete_to(evt.object, evt.stat, true);
   return discard_event();
 }
 
@@ -537,21 +537,14 @@ BackfillState::Waiting::react(ObjectPushed evt)
 {
   LOG_PREFIX(BackfillState::Waiting::react::ObjectPushed);
   DEBUGDPP("Waiting::react() on ObjectPushed; evt.object={}", pg(), evt.object);
-  backfill_state().progress_tracker->complete_to(evt.object, evt.stat);
-  if (!Enqueuing::all_enqueued(peering_state(),
-                               backfill_state().backfill_info,
-                               backfill_state().peer_backfill_info)) {
-    if (!backfill_state().next) {
-      return transit<Enqueuing>();
-    } else {
-      DEBUGDPP("backfill cancelled, not going Enqueuing", pg());
-      backfill_state().go_enqueuing_on_resume();
-    }
+  backfill_state().progress_tracker->complete_to(evt.object, evt.stat, false);
+  if (!backfill_state().next) {
+    return transit<Enqueuing>();
   } else {
-    // we still have something to wait on
-    logger().debug("Waiting::react() on ObjectPushed; still waiting");
+    DEBUGDPP("backfill cancelled, not going Enqueuing", pg());
+    backfill_state().go_enqueuing_on_resume();
+    return discard_event();
   }
-  return discard_event();
 }
 
 boost::statechart::result
@@ -621,7 +614,8 @@ void BackfillState::ProgressTracker::enqueue_drop(const hobject_t& obj)
 
 void BackfillState::ProgressTracker::complete_to(
   const hobject_t& obj,
-  const pg_stat_t& stats)
+  const pg_stat_t& stats,
+  bool may_push_to_max)
 {
   LOG_PREFIX(BackfillState::ProgressTracker::complete_to);
   DEBUGDPP("obj={}", pg(), obj);
@@ -642,7 +636,8 @@ void BackfillState::ProgressTracker::complete_to(
       soid,
       *item.stats);
   }
-  if (Enqueuing::all_enqueued(peering_state(),
+  if (may_push_to_max &&
+      Enqueuing::all_enqueued(peering_state(),
                               backfill_state().backfill_info,
                               backfill_state().peer_backfill_info) &&
       tracked_objects_completed()) {
