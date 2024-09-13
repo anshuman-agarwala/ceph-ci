@@ -19,7 +19,7 @@ supported top-level scopes.
 import errno
 import enum
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class EarmarkException(Exception):
         self.errno = error_code
         self.error_str = error_message
 
-    def to_tuple(self) -> tuple:
+    def to_tuple(self) -> Tuple[int, Optional[str], str]:
         return self.errno, "", self.error_str
 
     def __str__(self) -> str:

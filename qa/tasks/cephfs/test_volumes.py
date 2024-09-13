@@ -2346,7 +2346,7 @@ class TestSubvolumes(TestVolumesHelper):
 
         # verify the earmark
         get_earmark = self._fs_cmd("subvolume", "earmark", "get", self.volname, subvolume)
-        self.assertEqual(get_earmark, earmark)
+        self.assertEqual(get_earmark.rstrip('\n'), earmark)
     
     def test_subvolume_set_and_get_earmark(self):
         # create subvolume
@@ -2359,7 +2359,7 @@ class TestSubvolumes(TestVolumesHelper):
 
         # get earmark
         get_earmark = self._fs_cmd("subvolume", "earmark", "get", self.volname, subvolume)
-        self.assertEqual(get_earmark, earmark)
+        self.assertEqual(get_earmark.rstrip('\n'), earmark)
     
     def test_subvolume_clear_earmark(self):
         # create subvolume
@@ -2526,7 +2526,9 @@ class TestSubvolumes(TestVolumesHelper):
 
         # set earmark
         earmark = "smb.test"
-        self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, earmark)
+        self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, "--earmark", earmark)
+
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
 
         self.assertEqual(subvol_info["earmark"], earmark)
         

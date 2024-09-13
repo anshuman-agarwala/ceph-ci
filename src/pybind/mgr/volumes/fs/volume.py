@@ -606,8 +606,8 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
-    def get_earmark(self, **kwargs):  # type: ignore
-        ret        = 0, "", ""
+    def get_earmark(self, **kwargs) -> Tuple[int, Optional[str], str]:
+        ret: Tuple[int, Optional[str], str] = 0, "", ""
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname  = kwargs['group_name']
@@ -624,7 +624,7 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         except EarmarkException as ee:
             log.error(f"Earmark error occurred: {ee}")
-            ret = ee.to_tuple()  # type: ignore
+            ret = ee.to_tuple()
         return ret
 
     def set_earmark(self, **kwargs):  # type: ignore
