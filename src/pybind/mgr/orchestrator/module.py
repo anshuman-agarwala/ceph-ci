@@ -1542,6 +1542,7 @@ Usage:
     @_cli_write_command('orch daemon add nvmeof')
     def _nvmeof_add(self,
                     pool: str,
+                    group: str,
                     placement: Optional[str] = None,
                     inbuf: Optional[str] = None) -> HandleCommandResult:
         """Start nvmeof daemon(s)"""
@@ -1551,6 +1552,7 @@ Usage:
         spec = NvmeofServiceSpec(
             service_id='nvmeof',
             pool=pool,
+            group=group,
             placement=PlacementSpec.from_string(placement),
         )
         return self._daemon_add_misc(spec)
