@@ -1075,6 +1075,21 @@ def get_block_device_holders(sys_block: str = '/sys/block') -> Dict[str, Any]:
 
     return result
 
+def has_holders(device: str) -> bool:
+    """Check if a given device has any associated holders.
+
+    This function determines whether the specified device has associated holders
+    (e.g., other devices that depend on it) by checking if the device's real path
+    appears in the values of the dictionary returned by `get_block_device_holders`.
+
+    Args:
+        device (str): The path to the device (e.g., '/dev/sdX') to check.
+
+    Returns:
+        bool: True if the device has holders, False otherwise.
+    """
+    return os.path.realpath(device) in get_block_device_holders().values()
+
 def get_parent_device_from_mapper(mapper: str, abspath: bool = True) -> str:
     """Get the parent device corresponding to a given device mapper.
 
@@ -1128,4 +1143,4 @@ def get_lvm_mapper_path_from_dm(path: str, sys_block: str = '/sys/block') -> str
         with open(sys_block_path, 'r') as f:
             content: str = f.read()
             result = f'/dev/mapper/{content}'
-    return result
+    return result.strip()

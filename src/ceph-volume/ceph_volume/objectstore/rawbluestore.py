@@ -6,6 +6,7 @@ from ceph_volume import terminal, decorators, conf, process
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
+from ceph_volume.util.device import Device
 from ceph_volume.devices.lvm.common import rollback_osd
 from ceph_volume.devices.raw.list import direct_report
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -170,7 +171,18 @@ class RawBlueStore(BlueStore):
                     self.pre_activate_tpm2(device)
         found = direct_report(self.devices)
 
+        holders = disk.get_block_device_holders()
+        # for osd_uuid, meta in found.items():
+        #     realpath_device: str = os.path.realpath(meta['device'])
+        #     if realpath_device in disk.get_block_device_holders().keys():
+        #         parent_device: str = disk.get_block_device_holders()[realpath_device]
+        #         if any('ceph.cluster_fsid' in lv.lv_tags for lv in Device(parent_device).lvs):
+        #             continue
         for osd_uuid, meta in found.items():
+            realpath_device = os.path.realpath(meta['device'])
+            parent_device = holders.get(realpath_device)
+            if parent_device and any('ceph.cluster_fsid' in lv.lv_tags for lv in Device(parent_device).lvs):
+                continue
             osd_id = meta['osd_id']
             if self.osd_id is not None and str(osd_id) != str(self.osd_id):
                 continue

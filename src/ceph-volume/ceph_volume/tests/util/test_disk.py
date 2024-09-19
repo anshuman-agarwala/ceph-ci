@@ -43,6 +43,21 @@ class TestFunctions:
         with patch('builtins.open', mock_open(read_data='test--foo--vg-test--foo--lv')):
             assert disk.get_lvm_mapper_path_from_dm('/dev/dm-123') == '/dev/mapper/test--foo--vg-test--foo--lv'
 
+    @patch('ceph_volume.util.disk.get_block_device_holders', MagicMock(return_value={'/dev/dmcrypt-mapper-123': '/dev/sda'}))
+    @patch('os.path.realpath', MagicMock(return_value='/dev/sda'))
+    def test_has_holders_true(self):
+        assert disk.has_holders('/dev/sda')
+
+    @patch('ceph_volume.util.disk.get_block_device_holders', MagicMock(return_value={'/dev/dmcrypt-mapper-123': '/dev/sda'}))
+    @patch('os.path.realpath', MagicMock(return_value='/dev/sdb'))
+    def test_has_holders_false(self):
+        assert not disk.has_holders('/dev/sda')
+
+    @patch('ceph_volume.util.disk.get_block_device_holders', MagicMock(return_value={'/dev/dmcrypt-mapper-123': '/dev/sda'}))
+    @patch('os.path.realpath', MagicMock(return_value='/dev/foobar'))
+    def test_has_holders_device_does_not_exist(self):
+        assert not disk.has_holders('/dev/foobar')
+
 class TestLsblkParser(object):
 
     def test_parses_whitespace_values(self):
