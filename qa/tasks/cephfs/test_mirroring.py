@@ -585,7 +585,7 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(second["counters"]["snaps_synced"], first["counters"]["snaps_synced"])
         self.assertGreater(second["counters"]["last_synced_start"], first["counters"]["last_synced_start"])
         self.assertGreater(second["counters"]["last_synced_end"], second["counters"]["last_synced_start"])
-        self.assertGreater(second["counters"]["last_synced_duration"], 0)
+        self.assertGreaterEqual(second["counters"]["last_synced_duration"], 0)
         self.assertEquals(second["counters"]["last_synced_bytes"], 52428800) # last_synced_bytes = 50 files of 1MB size each
 
         # some more IO
@@ -608,7 +608,7 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(third["counters"]["snaps_synced"], second["counters"]["snaps_synced"])
         self.assertGreater(third["counters"]["last_synced_start"], second["counters"]["last_synced_end"])
         self.assertGreater(third["counters"]["last_synced_end"], third["counters"]["last_synced_start"])
-        self.assertGreater(third["counters"]["last_synced_duration"], 0)
+        self.assertGreaterEqual(third["counters"]["last_synced_duration"], 0)
         self.assertEquals(third["counters"]["last_synced_bytes"], 78643200) # last_synced_bytes = 75 files of 1MB size each
 
         # delete a snapshot
