@@ -412,7 +412,7 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
                         SelectECPool& spo,
                         SelectObjectSize& sos,
                         SelectNumThreads& snt,
-                        SelectSeqRange & ssr,
+                        SelectSeqRange& ssr,
                         ceph::util::random_number_generator<int>& rng,
                         ceph::mutex& lock,
                         ceph::condition_variable& cond,
@@ -424,20 +424,20 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
   if (dryrun) {
     verbose = true;
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(oid,
-                                        sbs.choose(),
-                                        rng());
+                                                                        sbs.choose(),
+                                                                        rng());
   } else {
     const std::string pool = spo.choose();
     int threads = snt.choose();
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(rados,
-                                    asio,
-                                    pool,
-                                    oid,
-                                    sbs.choose(),
-                                    rng(),
-                                    threads,
-                                    lock,
-                                    cond);
+                                                                    asio,
+                                                                    pool,
+                                                                    oid,
+                                                                    sbs.choose(),
+                                                                    rng(),
+                                                                    threads,
+                                                                    lock,
+                                                                    cond);
     dout(0) << "= " << oid << " pool=" << pool
             << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size()
