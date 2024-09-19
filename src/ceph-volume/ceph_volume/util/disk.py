@@ -1075,6 +1075,21 @@ def get_block_device_holders(sys_block: str = '/sys/block') -> Dict[str, Any]:
 
     return result
 
+def has_holders(device: str) -> bool:
+    """Check if a given device has any associated holders.
+
+    This function determines whether the specified device has associated holders
+    (e.g., other devices that depend on it) by checking if the device's real path
+    appears in the values of the dictionary returned by `get_block_device_holders`.
+
+    Args:
+        device (str): The path to the device (e.g., '/dev/sdX') to check.
+
+    Returns:
+        bool: True if the device has holders, False otherwise.
+    """
+    return os.path.realpath(device) in get_block_device_holders().values()
+
 def get_parent_device_from_mapper(mapper: str, abspath: bool = True) -> str:
     """Get the parent device corresponding to a given device mapper.
 
@@ -1128,4 +1143,61 @@ def get_lvm_mapper_path_from_dm(path: str, sys_block: str = '/sys/block') -> str
         with open(sys_block_path, 'r') as f:
             content: str = f.read()
             result = f'/dev/mapper/{content}'
-    return result
+    return result.strip()
+
+
+class BlockSysFs:
+    def __init__(self,
+                 path: str,
+                 sys_dev_block: str = '/sys/dev/block',
+                 sys_block: str = '/sys/block') -> None:
+        self.path: str = path
+        self.name: str = os.path.basename(os.path.realpath(self.path))
+        self.sys_dev_block: str = sys_dev_block
+        self.sys_block: str = sys_block
+        self.part_sysfs_path: str = self.get_sys_dev_block_path
+
+    @property
+    def is_partition(self) -> bool:
+        path: str = os.path.join(self.get_sys_dev_block_path, 'partition')
+        return os.path.exists(path)
+
+    @property
+    def holders(self) -> List[str]:
+        path: str = os.path.join(self.get_sys_dev_block_path, 'holders')
+        return os.listdir(path)
+
+    @property
+    def get_sys_dev_block_path(self) -> str:
+        path: str = ''
+        devices: List[str] = os.listdir(self.sys_dev_block)
+        for device in devices:
+            path = os.path.join(self.sys_dev_block, device)
+            if os.path.realpath(path).split('/')[-1:][0] == self.name:
+                return path
+
+    @property
+    def has_active_mappers(self) -> bool:
+        return len(self.active_mappers()) > 0
+
+    @property
+    def has_active_dmcrypt_mapper(self) -> bool:
+        return any(value.get('type') == 'CRYPT' for value in self.active_mappers().values())
+
+    def active_mappers(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+        for holder in self.holders:
+            path: str = os.path.join(self.sys_block, holder, 'dm/uuid')
+            if os.path.exists(path):
+                result[holder] = {}
+                with open(path, 'r') as f:
+                    content: str = f.read().strip().split('-', maxsplit=3)
+                    mapper_type: str = content[0]
+                    result[holder]['type'] = mapper_type
+                    if mapper_type == 'CRYPT':
+                        result[holder]['dmcrypt_type'] = content[1]
+                        result[holder]['dmcrypt_uuid'] = content[2]
+                        result[holder]['dmcrypt_mapping'] = content[3]
+                    if mapper_type == 'LVM':
+                        result[holder]['uuid'] = content[1]
+        return result
