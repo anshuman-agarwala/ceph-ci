@@ -16,6 +16,7 @@
 #include "NVMeofGwMon.h"
 #include "NVMeofGwMap.h"
 #include "OSDMonitor.h"
+#include "mon/health_check.h"
 
 using std::map;
 using std::make_pair;
@@ -81,6 +82,7 @@ int NVMeofGwMap::cfg_add_gw(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key)
 {
   std::set<NvmeAnaGrpId> allocated;
+  dout(1) << __func__ << " VALLARI_TEST: creating gateway " << dendl; 
   for (auto& itr: created_gws[group_key]) {
     allocated.insert(itr.second.ana_grp_id);
     if (itr.first == gw_id) {
@@ -151,6 +153,7 @@ int NVMeofGwMap::cfg_add_gw(
     dout(4) << "adding group " << elem << " to gw " << gw_id << dendl;
   }
   dout(10) << __func__ << " Created GWS:  " << created_gws  <<  dendl;
+  // check_health();
   return 0;
 }
 
@@ -872,6 +875,36 @@ struct CMonRequestProposal : public Context {
     }
   }
 };
+
+void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const 
+{
+  // where to call this function? 
+  // 1. NVMeofGwMap::cfg_add_gw
+  // 2. NVMeofGwMap::do_delete_gw
+  //
+  for (const auto& created_map_pair: created_gws) {
+    const auto& group_key = created_map_pair.first;
+    const NvmeGwMonStates& gw_created_map = created_map_pair.second;
+
+    // size_t gateway_count = gw_created_map.size();
+
+    dout(1) << "VALLARI_TEST: Group " << group_key << " has " <<  gw_created_map.size() << " gateways." << dendl;
+    
+    if ( gw_created_map.size() == 1) {
+      dout(1) << "VALLARI_TEST: only 1 gateway!! " << dendl;
+      
+      ostringstream ss;
+      ss << " VALLARI_TEST: nvmeof HA not possible with a single gateway";
+      auto& d = checks->add("NVMEOF_SINGLE_GATEWAY", HEALTH_WARN, ss.str(), 1);
+
+      CachedStackStringStream css;
+      *css << "some detailed advise - like create another gateway on a new host to fix this warning.";
+      d.detail.push_back(css->str());
+    }
+
+    // encode_health() // 
+  }
+}
 
 int NVMeofGwMap::blocklist_gw(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
