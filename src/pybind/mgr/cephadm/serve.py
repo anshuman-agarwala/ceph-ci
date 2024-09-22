@@ -480,6 +480,7 @@ class CephadmServe:
             if ((datetime_now() - t).total_seconds() < 60)
         }
         if self.mgr.warn_on_stray_hosts or self.mgr.warn_on_stray_daemons:
+            self.log.error('STRAY STRAY STRAY')
             ls = self.mgr.list_servers()
             self.log.debug(ls)
             managed_daemons = self.mgr.cache.get_daemons()
@@ -498,6 +499,8 @@ class CephadmServe:
                     daemon_id = s.get('id')
                     assert daemon_id
                     name = self._service_reference_name(s.get('type'), daemon_id)
+                    self.log.error(f'XXX - {s.get("type")}, {daemon_id}, {name}')
+                    self.log.error(f'YYY - {stray_filter(s.get("type"), daemon_id, name)}')
                     managed.extend(stray_filter(s.get('type'), daemon_id, name))
                     # Don't mark daemons we just created/removed in the last minute as stray.
                     # It may take some time for the mgr to become aware the daemon
@@ -508,6 +511,7 @@ class CephadmServe:
                         missing_names.append(name)
                         host_num_daemons += 1
                     if name not in managed:
+                        self.log.error(f'{name} marked stray')
                         daemon_detail.append(
                             'stray daemon %s on host %s not managed by cephadm' % (name, host))
                 if missing_names:
@@ -526,7 +530,9 @@ class CephadmServe:
             name = f'{service_type}.{daemon_id}'
             return name
 
+        self.log.error(f'AAA - {service_type} - {daemon_id}')
         metadata = self.mgr.get_metadata(service_type, daemon_id, {})
+        self.log.error(f'AAA - {metadata}')
         assert metadata is not None
         try:
             if service_type == 'rgw-nfs':

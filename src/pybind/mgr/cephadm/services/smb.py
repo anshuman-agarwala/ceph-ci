@@ -108,13 +108,16 @@ class SMBService(CephService):
         This is mainly needed when properly managed services spawn layered ceph
         services with different names (for example).
         """
+        logger.error(f'SMB STRAY CHECK - {service_type} - {daemon_id} - {name}')
         if service_type == 'ctdb':
             # in the future it would be good if the ctdb service registered
             # with a name/key we could associate with a cephadm deployed smb
             # service (or not). But for now we just suppress the stray service
             # warning for all ctdb lock helpers using the cluster
             logger.debug('ignoring possibly stray ctdb service: %s', name)
+            logger.error('True ctdb daemon')
             return True
+        logger.error('False ctdb daemon')
         return False
 
     def _allow_config_key_command(self, name: str) -> str:
