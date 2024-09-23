@@ -1539,7 +1539,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = NvmeofServiceSpec(
-            service_id='nvmeof',
+            service_id=f'{pool}.{group}' if group else pool,
             pool=pool,
             placement=PlacementSpec.from_string(placement),
         )
@@ -1816,7 +1816,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = NvmeofServiceSpec(
-            service_id=f'{pool}.{group}',
+            service_id=f'{pool}.{group}' if group else pool,
             pool=pool,
             group=group,
             placement=PlacementSpec.from_string(placement),
