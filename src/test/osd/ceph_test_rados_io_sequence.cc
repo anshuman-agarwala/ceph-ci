@@ -65,7 +65,7 @@ namespace {
 
     const std::string_view* pluginIt = std::find(
           ceph::io_sequence::tester::pluginChoices.begin(),
-          ceph::io_sequence::tester::pluginChoices.end(),
+          ceph::io_sequence::tester::pluginChoices.end(), 
           s
     );
     if(ceph::io_sequence::tester::pluginChoices.end() == pluginIt)
@@ -323,7 +323,7 @@ ceph::io_sequence::tester::SelectErasurePlugin::SelectErasurePlugin(
 
 
 ceph::io_sequence::tester::SelectErasureChunkSize::SelectErasureChunkSize(ceph::util::random_number_generator<int>& rng, po::variables_map vm)
-  : ProgramOptionSelector(rng, vm, "chunksize", true, false)
+  : ProgramOptionSelector(rng, vm, "stripe_unit", true, false)
 {
 }
 
@@ -485,8 +485,7 @@ bool ceph::io_sequence::tester::TestObject::next()
       } else {
         seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
                                                                 obj_size_range,
-                                                                seqseed.value_or(
-                                                                  rng()));
+                                                                seqseed.value_or(rng()));
         dout(0) << "== " << exerciser_model->get_oid() << " "
                 << curseq << " " << seq->get_name()
                 << " ==" <<dendl;
