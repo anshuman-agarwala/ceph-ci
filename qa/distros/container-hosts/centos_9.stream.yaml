@@ -5,7 +5,7 @@ overrides:
     allowlist:
       - scontext=system_u:system_r:logrotate_t:s0
       - scontext=system_u:system_r:getty_t:s0
-      - scontext=system_u:system_r:container_t:s0
+      - comm="ss" scontext=system_u:system_r:container_t:s0
 
 tasks:
 - pexec:
