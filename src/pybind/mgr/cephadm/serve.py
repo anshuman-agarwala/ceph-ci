@@ -526,13 +526,12 @@ class CephadmServe:
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
 
     def _service_reference_name(self, service_type: str, daemon_id: str) -> str:
+        self.log.error(f'AAA - {service_type} - {daemon_id}')
         if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
             name = f'{service_type}.{daemon_id}'
             return name
 
-        self.log.error(f'AAA - {service_type} - {daemon_id}')
         metadata = self.mgr.get_metadata(service_type, daemon_id, {})
-        self.log.error(f'AAA - {metadata}')
         assert metadata is not None
         try:
             if service_type == 'rgw-nfs':
@@ -556,6 +555,7 @@ class CephadmServe:
             for dd in managed
         }
         _services = [self.mgr.cephadm_services[dt] for dt in svcs]
+        self.log.error(f'Services to check for stray: {_services} !')
 
         def _filter(
             service_type: str, daemon_id: str, name: str
@@ -566,8 +566,11 @@ class CephadmServe:
                 # we assume that all tcmu-runner daemons are managed by cephadm
                 return [name]
             out = []
+            self.log.error(f'_filter to check for stray on services: {_services} !')
             for svc in _services:
+                self.log.error(f'RRR - Calling ignore stray for - {svc.TYPE}')
                 if svc.ignore_possible_stray(service_type, daemon_id, name):
+                    self.log.error(f'RRR - stray for - {svc.TYPE} - returned True')
                     out.append(name)
             return out
 

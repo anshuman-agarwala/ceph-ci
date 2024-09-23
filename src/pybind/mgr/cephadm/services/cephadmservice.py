@@ -572,6 +572,7 @@ class CephadmService(metaclass=ABCMeta):
         This is mainly needed when properly managed services spawn layered ceph
         services with different names (for example).
         """
+        logger.error(f'EEE - in default "ignore_possible_stray" for daemon: {name}')
         return False
 
 
