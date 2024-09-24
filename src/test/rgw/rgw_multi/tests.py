@@ -3638,4 +3638,5 @@ def test_copy_object_different_bucket():
         CopySource = source_bucket.name + '/' + objname)
     
     zonegroup_bucket_checkpoint(zonegroup_conns, dest_bucket.name)
+
     
