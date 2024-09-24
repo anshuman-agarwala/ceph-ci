@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
@@ -36,6 +37,7 @@ from ceph.deployment.service_spec import \
     HostPlacementSpec, IngressSpec, \
     TunedProfileSpec, IscsiServiceSpec, \
     MgmtGatewaySpec
+from ceph.deployment.utils import is_ipv6, unwrap_ipv6, wrap_ipv6
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -3253,18 +3255,33 @@ Then run the following:
 
     @handle_orch_error
     def set_prometheus_target(self, url: str) -> str:
+        try:
+            parsed_url = urlparse(url)
+            host = parsed_url.hostname
+            port = parsed_url.port
+            ipaddress.ip_address(host)
+            if port:
+                url = f"{host}:{port}"
+            else:
+                url = host
+        except ValueError as e:
+                return 'Invalid url. {}'.format(str(e))
+
         prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+
         if url not in prometheus_spec.targets:
             prometheus_spec.targets.append(url)
         else:
             return f"Target '{url}' already exists.\n"
-        if not prometheus_spec:
-            return "Service prometheus not found\n"
+
         daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('prometheus')
         spec = ServiceSpec.from_json(prometheus_spec.to_json())
         self.apply([spec], no_overwrite=False)
         for daemon in daemons:
             self.daemon_action(action='redeploy', daemon_name=daemon.daemon_name)
+
         return 'prometheus multi-cluster targets updated'
 
     @handle_orch_error
@@ -3298,6 +3315,14 @@ Then run the following:
         return {'user': user,
                 'password': password,
                 'certificate': self.cert_mgr.get_root_ca()}
+
+    @handle_orch_error
+    def get_security_config(self) -> Dict[str, bool]:
+        security_enabled, mgmt_gw_enabled, _ = self._get_security_config()
+        return {
+            'security_enabled': security_enabled,
+            'mgmt_gw_enabled': mgmt_gw_enabled
+        }
 
     @handle_orch_error
     def get_alertmanager_access_info(self) -> Dict[str, str]:
