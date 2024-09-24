@@ -876,7 +876,7 @@ struct CMonRequestProposal : public Context {
   }
 };
 
-void NVMeofGwMap::check_health(health_check_map_t *checks) const 
+void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const 
 {
   // where to call this function? 
   // 1. NVMeofGwMap::cfg_add_gw

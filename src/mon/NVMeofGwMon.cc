@@ -176,7 +176,7 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t)
 
   //health
   health_check_map_t checks;
-  pending_map.check_health(&checks);
+  pending_map.get_health_checks(&checks);
   encode_health(checks, t);
 }
 
