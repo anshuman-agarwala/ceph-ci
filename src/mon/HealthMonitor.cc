@@ -461,6 +461,7 @@ void HealthMonitor::gather_all_health_checks(health_check_map_t *all)
 {
   for (auto& svc : mon.paxos_service) {
     all->merge(svc->get_health_checks());
+    dout(1) << "VALLARI_TEST: gather_all_health_checks service_name: " << svc->service_name << dendl; 
   }
 }
 
@@ -475,6 +476,7 @@ health_status_t HealthMonitor::get_health_status(
   gather_all_health_checks(&all);
   health_status_t r = HEALTH_OK;
   for (auto& p : all.checks) {
+    dout(1) << "VALLARI_TEST all checks: " << p.second.severity << ": " << p.second.summary << dendl;
     if (!mutes.count(p.first)) {
       if (r > p.second.severity) {
 	r = p.second.severity;

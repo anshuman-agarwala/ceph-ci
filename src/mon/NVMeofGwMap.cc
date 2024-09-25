@@ -19,6 +19,8 @@
 #include "mon/health_check.h"
 
 using std::map;
+using std::list;
+using std::stringstream;
 using std::make_pair;
 using std::ostream;
 using std::ostringstream;
@@ -153,7 +155,6 @@ int NVMeofGwMap::cfg_add_gw(
     dout(4) << "adding group " << elem << " to gw " << gw_id << dendl;
   }
   dout(10) << __func__ << " Created GWS:  " << created_gws  <<  dendl;
-  // check_health();
   return 0;
 }
 
@@ -878,10 +879,6 @@ struct CMonRequestProposal : public Context {
 
 void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const 
 {
-  // where to call this function? 
-  // 1. NVMeofGwMap::cfg_add_gw
-  // 2. NVMeofGwMap::do_delete_gw
-  //
   for (const auto& created_map_pair: created_gws) {
     const auto& group_key = created_map_pair.first;
     const NvmeGwMonStates& gw_created_map = created_map_pair.second;
@@ -901,9 +898,33 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const
       *css << "some detailed advise - like create another gateway on a new host to fix this warning.";
       d.detail.push_back(css->str());
     }
-
-    // encode_health() // 
   }
+
+  // test1
+  ostringstream ss2;
+  ss2 << "VALLARI_TEST testwarn 1 ";
+  checks->add("NVMEOF_CLONE_TOO_FEW_OSDS", HEALTH_WARN, ss2.str(), 1); 
+
+  // test2
+  list<string> detail;
+  stringstream ss4;
+  ss4 << "testwarn 2 - application not enabled on pool";
+  detail.push_back(ss4.str());
+  ostringstream ss5;
+  ss5 << " pool(s) do not have an application enabled";
+  auto& d = checks->add("NVMEOF_CLONE_POOL_APP_NOT_ENABLED", HEALTH_WARN, ss5.str(),
+			    detail.size());
+  stringstream tip;
+  tip << "use 'ceph osd pool application enable <pool-name> "
+      << "<app-name>', where <app-name> is 'cephfs', 'rbd', 'rgw', "
+      << "or freeform for custom applications.";
+  detail.push_back(tip.str());
+  d.detail.swap(detail);
+
+  //test3
+  ostringstream ss3;
+  ss3 << "VALLARI_TEST testwarn 4 ";
+  checks->get_or_add("NVMEOF_CLONE_TOO_FEW_OSDS", HEALTH_WARN, ss3.str(), 1);  
 }
 
 int NVMeofGwMap::blocklist_gw(

@@ -16,6 +16,7 @@
 #include "NVMeofGwMon.h"
 #include "messages/MNVMeofGwBeacon.h"
 #include "messages/MNVMeofGwMap.h"
+#include "mon/health_check.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
@@ -177,6 +178,11 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t)
   //health
   health_check_map_t checks;
   pending_map.get_health_checks(&checks);
+  
+  // std::ostringstream ss2;
+  // ss2 << "VALLARI_TEST testwarn 3 ";
+  // &checks.add("NVMEOF_TEST", HEALTH_WARN, ss2.str(), 1); 
+
   encode_health(checks, t);
 }
 
