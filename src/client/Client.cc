@@ -10716,7 +10716,7 @@ void Client::C_Read_Finisher::finish_io(int r)
 {
   utime_t lat;
 
-  // Caller holds client_lock so we don't need to take it.
+  std::scoped_lock lock(clnt->client_lock);
 
   if (r >= 0) {
     if (is_read_async) {
@@ -10953,8 +10953,11 @@ retry:
       Context *iof = iofinish.release();
       crf.release();
 
-      if (rc < 0)
+      if (rc < 0) {
+        client_lock.unlock();
         iof->complete(rc);
+        client_lock.lock();
+      }
 
       // allow caller to wait on onfinish...
       return 0;
@@ -11403,6 +11406,8 @@ void Client::C_Write_Finisher::finish_io(int r)
 {
   bool fini;
 
+  std::scoped_lock lock(clnt->client_lock);
+
   clnt->put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
   if (r >= 0) {
@@ -11437,6 +11442,8 @@ void Client::C_Write_Finisher::finish_fsync(int r)
 {
   bool fini;
   client_t const whoami = clnt->whoami;  // For the benefit of ldout prefix
+
+  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
 
   ldout(clnt->cct, 3) << "finish_fsync r = " << r << dendl;
 
@@ -11668,7 +11675,9 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
       if (r < 0) {
         // should not get here, but...
+        client_lock.unlock();
         iof->complete(r);
+        client_lock.lock();
       }
 
       if (nullptr != onuninline) {
