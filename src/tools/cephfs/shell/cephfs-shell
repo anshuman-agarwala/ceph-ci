@@ -1768,6 +1768,7 @@ def manage_args():
     args.exe_and_quit = False    # Execute and quit, don't launch the shell.
 
     if args.batch:
+        poutput('{} and {} is the version of cmd2'.format(cmd2_version, Version(cmd2_version)))
         if Version(cmd2_version) <= Version("0.9.13"):
             args.commands = ['load ' + args.batch, ',quit']
         else:
