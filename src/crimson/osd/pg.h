@@ -645,6 +645,55 @@ private:
     }
   } background_process_lock;
 
+  using run_executer_ertr = crimson::compound_errorator_t<
+    OpsExecuter::osd_op_errorator,
+    crimson::errorator<
+      crimson::ct_error::edquot,
+      crimson::ct_error::eagain,
+      crimson::ct_error::enospc
+      >
+    >;
+  using run_executer_iertr = crimson::interruptible::interruptible_errorator<
+    ::crimson::osd::IOInterruptCondition,
+    run_executer_ertr>;
+  using run_executer_fut = run_executer_iertr::future<>;
+  run_executer_fut run_executer(
+    seastar::lw_shared_ptr<OpsExecuter> ox,
+    ObjectContextRef obc,
+    const OpInfo &op_info,
+    std::vector<OSDOp>& ops);
+
+  using submit_executer_ret = std::tuple<
+    interruptible_future<>,
+    interruptible_future<>>;
+  using submit_executer_fut = interruptible_future<
+    submit_executer_ret>;
+  submit_executer_fut submit_executer(
+    seastar::lw_shared_ptr<OpsExecuter> ox,
+    const std::vector<OSDOp>& ops) {
+    LOG_PREFIX(PG::submit_executer);
+    // transaction must commit at this point
+    co_return co_await std::move(
+      *ox
+    ).flush_changes_n_do_ops_effects(
+      ops,
+      snap_mapper,
+      osdriver,
+      [FNAME, this](auto&& txn,
+		    auto&& obc,
+		    auto&& osd_op_p,
+		    auto&& log_entries) {
+	SUBDEBUGDPP(osd, "object {} submitting txn", *this, obc->get_oid());
+	mutate_object(obc, txn, osd_op_p);
+	return submit_transaction(
+	  std::move(obc),
+	  std::move(txn),
+	  std::move(osd_op_p),
+	  std::move(log_entries));
+      });
+  }
+  
+
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
   using do_osd_ops_iertr =
