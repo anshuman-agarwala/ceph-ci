@@ -11403,6 +11403,12 @@ void Client::C_Write_Finisher::finish_io(int r)
 {
   bool fini;
 
+  // The objectcacher takes care of locking 'client_lock' before calling finish_io but not filer
+  // So lock only in case of filer write
+  std::unique_lock cl(clnt->client_lock, std::defer_lock);
+  if (!is_file_write)
+    cl.lock();
+
   clnt->put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
   if (r >= 0) {
@@ -11418,6 +11424,9 @@ void Client::C_Write_Finisher::finish_io(int r)
   iofinished = true;
   iofinished_r = r;
   fini = try_complete();
+
+  if (!is_file_write)
+    cl.unlock();
 
   if (fini)
     delete this;
@@ -11437,6 +11446,8 @@ void Client::C_Write_Finisher::finish_fsync(int r)
 {
   bool fini;
   client_t const whoami = clnt->whoami;  // For the benefit of ldout prefix
+
+  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
 
   ldout(clnt->cct, 3) << "finish_fsync r = " << r << dendl;
 
