@@ -115,12 +115,31 @@ ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
 {
   LOG_PREFIX(ClientRequest::reply_op_error);
   DEBUGDPP("{}: replying with error {}", *pg, *this, err);
+
   auto reply = crimson::make_message<MOSDOpReply>(
-    m.get(), err, pg->get_osdmap_epoch(),
-    m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
-    !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
-  reply->set_reply_versions(eversion_t(), 0);
-  reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
+    m.get(), err, pg->get_osdmap_epoch(), 0, false);
+
+  if (!m->ops.empty() && m->ops.back().op.flags & CEPH_OSD_OP_FLAG_FAILOK) {
+    reply->set_result(0);
+  }
+
+  // For all ops except for CMPEXT, the correct error value is encoded
+  // in e. For CMPEXT, osdop.rval has the actual error value.
+  if (err == -ct_error::cmp_fail_error_value) {
+    assert(!m->ops.empty());
+    for (auto &osdop : m->ops) {
+      if (osdop.rval < 0) {
+        reply->set_result(osdop.rval);
+        break;
+      }
+    }
+  }
+
+  reply->set_enoent_reply_versions(
+    pg->peering_state.get_info().last_update,
+    pg->peering_state.get_info().last_user_version);
+  reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+
   // TODO: gate the crosscore sending
   return interruptor::make_interruptible(
     get_foreign_connection().send_with_throttling(std::move(reply))
