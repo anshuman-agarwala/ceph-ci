@@ -405,7 +405,7 @@ class CephFSShell(Cmd):
 
     def default(self, line):
         self.exit_code = 127
-        perror('Unrecognized command')
+        perror('{} and {} Unrecognized command'.format(cmd2_version, Version(cmd2_version)))
 
     def set_prompt(self):
         self.prompt = ('\033[01;33mCephFS:~' + colorama.Fore.LIGHTCYAN_EX
