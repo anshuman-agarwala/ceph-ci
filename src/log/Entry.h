@@ -4,15 +4,19 @@
 #ifndef __CEPH_LOG_ENTRY_H
 #define __CEPH_LOG_ENTRY_H
 
+#include "include/compat.h"
+
 #include "log/LogClock.h"
 
 #include "common/StackStringStream.h"
+#include "common/Thread.h"
 
 #include "boost/container/small_vector.hpp"
 
 #include <pthread.h>
 
 #include <string_view>
+
 
 namespace ceph {
 namespace logging {
@@ -27,7 +31,9 @@ public:
     m_thread(pthread_self()),
     m_prio(pr),
     m_subsys(sub)
-  {}
+  {
+    strncpy(m_thread_name, Thread::get_thread_name().data(), 16);
+  }
   Entry(const Entry &) = default;
   Entry& operator=(const Entry &) = default;
   Entry(Entry &&e) = default;
@@ -40,6 +46,7 @@ public:
   time m_stamp;
   pthread_t m_thread;
   short m_prio, m_subsys;
+  char m_thread_name[16];
 
   static log_clock& clock() {
     static log_clock clock;
