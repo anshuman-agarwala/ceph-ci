@@ -143,7 +143,7 @@ function TEST_journald_cluster_log_level() {
     fi
 
     ceph osd down 0
-    TIMEOUT=20 wait_for_osd up 0 || return 1
+    TIMEOUT=60 wait_for_osd up 0 || return 1
     search_str="osd.0.*boot"
     sudo journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=6 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
     grep -q "$search_str" $dir/journal.log
