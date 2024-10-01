@@ -502,6 +502,7 @@ class CephadmServe:
                     # Don't mark daemons we just created/removed in the last minute as stray.
                     # It may take some time for the mgr to become aware the daemon
                     # had been created/removed.
+                    self.log.debug("managed daemons %s", managed)  # Added temporarily
                     if name in self.mgr.recently_altered_daemons:
                         continue
                     if host not in self.mgr.inventory:
@@ -522,7 +523,7 @@ class CephadmServe:
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
 
     def _service_reference_name(self, service_type: str, daemon_id: str) -> str:
-        if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
+        if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs', 'ctdb']:
             name = f'{service_type}.{daemon_id}'
             return name
 
