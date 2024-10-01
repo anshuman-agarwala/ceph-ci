@@ -51,29 +51,23 @@ namespace ceph {
 
       void allow_ec_overwrites(bool allow);
 
+      template <int N>
       class AsyncOpInfo {
       public:
         librados::ObjectReadOperation rop;
         librados::ObjectWriteOperation wop;
-        ceph::buffer::list bl1;
-        ceph::buffer::list bl2;
-        ceph::buffer::list bl3;
-        uint64_t offset1;
-        uint64_t length1;
-        uint64_t offset2;
-        uint64_t length2;
-        uint64_t offset3;
-        uint64_t length3;
+        std::array<ceph::bufferlist, N> bufferlist;
+        std::array<uint64_t, N> offset;
+        std::array<uint64_t, N> length;
 
-        AsyncOpInfo(uint64_t offset1 = 0, uint64_t length1 = 0,
-                uint64_t offset2 = 0, uint64_t length2 = 0,
-                uint64_t offset3 = 0, uint64_t length3 = 0 );
+        AsyncOpInfo(std::array<uint64_t, N> offset = {},
+                    std::array<uint64_t, N> length = {});
         ~AsyncOpInfo() = default;
       };
 
       // Must be called with lock held
       bool readyForIoOp(IoOp& op);
-      
+
       void applyIoOp(IoOp& op);
     };
   }

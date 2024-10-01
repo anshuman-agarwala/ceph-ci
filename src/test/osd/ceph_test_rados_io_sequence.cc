@@ -475,7 +475,7 @@ bool ceph::io_sequence::tester::TestObject::next()
               << op->to_string(exerciser_model->get_block_size()) << dendl;
     }
     exerciser_model->applyIoOp(*op);
-    if (op->done()) {
+    if (op->getOpType() == ceph::io_exerciser::OpType::Done) {
       ++curseq;
       if (curseq == seq_range.second) {
         done = true;
@@ -644,22 +644,22 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test()
   while (!done) {
     const std::string op = get_token();
     if (!op.compare("done")  || !op.compare("q") || !op.compare("quit")) {
-      ioop = ceph::io_exerciser::IoOp::generate_done();
+      ioop = ceph::io_exerciser::DoneOp::generate();
     } else if (!op.compare("create")) {
-      ioop = ceph::io_exerciser::IoOp::generate_create(get_numeric_token());
+      ioop = ceph::io_exerciser::CreateOp::generate(get_numeric_token());
     } else if (!op.compare("remove") || !op.compare("delete")) {
-      ioop = ceph::io_exerciser::IoOp::generate_remove();
+      ioop = ceph::io_exerciser::RemoveOp::generate();
     } else if (!op.compare("read")) {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_read(offset, length);
+      ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length);
     } else if (!op.compare("read2")) {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
       uint64_t offset2 = get_numeric_token();
       uint64_t length2 = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_read2(offset1, length1,
-                                                      offset2, length2);
+      ioop = ceph::io_exerciser::DoubleReadOp::generate(offset1, length1,
+                                                        offset2, length2);
     } else if (!op.compare("read3")) {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
@@ -667,20 +667,20 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test()
       uint64_t length2 = get_numeric_token();
       uint64_t offset3 = get_numeric_token();
       uint64_t length3 = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_read3(offset1, length1,
-                                                      offset2, length2,
-				                      offset3, length3);
+      ioop = ceph::io_exerciser::TripleReadOp::generate(offset1, length1,
+                                                        offset2, length2,
+                                                        offset3, length3);
     } else if (!op.compare("write")) {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_write(offset, length);
+      ioop = ceph::io_exerciser::SingleWriteOp::generate(offset, length);
     } else if (!op.compare("write2")) {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
       uint64_t offset2 = get_numeric_token();
       uint64_t length2 = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_write2(offset1, length1,
-                                                       offset2, length2);
+      ioop = ceph::io_exerciser::DoubleWriteOp::generate(offset1, length1,
+                                                        offset2, length2);
     } else if (!op.compare("write3")) {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
@@ -688,17 +688,17 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test()
       uint64_t length2 = get_numeric_token();
       uint64_t offset3 = get_numeric_token();
       uint64_t length3 = get_numeric_token();
-      ioop = ceph::io_exerciser::IoOp::generate_write3(offset1, length1,
-                                                       offset2, length2,
-				                       offset3, length3);
+      ioop = ceph::io_exerciser::TripleWriteOp::generate(offset1, length1,
+                                                         offset2, length2,
+                                                         offset3, length3);
     } else {
       throw std::runtime_error("Invalid operation "+op);
     }
     dout(0) << ioop->to_string(model->get_block_size()) << dendl;
     model->applyIoOp(*ioop);
-    done = ioop->done();
+    done = ioop->getOpType() == ceph::io_exerciser::OpType::Done;
     if (!done) {
-      ioop = ceph::io_exerciser::IoOp::generate_barrier();
+      ioop = ceph::io_exerciser::BarrierOp::generate();
       model->applyIoOp(*ioop);
     }
   }
