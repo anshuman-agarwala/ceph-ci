@@ -658,7 +658,7 @@ private:
     run_executer_ertr>;
   using run_executer_fut = run_executer_iertr::future<>;
   run_executer_fut run_executer(
-    seastar::lw_shared_ptr<OpsExecuter> ox,
+    OpsExecuter &ox,
     ObjectContextRef obc,
     const OpInfo &op_info,
     std::vector<OSDOp>& ops);
@@ -669,12 +669,12 @@ private:
   using submit_executer_fut = interruptible_future<
     submit_executer_ret>;
   submit_executer_fut submit_executer(
-    seastar::lw_shared_ptr<OpsExecuter> ox,
+    OpsExecuter &&ox,
     const std::vector<OSDOp>& ops) {
     LOG_PREFIX(PG::submit_executer);
     // transaction must commit at this point
     co_return co_await std::move(
-      *ox
+      ox
     ).flush_changes_n_do_ops_effects(
       ops,
       snap_mapper,
