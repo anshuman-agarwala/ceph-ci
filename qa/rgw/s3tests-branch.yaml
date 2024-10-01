@@ -1,4 +1,4 @@
 overrides:
   s3tests:
-    force-branch: ceph-master
-    # git_remote: https://github.com/ceph/
+    force-branch: v2-presigned-get
+    git_remote: https://github.com/tobias-urdin/
