@@ -46,7 +46,7 @@ static inline seastar::log_level to_log_level(int level) {
 #define SET_SUBSYS(subname_) static constexpr auto SOURCE_SUBSYS = ceph_subsys_##subname_
 #define LOCAL_LOGGER crimson::get_logger(SOURCE_SUBSYS)
 #define LOGGER(subname_) crimson::get_logger(ceph_subsys_##subname_)
-#define LOG_PREFIX(x) constexpr auto FNAME = #x
+#define LOG_PREFIX(x) constexpr auto FNAME = #x;
 
 #define LOG(level_, MSG, ...) \
   LOCAL_LOGGER.log(level_, "{}: " MSG, FNAME , ##__VA_ARGS__)
