@@ -130,6 +130,8 @@ class Store {
   /// the collection (i.e. - the PG store) in which the errors are stored
   const coll_t coll;
 
+  scrub_level_t current_level;
+
   /**
    * the machinery (backend details, cache, etc.) for storing both levels
    * of errors (note: 'optional' to allow delayed creation w/o dynamic
@@ -169,5 +171,14 @@ class Store {
       hobject_t obj,
       ExpCacherPosData& latest_sh,
       ExpCacherPosData& latest_dp) const;
+
+  /**
+   * an aux used by merge_encoded_error_wrappers() to filter only relevant
+   * errors.
+   */
+  bufferlist shallow_filtered_copy(
+      const inconsistent_obj_wrapper& obj,
+      uint64_t obj_err_mask,
+      uint64_t shard_err_mask) const;
 };
 }  // namespace Scrub
