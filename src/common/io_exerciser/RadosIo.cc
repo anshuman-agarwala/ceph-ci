@@ -148,9 +148,13 @@ void RadosIo::applyIoOp(IoOp &op)
       op_info->rop.read(op.offset1 * block_size,
                         op.length1 * block_size,
                         &op_info->bl1, nullptr);
-      auto read_cb = [this, op_info] (boost::system::error_code ec, bufferlist bl) {
+      auto read_cb = [this, op_info] (boost::system::error_code ec,
+                                      version_t ver,
+                                      bufferlist bl) {
         ceph_assert(ec == boost::system::errc::success);
-        db->validate(op_info->bl1, op_info->offset1, op_info->length1);
+        ceph_assert(db->validate(op_info->bl1,
+                                 op_info->offset1,
+                                 op_info->length1));
         finish_io();
       };
       librados::async_operate(asio, io, oid,
@@ -176,8 +180,12 @@ void RadosIo::applyIoOp(IoOp &op)
       auto read2_cb = [this, op_info] (boost::system::error_code ec,
                                        bufferlist bl) {
         ceph_assert(ec == boost::system::errc::success);
-        db->validate(op_info->bl1, op_info->offset1, op_info->length1);
-        db->validate(op_info->bl2, op_info->offset2, op_info->length2);
+        ceph_assert(db->validate(op_info->bl1,
+                                 op_info->offset1,
+                                 op_info->length1));
+        ceph_assert(db->validate(op_info->bl2,
+                                 op_info->offset2,
+                                 op_info->length2));
         finish_io();
       };
       librados::async_operate(asio, io, oid,
@@ -204,9 +212,15 @@ void RadosIo::applyIoOp(IoOp &op)
       auto read3_cb = [this, op_info] (boost::system::error_code ec,
                                        bufferlist bl) {
         ceph_assert(ec == boost::system::errc::success);
-        db->validate(op_info->bl1, op_info->offset1, op_info->length1);
-        db->validate(op_info->bl2, op_info->offset2, op_info->length2);
-        db->validate(op_info->bl3, op_info->offset3, op_info->length3);
+        ceph_assert(db->validate(op_info->bl1,
+                                 op_info->offset1,
+                                 op_info->length1));
+        ceph_assert(db->validate(op_info->bl2,
+                                 op_info->offset2,
+                                 op_info->length2));
+        ceph_assert(db->validate(op_info->bl3,
+                                 op_info->offset3,
+                                 op_info->length3));
         finish_io();
       };
       librados::async_operate(asio, io, oid,
