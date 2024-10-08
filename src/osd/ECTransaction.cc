@@ -620,6 +620,9 @@ void ECTransaction::generate_transactions(
 
         for (auto &&[shard, eset] : cloneable_range) {
           eset.intersection_of(plan.will_write[shard]);
+
+          // First write to this shard
+entry->written_shards.insert(st.first);
           for (auto &[start, len] : eset) {
             if (start < restore_from) restore_from = start;
             if(start + len > restore_end) restore_end = start + len;
