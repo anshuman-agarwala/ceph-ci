@@ -539,11 +539,14 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
     if (res.r != 0)
       goto out;
     ceph_assert(res.errors.empty());
-
+#if DEBUG_EC_BUFFERS
+    dout(0) << __func__ << "before decode: " << res.buffers_read.debug_string(2048, 8) << dendl;
+#endif
     /* Decode any missing buffers */
     res.buffers_read.decode(read_pipeline.ec_impl, req.shard_want_to_read);
+
 #if DEBUG_EC_BUFFERS
-    dout(0) << __func__ << " " << res.buffers_read.debug_string(2048, 8) << dendl;
+    dout(0) << __func__ << "after decode: " << res.buffers_read.debug_string(2048, 8) << dendl;
 #endif
 
     for (auto &&read: req.to_read) {

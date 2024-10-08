@@ -526,6 +526,11 @@ namespace ECUtil {
         ceph_assert(chunk_buffers[shard].length() == length);
         chunk_buffers[shard].rebuild_aligned_size_and_memory(sinfo->get_chunk_size(), SIMD_ALIGN);
 
+        // The above can replace the buffer, which will not make it back into
+        // the extent map, so re-insert this buffer back into the original
+        // extent map. We can probably optimise this out much of the time.
+        extent_maps[shard].insert(offset, length, chunk_buffers[shard]);
+
         if (raw_shard >= sinfo->get_k()) {
           shards.insert(raw_shard); // FIXME: Why raw shards??? Needs fix or comment.
         }
@@ -578,7 +583,6 @@ namespace ECUtil {
         std::map<int, bufferlist> decoded;
 
         want_to_read.insert(shard);
-        zero_pad(offset, length);
         auto s = slice(offset, length);
 
         for (auto &&[_, bl] : s) {
@@ -650,13 +654,6 @@ namespace ECUtil {
       bufferlist zeros;
       zeros.append_zero(z_len);
       insert_in_shard(shard, z_off, zeros);
-    }
-  }
-
-  void shard_extent_map_t::zero_pad(uint64_t offset, uint64_t length) {
-    for (int i=0; i < sinfo->get_k_plus_m(); i++) {
-      int shard = sinfo->get_shard(i);
-      zero_pad(shard, offset, length);
     }
   }
 
