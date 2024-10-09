@@ -424,7 +424,20 @@ void NVMeofGwMap::find_failback_gw(
   auto& gws_states = created_gws[group_key];
   auto& gw_state = created_gws[group_key][gw_id];
   bool do_failback = false;
-
+  /*//only if this GW has listeners need to do failback to it
+  bool listener_found = false;
+  for (auto &subs: gw_state.subsystems) {
+    if (subs.listeners.size()) {
+      listener_found = true;
+      break;
+    }
+  }
+  if (!listener_found) {
+    dout(10) <<
+      "GW has no listeners configured, failback to it is not allowed "
+       << gw_id << dendl;
+    return;
+  }*/
   dout(10) << "Find failback GW for GW " << gw_id << dendl;
   for (auto& gw_state_it: gws_states) {
     auto& st = gw_state_it.second;
