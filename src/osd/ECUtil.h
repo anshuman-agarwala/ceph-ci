@@ -16,12 +16,18 @@
 #define ECUTIL_H
 
 #include <ostream>
+#include <opentelemetry/ext/http/client/http_client.h>
+
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer_fwd.h"
 #include "include/ceph_assert.h"
 #include "include/encoding.h"
 #include "common/Formatter.h"
 #include "ExtentCache.h"
+
+// Setting to 1 turns on very large amounts of level 0 debug containing the
+// contents of buffers. Even on level 20 this is not really wanted.
+#define DEBUG_EC_BUFFERS 1
 
 namespace ECUtil {
   class shard_extent_map_t;
@@ -76,6 +82,15 @@ public:
       chunk_mapping_reverse(reverse_chunk_mapping(_chunk_mapping, k + m))
   {
     ceph_assert(stripe_width % k == 0);
+  }
+  bool ro_offset_to_shard_offset(uint64_t ro_offset, int shard) const
+  {
+    uint64_t full_stripes = (ro_offset / stripe_width) * chunk_size;
+    int offset_shard = (ro_offset / chunk_size) % k;
+
+    if (shard == offset_shard) return full_stripes + ro_offset % chunk_size;
+    if (shard < offset_shard) return full_stripes + chunk_size;
+    return full_stripes;
   }
   bool logical_offset_is_stripe_aligned(uint64_t logical) const {
     return (logical % stripe_width) == 0;
@@ -219,6 +234,17 @@ public:
   }
 };
 
+inline uint64_t page_mask() {
+  static const uint64_t page_mask = ((uint64_t)CEPH_PAGE_SIZE) - 1;
+  return page_mask;
+}
+inline uint64_t align_page_next(uint64_t val) {
+  return (val + page_mask()) & ~page_mask();
+}
+inline uint64_t align_page_prev(uint64_t val) {
+  return val & ~page_mask();
+}
+
 int decode(
   ErasureCodeInterfaceRef &ec_impl,
   const std::list<std::set<int>> want_to_read,
@@ -249,9 +275,6 @@ int encode(
 class HashInfo {
   uint64_t total_chunk_size = 0;
   std::vector<uint32_t> cumulative_shard_hashes;
-
-  // purely ephemeral, represents the size once all in-flight ops commit
-  uint64_t projected_total_chunk_size = 0;
 public:
   HashInfo() {}
   explicit HashInfo(unsigned num_chunks) :
@@ -274,23 +297,9 @@ public:
   uint64_t get_total_chunk_size() const {
     return total_chunk_size;
   }
-  uint64_t get_projected_total_chunk_size() const {
-    return projected_total_chunk_size;
-  }
   uint64_t get_total_logical_size(const stripe_info_t &sinfo) const {
     return get_total_chunk_size() *
       (sinfo.get_stripe_width()/sinfo.get_chunk_size());
-  }
-  uint64_t get_projected_total_logical_size(const stripe_info_t &sinfo) const {
-    return get_projected_total_chunk_size() *
-      (sinfo.get_stripe_width()/sinfo.get_chunk_size());
-  }
-  void set_projected_total_logical_size(
-    const stripe_info_t &sinfo,
-    uint64_t logical_size) {
-    ceph_assert(sinfo.logical_offset_is_stripe_aligned(logical_size));
-    projected_total_chunk_size = sinfo.aligned_logical_offset_to_chunk_offset(
-      logical_size);
   }
   void set_total_chunk_size_clear_hash(uint64_t new_chunk_size) {
     cumulative_shard_hashes.clear();
@@ -300,9 +309,7 @@ public:
     return !cumulative_shard_hashes.empty();
   }
   void update_to(const HashInfo &rhs) {
-    auto ptcs = projected_total_chunk_size;
     *this = rhs;
-    projected_total_chunk_size = ptcs;
   }
   friend std::ostream& operator<<(std::ostream& out, const HashInfo& hi);
 };
@@ -422,10 +429,27 @@ public:
   void append_zeros_to_ro_offset( uint64_t ro_offset );
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
-  int encode(ErasureCodeInterfaceRef& ecimpl, HashInfoRef &hinfo, uint64_t before_ro_size);
-  void get_buffer(int shard, int offset, int length, buffer::list &append_to);
+  int encode(ErasureCodeInterfaceRef& ecimpl, const HashInfoRef &hinfo, uint64_t before_ro_size);
+  void decode(ErasureCodeInterfaceRef& ecimpl, std::map<int, extent_set> want);
+  void get_buffer(int shard, uint64_t offset, uint64_t length, buffer::list &append_to, bool zero_pad);
+  bufferlist get_ro_buffer(uint64_t ro_offset, uint64_t ro_length);
   std::map <int, extent_set> get_extent_set_map();
   void insert_parity_buffers();
+  void erase_shard(int shard);
+  std::map<int, bufferlist> slice(int offset, int length);
+  std::string debug_string(uint64_t inteval, uint64_t offset);
+
+  void assert_buffer_contents_equal(shard_extent_map_t other) const
+  {
+    for (auto &&[shard, emap]: extent_maps) {
+      for (auto &&i : emap) {
+        bufferlist bl = i.get_val();
+        bufferlist otherbl;
+        other.get_buffer(shard, i.get_off(), i.get_len(), otherbl, false);
+        ceph_assert(bl.contents_equal(otherbl));
+      }
+    }
+  }
 
   friend std::ostream& operator<<(std::ostream& lhs, const shard_extent_map_t& rhs);
 };

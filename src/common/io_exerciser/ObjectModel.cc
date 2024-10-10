@@ -140,7 +140,9 @@ void ObjectModel::applyIoOp(IoOp& op)
     ceph_assert(!reads.intersects(op.offset1, op.length1));
     ceph_assert(!writes.intersects(op.offset1, op.length1));
     writes.union_insert(op.offset1, op.length1);
-    ceph_assert(op.offset1 + op.length1 <= contents.size());
+    if (op.offset1 + op.length1 > contents.size()) {
+      contents.resize(op.offset1 + op.length1);
+    }
     std::generate(std::execution::seq,
                   std::next(contents.begin(), op.offset1),
                   std::next(contents.begin(), op.offset1 + op.length1),
