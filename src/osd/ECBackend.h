@@ -145,6 +145,17 @@ public:
     bool fast_read,
     GenContextURef<ECCommon::ec_extents_t &&> &&func) override;
 
+  /**
+   * Async read mechanism for read-modify-write (RMW) code paths. Here wthe
+   * client already knows the set of shard reads that are required, so these
+   * can be passed in directly.  The "fast_read" mechanism is not needed.
+   *
+   * Otherwise this is the same as objects_read_and_reconstruct.
+   */
+  void objects_read_and_reconstruct_for_rmw(
+    const std::map<hobject_t, std::map<int, extent_set>> &reads,
+    GenContextURef<ECCommon::ec_extents_t &&> &&func) override;
+
   void objects_read_async(
     const hobject_t &hoid,
     const std::list<std::pair<ECCommon::ec_align_t,
@@ -284,7 +295,7 @@ public:
     RecoveryMessages *m);
   void handle_recovery_read_complete(
     const hobject_t &hoid,
-    std::map<int, extent_map> &buffers_read,
+    ECUtil::shard_extent_map_t &buffers_read,
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs,
     RecoveryMessages *m);
   void handle_recovery_push(
@@ -408,6 +419,10 @@ public:
     std::map<std::string, ceph::bufferlist, std::less<>>,
     size_t
   > get_attrs_n_size_from_disk(const hobject_t& hoid);
+
+  ECUtil::HashInfoRef get_hinfo_from_disk(hobject_t oid);
+
+  std::optional<object_info_t> get_object_info_from_obc(ObjectContextRef &obc_map);
 
 public:
   int object_stat(const hobject_t &hoid, struct stat* st);

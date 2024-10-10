@@ -32,7 +32,7 @@ struct ECTransaction {
   struct WritePlan {
     bool invalidates_cache = false; // Yes, both are possible
     std::map<hobject_t,extent_set> to_read;
-    std::map<hobject_t,extent_set> will_write; // superset of to_read
+    std::map<hobject_t,extent_set> will_write;
 
     std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
   };
@@ -224,6 +224,7 @@ struct ECCommon {
   struct ec_extent_t {
     int err;
     extent_map emap;
+    ECUtil::shard_extent_map_t shard_extent_map;
   };
   friend std::ostream &operator<<(std::ostream &lhs, const ec_extent_t &rhs);
   using ec_extents_t = std::map<hobject_t, ec_extent_t>;
@@ -243,6 +244,10 @@ struct ECCommon {
     bool fast_read,
     GenContextURef<ec_extents_t &&> &&func) = 0;
 
+  virtual void objects_read_and_reconstruct_for_rmw(
+    const std::map<hobject_t, std::map<int, extent_set>> &to_read,
+    GenContextURef<ec_extents_t &&> &&func) = 0;
+
   struct shard_read_t {
     extent_set extents;
     std::vector<std::pair<int, int>> subchunk;
@@ -252,12 +257,22 @@ struct ECCommon {
 
   struct read_request_t {
     const std::list<ec_align_t> to_read;
+    const uint32_t flags = 0;
+    const std::map<int, extent_set> shard_want_to_read;
     std::map<pg_shard_t, shard_read_t> shard_reads;
-    bool want_attrs;
+    bool want_attrs = false;
     read_request_t(
       const std::list<ec_align_t> &to_read,
-      bool want_attrs)
-      : to_read(to_read), want_attrs(want_attrs) {}
+      const std::map<int, extent_set> shard_want_to_read,
+      bool want_attrs) :
+        to_read(to_read),
+        flags(to_read.front().flags),
+        shard_want_to_read(shard_want_to_read),
+        want_attrs(want_attrs) {}
+    read_request_t(const std::map<int, extent_set> shard_want_to_read,
+      bool want_attrs) :
+        shard_want_to_read(shard_want_to_read),
+        want_attrs(want_attrs) {}
     bool operator==(const read_request_t &other) const;
   };
   friend std::ostream &operator<<(std::ostream &lhs, const read_request_t &rhs);
@@ -287,16 +302,15 @@ struct ECCommon {
     int r;
     std::map<pg_shard_t, int> errors;
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs;
-    std::map<int, extent_map> buffers_read;
-    read_result_t() : r(0) {}
+    ECUtil::shard_extent_map_t buffers_read;
+    read_result_t(const ECUtil::stripe_info_t *sinfo) : r(0), buffers_read(sinfo) {}
   };
 
   struct ReadCompleter {
     virtual void finish_single_request(
       const hobject_t &hoid,
       read_result_t &res,
-      std::list<ECCommon::ec_align_t> to_read,
-      std::set<int> wanted_to_read) = 0;
+      ECCommon::read_request_t &req) = 0;
 
     virtual void finish(int priority) && = 0;
 
@@ -315,11 +329,13 @@ struct ECCommon {
     void complete_object(
       const hobject_t &hoid,
       int err,
-      extent_map &&buffers) {
+      extent_map &&buffers,
+      ECUtil::shard_extent_map_t &&shard_extent_map) {
       ceph_assert(objects_to_read);
       --objects_to_read;
-      ceph_assert(!results.count(hoid));
-      results.emplace(hoid, ec_extent_t{err, std::move(buffers)});
+      ceph_assert(!results.contains(hoid));
+      results.emplace(hoid, ec_extent_t{err, std::move(buffers),
+        std::move(shard_extent_map)});
     }
     bool is_complete() const {
       return objects_to_read == 0;
@@ -344,7 +360,6 @@ struct ECCommon {
 
     ZTracer::Trace trace;
 
-    std::map<hobject_t, std::set<int>> want_to_read;
     std::map<hobject_t, read_request_t> to_read;
     std::map<hobject_t, read_result_t> complete;
 
@@ -362,7 +377,6 @@ struct ECCommon {
       bool for_recovery,
       std::unique_ptr<ReadCompleter> _on_complete,
       OpRequestRef op,
-      std::map<hobject_t, std::set<int>> &&_want_to_read,
       std::map<hobject_t, read_request_t> &&_to_read)
       : priority(priority),
         tid(tid),
@@ -370,7 +384,6 @@ struct ECCommon {
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
-        want_to_read(std::move(_want_to_read)),
 	to_read(std::move(_to_read)) {}
     ReadOp() = delete;
     ReadOp(const ReadOp &) = delete; // due to on_complete being unique_ptr
@@ -381,6 +394,10 @@ struct ECCommon {
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
       GenContextURef<ec_extents_t &&> &&func);
+
+    void objects_read_and_reconstruct_for_rmw(
+      const std::map<hobject_t, std::map<int, extent_set>> &to_read,
+      GenContextURef<ECCommon::ec_extents_t &&> &&func);
 
     template <class F, class G>
     void filter_read_op(
@@ -399,7 +416,6 @@ struct ECCommon {
 
     void start_read_op(
       int priority,
-      std::map<hobject_t, std::set<int>> &want_to_read,
       std::map<hobject_t, read_request_t> &to_read,
       OpRequestRef op,
       bool do_redundant_reads,
@@ -479,7 +495,6 @@ struct ECCommon {
     /// Returns to_read replicas sufficient to reconstruct want
     int get_min_avail_to_read_shards(
       const hobject_t &hoid,     ///< [in] object
-      const std::map<int, extent_set> &want_shard_read, ///< [in] desired shards
       bool for_recovery,         ///< [in] true if we may use non-acting replicas
       bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
       read_request_t& read_request, ///< [out] shard_reads, corresponding subchunks / other sub reads to read
@@ -490,7 +505,7 @@ struct ECCommon {
 
     uint64_t shard_buffer_list_to_chunk_buffer_list(
       ec_align_t &read,
-      std::map<int, extent_map> buffers_read,
+      ECUtil::shard_extent_map_t buffers_read,
       std::list<std::map<int, bufferlist>> &chunk_bufferlists,
       std::list<std::set<int>> &want_to_reads);
   };
@@ -535,7 +550,7 @@ struct ECCommon {
       std::set<hobject_t> temp_cleared;
 
       ECTransaction::WritePlan plan;
-      bool requires_rmw() const { return !plan.to_read.empty(); }
+      bool requires_rmw() const { return !plan.want_read; }
       bool invalidates_cache() const { return plan.invalidates_cache; }
 
       // must be true if requires_rmw(), must be false if invalidates_cache()
@@ -543,10 +558,10 @@ struct ECCommon {
 
       /// In progress read state;
       std::map<hobject_t,extent_set> pending_read; // subset already being read
-      std::map<hobject_t,extent_set> remote_read;  // subset we must read
-      std::map<hobject_t,extent_map> remote_read_result;
+      std::map<hobject_t,std::map<int, extent_set>> remote_read;  // subset we must read
+      std::map<hobject_t,ECUtil::shard_extent_map_t> remote_shard_extent_map;
       bool read_in_progress() const {
-        return !remote_read.empty() && remote_read_result.empty();
+        return !remote_read.empty() && remote_shard_extent_map.empty();
       }
 
       /// In progress write state.
@@ -649,19 +664,11 @@ struct ECCommon {
 
     template <typename Func>
     void objects_read_async_no_cache(
-      const std::map<hobject_t,extent_set> &to_read,
+      const std::map<hobject_t,std::map<int, extent_set>> &to_read,
       Func &&on_complete
     ) {
-      std::map<hobject_t, std::list<ec_align_t>> _to_read;
-      for (auto &&hpair: to_read) {
-        auto &l = _to_read[hpair.first];
-        for (auto extent: hpair.second) {
-          l.emplace_back(ec_align_t{extent.first, extent.second, 0});
-        }
-      }
-      ec_backend.objects_read_and_reconstruct(
-        _to_read,
-        false,
+      ec_backend.objects_read_and_reconstruct_for_rmw(
+        to_read,
         make_gen_lambda_context<
         ECCommon::ec_extents_t &&, Func>(
             std::forward<Func>(on_complete)));
