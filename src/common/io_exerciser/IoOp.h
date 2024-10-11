@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <string>
 #include <memory>
 #include "include/ceph_assert.h"
@@ -144,6 +145,90 @@ namespace ceph {
                                                        uint64_t length2,
                                                        uint64_t offset3,
                                                        uint64_t length3);
+    };
+
+    template <ceph::io_exerciser::OpType opType>
+    class InjectErrorOp : public TestOp<opType>
+    {
+      public:
+        InjectErrorOp(int shard, std::optional<int> type, std::optional<int> when, std::optional<int> duration);
+
+        std::string to_string(uint64_t block_size) const override;
+
+        int shard;
+        std::optional<int> type;
+        std::optional<int> when;
+        std::optional<int> duration;
+
+      protected:
+        virtual constexpr std::string_view get_inject_type_string() const = 0;
+    };
+
+    class InjectReadErrorOp : public InjectErrorOp<OpType::InjectReadError>
+    {
+      public:
+        InjectReadErrorOp(int shard, std::optional<int> type, std::optional<int> when, std::optional<int> duration);
+
+        static std::unique_ptr<InjectReadErrorOp> generate(int shard,
+                                                           std::optional<int> type,
+                                                           std::optional<int> when,
+                                                           std::optional<int> duration);
+
+      protected:
+        constexpr std::string_view get_inject_type_string() const override;
+    };
+
+    class InjectWriteErrorOp : public InjectErrorOp<OpType::InjectWriteError>
+    {
+      public:
+        InjectWriteErrorOp(int shard, std::optional<int> type, std::optional<int> when, std::optional<int> duration);
+
+        static std::unique_ptr<InjectWriteErrorOp> generate(int shard,
+                                                            std::optional<int> type,
+                                                            std::optional<int> when,
+                                                            std::optional<int> duration);
+
+      protected:
+        constexpr std::string_view get_inject_type_string() const override;
+    };
+
+    template <ceph::io_exerciser::OpType opType>
+    class ClearErrorInjectOp : public TestOp<opType>
+    {
+      public:
+        ClearErrorInjectOp(int shard, std::optional<int> type);
+
+        std::string to_string(uint64_t block_size) const override;
+
+        int shard;
+        std::optional<int> type;
+
+      protected:
+        virtual constexpr std::string_view get_inject_type_string() const = 0;
+    };
+
+    class ClearReadErrorInjectOp : public ClearErrorInjectOp<OpType::ClearReadErrorInject>
+    {
+      public:
+        ClearReadErrorInjectOp(int shard, std::optional<int> type);
+
+        static std::unique_ptr<ClearReadErrorInjectOp> generate(int shard,
+                                                                std::optional<int> type);
+
+      protected:
+        constexpr std::string_view get_inject_type_string() const override;
+    };
+
+    class ClearWriteErrorInjectOp : public ClearErrorInjectOp<OpType::ClearWriteErrorInject>
+    {
+      public:
+        ClearWriteErrorInjectOp(int shard, std::optional<int> type);
+
+        static std::unique_ptr<ClearWriteErrorInjectOp> generate(int shard,
+                                                                 std::optional<int> type);
+
+      protected:
+        constexpr std::string_view get_inject_type_string() const override;
     };
   }
 }
