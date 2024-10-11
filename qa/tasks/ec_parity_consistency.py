@@ -6,8 +6,6 @@ match the output produced by the Ceph Erasure Code Tool.
 import logging
 import json
 import os
-import atexit
-import tempfile
 import shutil
 import time
 from io import StringIO
@@ -88,9 +86,15 @@ class ErasureCodeObject:
         data_out = bytearray()
         for shard in shards:
             data_out += shard
-        with open(filepath, "wb") as binary_file:
-            binary_file.write(data_out)
-            binary_file.close()
+        try:
+            with open(filepath, "wb") as binary_file:
+                try:
+                    binary_file.write(data_out)
+                    binary_file.close()
+                except (IOError, OSError) as e:
+                    log.error("Error writing to file: %s", e)
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            log.error("Error opening file for writing: %s", e)
 
     def delete_shards(self):
         """
@@ -190,11 +194,10 @@ class ErasureCodeObjects:
             return True  # All pools to be checked
         object_json = object_json[1]
         shard_pool_id = object_json["pool"]
-        for pool_json in self.pools_json:
-            if shard_pool_id == pool_json["pool"]:
-                if pool_json["pool_name"] in self.pools_to_check:
-                    return True
-        return False
+        if shard_pool_id in self.pools_to_check:
+            return True
+        else:
+            return False
 
     def is_object_in_ec_pool(self, object_json: Dict[str, Any]):
         """
@@ -258,7 +261,7 @@ class ErasureCodeObjects:
         """
         json_str = json.dumps(object_json)
         object_json = object_json[1]
-        object_oid = object_json["oid"]
+        object_oid = "".join(object_json["oid"].split())
         object_snapid = object_json["snapid"]
         object_uid = object_oid + '_' + str(object_snapid)
         ec_object = self.get_object_by_uid(object_uid)
@@ -504,8 +507,7 @@ def get_tmp_directory():
     Returns a temporary directory name that will be used to store shard data
     Includes the PID so different instances can be run in parallel
     """
-    tmpdir = (tempfile.gettempdir() +
-              '/consistency-check-' + str(os.getpid()) + '/')
+    tmpdir = '/var/tmp/consistency-check-' + str(os.getpid()) + '/'
     return tmpdir
 
 
@@ -553,22 +555,6 @@ def load_objects_to_check(objects_to_check: str) -> List[str]:
     return object_list
 
 
-def exit_handler(manager: ceph_manager.CephManager,
-                 osds: List[Dict[str, Any]], retain_files: bool = False):
-    """
-    Revive any OSDs that were killed during the task and
-    clean up any temporary files. Optionally retain files for
-    debug if specified by the config
-    """
-    for osd in osds:
-        osd_id = osd["osd"]
-        manager.revive_osd(osd_id, skip_admin_check=True)
-
-    dir_exists = os.path.isdir(get_tmp_directory())
-    if dir_exists and not retain_files:
-        shutil.rmtree(get_tmp_directory())
-
-
 def task(ctx, config: Dict[str, Any]):
     """
     Gathers information about EC objects living on the OSDs, then
@@ -583,7 +569,7 @@ def task(ctx, config: Dict[str, Any]):
         assert_on_mismatch: <bool> - Whether to count a mismatch as a failure
         max_run_time: <int> - Max amount of time to run the tool for in seconds
         object_list: <List[str]> - OID list of which objects to check
-        pools_to_check: <List[str]> - List of pool names to check for objects
+        pools_to_check: <List[int] - IDs of which pools to check for objects
     """
 
     if config is None:
@@ -603,7 +589,7 @@ def task(ctx, config: Dict[str, Any]):
     assert not manager.cephadm, cephadm_not_supported
 
     retain_files = config.get('retain_files', False)
-    max_time = int(config.get('max_run_time', 3600))
+    max_time = int(config.get('max_run_time', None))
     assert_on_mismatch = config.get('assert_on_mismatch', True)
 
     osds = manager.get_osd_dump()
@@ -611,8 +597,6 @@ def task(ctx, config: Dict[str, Any]):
     ec_tool = ErasureCodeTool(manager, osds[0]["osd"])
     ec_objects = ErasureCodeObjects(manager, config)
     start_time = time.time()
-
-    atexit.register(exit_handler, manager, osds, retain_files)
 
     # Loop through every OSD, storing each object shard in an EC object
     # Objects not in EC pools or the object_list will be ignored
@@ -634,7 +618,7 @@ def task(ctx, config: Dict[str, Any]):
     consistent, inconsistent = [], []
     for ec_object in ec_objects.objects:
         time_elapsed = time.time() - start_time
-        if time_elapsed > max_time:
+        if max_time is not None and time_elapsed > max_time:
             log.info("%i seconds elapsed, stopping "
                      "due to time limit.", time_elapsed)
             break
@@ -643,7 +627,11 @@ def task(ctx, config: Dict[str, Any]):
         object_uid = ec_object.uid
         object_dir = get_tmp_directory() + object_uid + '/'
         object_filepath = object_dir + DATA_SHARD_FILENAME
-        os.makedirs(object_dir)
+        try:
+            os.makedirs(object_dir)
+        except OSError as e:
+            log.error("Directory '%s' can not be created: %s", object_dir, e)
+
         ec_object.write_data_shards_to_file(object_filepath)
         # Encode the shards and output to the object dir
         want_to_encode = ec_object.get_want_to_encode_str()
@@ -661,6 +649,15 @@ def task(ctx, config: Dict[str, Any]):
             inconsistent.append(object_uid)
         # Free up memory consumed by shards
         ec_object.delete_shards()
+
+    # Can revive the OSDs now
+    for osd in osds:
+        osd_id = osd["osd"]
+        manager.revive_osd(osd_id, skip_admin_check=True)
+
+    # Delete test files unless retain_files is set
+    if not retain_files:
+        shutil.rmtree(get_tmp_directory())
 
     # Print a summary of matches, raise a RunTimeError if required
     print_summary(consistent, inconsistent)
