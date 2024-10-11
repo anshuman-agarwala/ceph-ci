@@ -354,10 +354,19 @@ class LocalRemote(RemoteShell):
             self._hostname = 'localhost'
         return self._hostname
 
-    def get_file(self, path, sudo, dest_dir):
-        tmpfile = tempfile.NamedTemporaryFile(delete=False).name
-        shutil.copy(path, tmpfile)
-        return tmpfile
+    def get_file(self, path, sudo=False, dest_dir='/tmp'):
+        if dest_dir == '/tmp':
+            # If we're storing in /tmp, generate a unique filename
+            (_fd, local_path) = tempfile.mkstemp(dir=dest_dir)
+        else:
+            # If we are storing somewhere other than /tmp, use the original
+            # filename
+            local_path = os.path.join(dest_dir, path.split(os.path.sep)[-1])
+        try:
+            shutil.copy(path, local_path)
+        except shutil.SameFileError:
+            pass
+        return local_path
 
     # XXX: This method ignores the error raised when src and dst are
     # holding same path. For teuthology, same path still represents
@@ -367,6 +376,48 @@ class LocalRemote(RemoteShell):
             shutil.copy(src, dst)
         except shutil.SameFileError:
             pass
+
+    def write_file(self, path, data, owner=None,
+                   mode='0644', mkdir=False, append=False, sudo=False):
+        dd = 'sudo dd' if sudo else 'dd'
+        args = dd + ' of=' + path
+        if append:
+            args += ' conv=notrunc oflag=append'
+        if mkdir:
+            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
+            dirpath = os.path.dirname(path)
+            if dirpath:
+                args = mkdirp + ' ' + dirpath + '\n' + args
+        if mode:
+            chmod = 'sudo chmod' if sudo else 'chmod'
+            args += '\n' + chmod + ' ' + mode + ' ' + path
+        if owner:
+            chown = 'sudo chown' if sudo else 'chown'
+            args += '\n' + chown + ' ' + owner + ' ' + path
+        args = 'set -ex' + '\n' + args
+        self.run(args=args, stdin=data, quiet=True)
+
+        # fm = 'a' if append else 'w'
+        # if contents 
+        # try:
+        #     with open(filepath, fm) as f:
+        #         try:
+        #             f.write(contents)
+        #         except (IOError, OSError) as e:
+        #             log.error("Error writing to file: %s", e)
+        # except (FileNotFoundError, PermissionError, OSError) as e:
+        #     log.error("Error opening file for writing: %s", e)
+        # if os.path.isfile(filepath):
+        #     log.info("write: File created, filesize is: %i", os.path.getsize(filepath))
+        # else:
+        #     log.error("write: File %s not found!", filepath)
+        # # st = os.stat(filepath)
+        # # log.info("File perms: %d", st.st_mode)
+        # # log.info("Changing permissions")
+        # # os.chmod(filepath, 0o0777)
+        # st = os.stat(filepath)
+        # log.info("New file perms: %d", st.st_mode)
+        # log.info("File exists at: %s", filepath)
 
     def _expand_teuthology_tools(self, args):
         assert isinstance(args, list)

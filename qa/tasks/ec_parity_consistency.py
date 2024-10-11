@@ -6,15 +6,15 @@ match the output produced by the Ceph Erasure Code Tool.
 import logging
 import json
 import os
-import atexit
-import tempfile
 import shutil
 import time
+import atexit
 from io import StringIO
 from io import BytesIO
 from typing import Dict, List, Any
 from tasks import ceph_manager
 from teuthology import misc as teuthology
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 DATA_SHARD_FILENAME = 'ec-obj'
@@ -78,19 +78,24 @@ class ErasureCodeObject:
         """
         return self.shards[self.k:self.k + self.m]
 
-    def write_data_shards_to_file(self, filepath: str):
+    def write_data_shards_to_file(self, filepath: str, remote: any = None):
         """
         Write the data shards to files for
         consumption by Erasure Code tool.
+        Write to remote if remote is specified.
         """
         shards = self.get_data_shards()
         assert None not in shards, "Object is missing data shards"
-        data_out = bytearray()
+        data = bytearray()
         for shard in shards:
-            data_out += shard
-        with open(filepath, "wb") as binary_file:
-            binary_file.write(data_out)
-            binary_file.close()
+            data += shard
+        if remote:
+            bytess = bytes(data)
+            remote.write_file(filepath, BytesIO(bytess),
+                              mkdir=True, append=False)
+        else:
+            with open(filepath, "wb") as binary_file:
+                binary_file.write(data)
 
     def delete_shards(self):
         """
@@ -98,19 +103,24 @@ class ErasureCodeObject:
         """
         self.shards = [None] * (self.k + self.m)
 
-    def does_shard_match_file(self, index: int, file_in: str) -> bool:
+    def does_shard_match_file(self, index: int, filepath: str,
+                              remote: any = None) -> bool:
         """
         Compare shard at specified index with contents of the supplied file
+        If remote is specified fetch the file and make a local copy
         Return True if they match, False otherwise
         """
         shard_data = self.shards[index]
         file_content = bytearray()
-        with open(file_in, "rb") as binary_file:
+        if remote:
+            remote.get_file(filepath, False, os.path.dirname(filepath))
+        with open(filepath, "rb") as binary_file:
             b = binary_file.read()
             file_content.extend(b)
         return shard_data == file_content
 
-    def compare_parity_shards_to_files(self, filepath: str) -> bool:
+    def compare_parity_shards_to_files(self, filepath: str,
+                                       remote: any = None) -> bool:
         """
         Check the object's parity shards match the files generated
         by the erasure code tool. Return True if they match, False otherwise.
@@ -118,7 +128,7 @@ class ErasureCodeObject:
         do_all_shards_match = True
         for i in range(self.k, self.k + self.m):
             shard_filename = filepath + '.' + str(i)
-            match = self.does_shard_match_file(i, shard_filename)
+            match = self.does_shard_match_file(i, shard_filename, remote)
             if match:
                 log.debug("Shard %i in object %s matches file content",
                           i,
@@ -238,17 +248,22 @@ class ErasureCodeObjects:
             log.error("Failed to parse object dump to JSON: %s", e)
         return self.ec_profiles[pool_id]
 
-    def process_object_shard_data(self, ec_object: ErasureCodeObject):
+    def process_object_shard_data(self, ec_object: ErasureCodeObject) -> bool:
         """
         Use the Object Store tool to get object info and the bytes data
-        for all shards in an object
+        for all shards in an object, returns true if successful
         """
         for (json_str, osd_id) in zip(ec_object.jsons, ec_object.osd_map):
             shard_info = self.os_tool.get_shard_info_dump(osd_id, json_str)
             shard_data = self.os_tool.get_shard_bytes(osd_id, json_str)
             shard_index = shard_info["id"]["shard_id"]
+            shard_whited_out = ("whiteout" in shard_info["info"]["flags"])
+            if shard_whited_out:
+                log.info("Found whiteout shard, skipping.")
+                return False
             ec_object.object_size = shard_info["hinfo"]["total_chunk_size"]
             ec_object.update_shard(shard_index, shard_data)
+        return True
 
     def process_object_json(self, osd_id: int, object_json: List[Any]):
         """
@@ -411,9 +426,9 @@ class ErasureCodeTool:
     """
     Interface for running the Ceph Erasure Code Tool
     """
-    def __init__(self, manager: ceph_manager.CephManager, osd: int):
+    def __init__(self, manager: ceph_manager.CephManager, remote: any):
         self.manager = manager
-        self.remote = self.manager.find_remote("osd", osd)
+        self.remote = remote
 
     def run_erasure_code_tool(self, cmd: List[str]):
         """
@@ -449,10 +464,10 @@ class ErasureCodeTool:
         """
         cmd = ["calc-chunk-size", profile, object_size]
         proc = self.run_erasure_code_tool(cmd)
-        stdout = proc.stdout.getvalue()
-        if not stdout:
-            log.error("Erasure Code tool failed to calculate chunk size.")
-        return stdout
+        if not proc.stdout:
+            log.error("Erasure Code tool failed to calculate chunk size: %s",
+                      proc.stderr)
+        return proc.stdout
 
     def encode(self, profile: str, stripe_unit: int,
                file_nums: str, filepath: str):
@@ -462,8 +477,8 @@ class ErasureCodeTool:
         """
         cmd = ["encode", profile, str(stripe_unit), file_nums, filepath]
         proc = self.run_erasure_code_tool(cmd)
-        if proc.exitstatus != 0:
-            log.error("Erasure Code tool failed to encode.")
+        if proc.returncode != 0:
+            log.error("Erasure Code tool failed to encode: %s", proc.stderr)
 
     def decode(self, profile: str, stripe_unit: int,
                file_nums: str, filepath: str):
@@ -473,8 +488,8 @@ class ErasureCodeTool:
         """
         cmd = ["decode", profile, str(stripe_unit), file_nums, filepath]
         proc = self.run_erasure_code_tool(cmd)
-        if proc.exitstatus != 0:
-            log.error("Erasure Code tool failed to decode.")
+        if proc.returncode != 0:
+            log.error("Erasure Code tool failed to decode: %s", proc.stderr)
 
 
 def shell(ctx: any, cluster_name: str, remote: any,
@@ -504,26 +519,8 @@ def get_tmp_directory():
     Returns a temporary directory name that will be used to store shard data
     Includes the PID so different instances can be run in parallel
     """
-    tmpdir = (tempfile.gettempdir() +
-              '/consistency-check-' + str(os.getpid()) + '/')
+    tmpdir = '/var/tmp/consistency-check-' + str(os.getpid()) + '/'
     return tmpdir
-
-
-def print_summary(consistent: List[str],
-                  inconsistent: List[str]):
-    """
-    Print a summary including counts of objects checked
-    and a JSON-formatted lists of consistent and inconsistent objects.
-    """
-    log.info("Consistent objects counted: %i", len(consistent))
-    log.info("Inconsistent objects counted %i", len(inconsistent))
-    log.info("Total objects checked: %i", len(consistent) + len(inconsistent))
-    if consistent:
-        out = '[' + ','.join("'" + str(o) + "'" for o in consistent) + ']'
-        log.info("Consistent objects: %s", out)
-    if inconsistent:
-        out = '[' + ','.join("'" + str(o) + "'" for o in inconsistent) + ']'
-        log.info("Objects with a mismatch: %s", out)
 
 
 def handle_mismatch(assert_on_mismatch: bool):
@@ -553,20 +550,52 @@ def load_objects_to_check(objects_to_check: str) -> List[str]:
     return object_list
 
 
-def exit_handler(manager: ceph_manager.CephManager,
-                 osds: List[Dict[str, Any]], retain_files: bool = False):
+def revive_osds(manager: ceph_manager.CephManager, osds: List[Dict[str, Any]]):
     """
     Revive any OSDs that were killed during the task and
-    clean up any temporary files. Optionally retain files for
-    debug if specified by the config
+    clean up any temporary files (temp files both locally and on remote).
+    Optionally retain files for debug if specified by the config
     """
     for osd in osds:
         osd_id = osd["osd"]
-        manager.revive_osd(osd_id, skip_admin_check=True)
+        manager.revive_osd(osd_id, skip_admin_check=False)
+        manager.mark_in_osd(osd_id)
+        manager.wait_till_osd_is_up(osd_id)
 
-    dir_exists = os.path.isdir(get_tmp_directory())
-    if dir_exists and not retain_files:
-        shutil.rmtree(get_tmp_directory())
+
+def clean_up_test_files(remote: any = None):
+    """
+    Clean any test files that were created
+    both locally and on a remote if specified
+    """
+    tmp_dir = get_tmp_directory()
+    local_dir_exists = os.path.isdir(tmp_dir)
+    if local_dir_exists:
+        shutil.rmtree(tmp_dir)
+    if remote:
+        remote.run(args=["rm", "-rf", tmp_dir])
+
+
+def print_summary(consistent: List[str],
+                  inconsistent: List[str],
+                  skipped: List[str]):
+    """
+    Print a summary including counts of objects checked
+    and a JSON-formatted lists of consistent and inconsistent objects.
+    """
+    log.info("Consistent objects counted: %i", len(consistent))
+    log.info("Inconsistent objects counted %i", len(inconsistent))
+    log.info("Objects skipped: %i", len(skipped) + len(skipped))
+    log.info("Total objects checked: %i", len(consistent) + len(inconsistent))
+    if consistent:
+        out = '[' + ','.join("'" + str(o) + "'" for o in consistent) + ']'
+        log.info("Consistent objects: %s", out)
+    if inconsistent:
+        out = '[' + ','.join("'" + str(o) + "'" for o in inconsistent) + ']'
+        log.info("Objects with a mismatch: %s", out)
+    if skipped:
+        out = '[' + ','.join("'" + str(o) + "'" for o in skipped) + ']'
+        log.info("Objects skipped: %s", out)
 
 
 def task(ctx, config: Dict[str, Any]):
@@ -603,22 +632,30 @@ def task(ctx, config: Dict[str, Any]):
     assert not manager.cephadm, cephadm_not_supported
 
     retain_files = config.get('retain_files', False)
-    max_time = int(config.get('max_run_time', 3600))
+    max_time = config.get('max_run_time', None)
     assert_on_mismatch = config.get('assert_on_mismatch', True)
 
     osds = manager.get_osd_dump()
+    ec_remote = manager.find_remote("osd", osds[0]["osd"])
+
     os_tool = ObjectStoreTool(manager)
-    ec_tool = ErasureCodeTool(manager, osds[0]["osd"])
+    ec_tool = ErasureCodeTool(manager, ec_remote)
     ec_objects = ErasureCodeObjects(manager, config)
     start_time = time.time()
+    consistent, inconsistent, skipped = [], [], []
 
-    atexit.register(exit_handler, manager, osds, retain_files)
+    atexit.register(revive_osds, manager, osds)
+    atexit.register(print_summary, consistent, inconsistent, skipped)
+    if not retain_files: 
+        atexit.register(clean_up_test_files, ec_remote)
 
     # Loop through every OSD, storing each object shard in an EC object
     # Objects not in EC pools or the object_list will be ignored
     for osd in osds:
         osd_id = osd["osd"]
         manager.kill_osd(osd_id)
+        manager.mark_down_osd(osd_id)
+        manager.mark_out_osd(osd_id)
         data_objects = os_tool.get_ec_data_objects(osd_id)
         if data_objects:
             for obj in data_objects:
@@ -631,20 +668,29 @@ def task(ctx, config: Dict[str, Any]):
 
     # Now compute the parities for each object
     # and verify they match what the EC tool produces
-    consistent, inconsistent = [], []
     for ec_object in ec_objects.objects:
         time_elapsed = time.time() - start_time
-        if time_elapsed > max_time:
+        if max_time is not None and time_elapsed > max_time:
             log.info("%i seconds elapsed, stopping "
                      "due to time limit.", time_elapsed)
             break
-        ec_objects.process_object_shard_data(ec_object)
-        # Create dir and write out shards
+
+        # Try to process the object shards, skip if
+        # something goes wrong e.g. deleted object
         object_uid = ec_object.uid
+        if not ec_objects.process_object_shard_data(ec_object):
+            skipped.append(object_uid)
+            continue
+
+        # Create dir and write out shards
         object_dir = get_tmp_directory() + object_uid + '/'
         object_filepath = object_dir + DATA_SHARD_FILENAME
-        os.makedirs(object_dir)
-        ec_object.write_data_shards_to_file(object_filepath)
+        try:
+            os.makedirs(object_dir)
+        except OSError as e:
+            log.error("Directory '%s' can not be created: %s", object_dir, e)
+        ec_object.write_data_shards_to_file(object_filepath, ec_remote)
+
         # Encode the shards and output to the object dir
         want_to_encode = ec_object.get_want_to_encode_str()
         ec_profile = ec_object.get_ec_tool_profile()
@@ -654,7 +700,8 @@ def task(ctx, config: Dict[str, Any]):
                        want_to_encode,
                        object_filepath)
         # Compare stored parities to EC tool output
-        match = ec_object.compare_parity_shards_to_files(object_filepath)
+        match = ec_object.compare_parity_shards_to_files(object_filepath,
+                                                         ec_remote)
         if match:
             consistent.append(object_uid)
         else:
@@ -662,7 +709,5 @@ def task(ctx, config: Dict[str, Any]):
         # Free up memory consumed by shards
         ec_object.delete_shards()
 
-    # Print a summary of matches, raise a RunTimeError if required
-    print_summary(consistent, inconsistent)
     if len(inconsistent) > 0:
         handle_mismatch(assert_on_mismatch)
