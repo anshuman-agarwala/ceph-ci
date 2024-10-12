@@ -86,9 +86,15 @@ class ErasureCodeObject:
         data_out = bytearray()
         for shard in shards:
             data_out += shard
-        with open(filepath, "wb") as binary_file:
-            binary_file.write(data_out)
-            binary_file.close()
+        try:
+            with open(filepath, "wb") as binary_file:
+                try:
+                    binary_file.write(data_out)
+                    binary_file.close()
+                except (IOError, OSError) as e:
+                    log.error("Error writing to file: %s", e)
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            log.error("Error opening file for writing: %s", e)
 
     def delete_shards(self):
         """
@@ -621,7 +627,12 @@ def task(ctx, config: Dict[str, Any]):
         object_uid = ec_object.uid
         object_dir = get_tmp_directory() + object_uid + '/'
         object_filepath = object_dir + DATA_SHARD_FILENAME
-        os.makedirs(object_dir)
+        try:
+            os.makedirs(object_dir)
+            log.info("Directory '%s' created successfully", object_dir)
+        except OSError as e:
+            log.error("Directory '%s' can not be created: %s", object_dir, e)
+
         ec_object.write_data_shards_to_file(object_filepath)
         # Encode the shards and output to the object dir
         want_to_encode = ec_object.get_want_to_encode_str()
