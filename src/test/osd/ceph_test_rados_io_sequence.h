@@ -248,6 +248,8 @@ namespace ceph
       bool get_allow_pool_balancer() { return allow_pool_balancer; }
       bool get_allow_pool_deep_scrubbing() { return allow_pool_deep_scrubbing; }
       bool get_allow_pool_scrubbing() { return allow_pool_scrubbing; }
+      int getChosenK() const { return k; }
+      int getChosenM() const { return m; }
 
     private:
       void create_pool(librados::Rados& rados,
@@ -263,6 +265,8 @@ namespace ceph
       bool allow_pool_balancer;
       bool allow_pool_deep_scrubbing;
       bool allow_pool_scrubbing;
+      int k;
+      int m;
       
       SelectErasureKM skm;
       SelectErasurePlugin spl;
@@ -304,6 +308,8 @@ namespace ceph
       ceph::util::random_number_generator<int>& rng;
       bool verbose;
       std::optional<int> seqseed;
+      int poolK;
+      int poolM;
     };
 
     class TestRunner

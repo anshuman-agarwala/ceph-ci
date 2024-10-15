@@ -6,6 +6,8 @@
 
 #include "include/types.h"
 
+#include "OpType.h"
+
 class JSONObj;
 
 namespace ceph {
@@ -61,6 +63,67 @@ namespace ceph {
           int up_primary;
           std::vector<int> acting;
           int acting_primary;
+
+          void decode_json(JSONObj *obj);
+          void dump() const;
+      };
+
+      class OSDPoolGetRequest : public JSONStructure
+      {
+        public:
+          OSDPoolGetRequest(const std::string& pool_name, std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
+          OSDPoolGetRequest(JSONObj* obj, std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
+
+          std::string prefix = "osd pool get";
+          std::string pool;
+          std::string var = "erasure_code_profile";
+          std::string format = "json";
+
+          void decode_json(JSONObj* obj) override;
+          void dump() const override;
+      };
+
+      class OSDPoolGetReply : public JSONStructure
+      {
+        public:
+          OSDPoolGetReply(JSONObj *obj, std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
+
+          std::string erasure_code_profile;
+
+          void decode_json(JSONObj *obj);
+          void dump() const;
+      };
+
+      class OSDECProfileGetRequest : public JSONStructure
+      {
+        public:
+          OSDECProfileGetRequest(const std::string& profile_name, std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
+          OSDECProfileGetRequest(JSONObj* obj, std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
+
+          std::string prefix = "osd pool get";
+          std::string name;
+          std::string format = "json";
+
+          void decode_json(JSONObj* obj) override;
+          void dump() const override;
+      };
+
+      class OSDECProfileGetReply : public JSONStructure
+      {
+        public:
+          OSDECProfileGetReply(JSONObj *obj, std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
+
+          std::string crush_device_class;
+          std::string crush_failure_domain;
+          int crush_num_failure_domains;
+          int crush_osds_per_failure_domain;
+          std::string crush_root;
+          bool jerasure_per_chunk_alignment;
+          int k;
+          int m;
+          std::string plugin;
+          std::string technique;
+          std::string w;
 
           void decode_json(JSONObj *obj);
           void dump() const;
@@ -158,8 +221,6 @@ namespace ceph {
       {
         public:
           ConfigSetRequest(std::string who, std::string name, const std::string& value, std::optional<bool> force = std::nullopt, std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
-          // ConfigSetRequest(std::string who, std::string name, bool value, std::optional<bool> force = std::nullopt, std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
-          // ConfigSetRequest(std::string who, std::string name, int value, std::optional<bool> force = std::nullopt, std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
           ConfigSetRequest(JSONObj* obj, std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
 
           std::string prefix = "config set";
@@ -172,11 +233,6 @@ namespace ceph {
           void dump() const override;
       };
 
-      enum class InjectOpType {
-        Read,
-        Write
-      };
-
       class InjectECErrorRequest : public JSONStructure
       {
         public:
@@ -184,18 +240,18 @@ namespace ceph {
                                const std::string& pool,
                                const std::string& objname,
                                int shardid,
-                               std::optional<int> type,
-                               std::optional<int> when,
-                               std::optional<int> duration,
+                               std::optional<uint64_t> type,
+                               std::optional<uint64_t> when,
+                               std::optional<uint64_t> duration,
                                std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
 
           std::string prefix;
           std::string pool;
           std::string objname;
           int shardid;
-          std::optional<int> type;
-          std::optional<int> when;
-          std::optional<int> duration;
+          std::optional<uint64_t> type;
+          std::optional<uint64_t> when;
+          std::optional<uint64_t> duration;
 
           void decode_json(JSONObj* obj) override;
           void dump() const override;
@@ -208,14 +264,14 @@ namespace ceph {
                                     const std::string& pool,
                                     const std::string& objname,
                                     int shardid,
-                                    std::optional<int> type,
+                                    std::optional<uint64_t> type,
                                     std::shared_ptr<ceph::Formatter> formatter = std::make_shared<JSONFormatter>(false));
 
           std::string prefix;
           std::string pool;
           std::string objname;
           int shardid;
-          std::optional<int> type;
+          std::optional<uint64_t> type;
 
           void decode_json(JSONObj* obj) override;
           void dump() const override;

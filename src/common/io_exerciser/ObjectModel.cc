@@ -168,7 +168,6 @@ void ObjectModel::applyIoOp(IoOp& op)
   {
     ceph_assert(created);
     SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);
-
     // Not allowed: write overlapping with parallel read or write
     ceph_assert(!reads.intersects(writeOp.offset[0], writeOp.length[0]));
     ceph_assert(!writes.intersects(writeOp.offset[0], writeOp.length[0]));

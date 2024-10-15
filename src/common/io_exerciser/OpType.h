@@ -26,5 +26,13 @@ namespace ceph {
       ClearReadErrorInject,   // Op to tell OSD to clear read error injects
       ClearWriteErrorInject   // Op to tell OSD to clear write error injects
     };
+
+    enum class InjectOpType {
+      None,
+      ReadEIO,
+      ReadMissingShard,
+      WriteFailAndRollback,
+      WriteOSDAbort
+    };
   }
 }

@@ -128,6 +128,7 @@ namespace {
     "\t\t read2|write2 <off> <len> <off> <len>",
     "\t\t read3|write3 <off> <len> <off> <len> <off> <len>",
     "\t\t injecterror <type> <shard> <good_count> <fail_count>",
+    "\t\t clearinject <type> <shard>",
     "\t\t done"
   };
 
@@ -139,7 +140,7 @@ namespace {
         "show help message")
       ("listsequence,l",
         "show list of sequences")
-      ("dryrun,d", po::value<bool>()->default_value(false),
+      ("dryrun,d",
         "test sequence, do not issue any I/O")
       ("verbose",
         "more verbose output during test")
@@ -169,13 +170,13 @@ namespace {
         "number of objects to exercise in parallel")
       ("interactive",
         "interactive mode, execute IO commands from stdin")
-      ("allow_pool_autoscaling", po::value<bool>()->default_value(false),
+      ("allow_pool_autoscaling",
         "Allows pool autoscaling. Disabled by default.")
-      ("allow_pool_balancer", po::value<bool>()->default_value(false),
+      ("allow_pool_balancer",
         "Enables pool balancing. Disabled by default.")
-      ("allow_pool_deep_scrubbing", po::value<bool>()->default_value(false),
+      ("allow_pool_deep_scrubbing",
         "Enables pool deep scrub. Disabled by default.")
-      ("allow_pool_scrubbing", po::value<bool>()->default_value(false),
+      ("allow_pool_scrubbing",
         "Enables pool scrubbing. Disabled by default.");
 
     return desc;
@@ -375,12 +376,36 @@ const std::string ceph::io_sequence::tester::SelectECPool::choose()
 {
   std::pair<int,int> value;
   if (!skm.isForced() && force_value.has_value()) {
+    int rc;
+    bufferlist inbl, outbl;
+    auto formatter = std::make_shared<JSONFormatter>(false);
+
+    ceph::io_exerciser::json::OSDPoolGetRequest osdPoolGetRequest(*force_value, formatter);
+    rc = rados.mon_command(osdPoolGetRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    JSONParser p;
+    bool success = p.parse(outbl.c_str(), outbl.length());
+    ceph_assert(success);
+
+    ceph::io_exerciser::json::OSDPoolGetReply osdPoolGetReply(&p, formatter);
+
+    ceph::io_exerciser::json::OSDECProfileGetRequest osdECProfileGetRequest(osdPoolGetReply.erasure_code_profile, formatter);
+    rc = rados.mon_command(osdECProfileGetRequest.encode_json(), inbl, &outbl, nullptr);
+    ceph_assert(rc == 0);
+
+    success = p.parse(outbl.c_str(), outbl.length());
+    ceph_assert(success);
+
+    ceph::io_exerciser::json::OSDECProfileGetReply reply(&p, formatter);
+    k = reply.k;
+    m = reply.m;
     return *force_value;
   } else {
     value = skm.choose();
   }
-  int k = value.first;
-  int m = value.second;
+  k = value.first;
+  m = value.second;
 
   const std::string plugin = std::string(spl.choose());
   const uint64_t chunk_size = scs.choose();
@@ -501,6 +526,9 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
                                                                         rng());
   } else {
     const std::string pool = spo.choose();
+    poolK = spo.getChosenK();
+    poolM = spo.getChosenM();
+
     int threads = snt.choose();
 
     bufferlist inbl, outbl;
@@ -544,6 +572,8 @@ ceph::io_sequence::tester::TestObject::TestObject( const std::string oid,
   curseq = seq_range.first;
   seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
                                                           obj_size_range,
+                                                          poolK,
+                                                          poolM,
                                                           seqseed.value_or(rng()));
   op = seq->next();
   done = false;
@@ -581,6 +611,7 @@ bool ceph::io_sequence::tester::TestObject::next()
       } else {
         seq = ceph::io_exerciser::IoSequence::generate_sequence(curseq,
                                                                 obj_size_range,
+                                                                poolK, poolM,
                                                                 seqseed.value_or(rng()));
         dout(0) << "== " << exerciser_model->get_oid() << " "
                 << curseq << " " << seq->get_name()
@@ -612,11 +643,11 @@ ceph::io_sequence::tester::TestRunner::TestRunner(po::variables_map& vm,
   sbs{rng, vm},
   sos{rng, vm},
   spo{rng, vm, rados,
-      vm["dryrun"].as<bool>(),
-      vm["allow_pool_autoscaling"].as<bool>(),
-      vm["allow_pool_balancer"].as<bool>(),
-      vm["allow_pool_deep_scrubbing"].as<bool>(),
-      vm["allow_pool_scrubbing"].as<bool>()},
+      vm.contains("dryrun"),
+      vm.contains("allow_pool_autoscaling"),
+      vm.contains("allow_pool_balancer"),
+      vm.contains("allow_pool_deep_scrubbing"),
+      vm.contains("allow_pool_scrubbing")},
   snt{rng, vm},
   ssr{rng, vm}
 {
@@ -676,6 +707,8 @@ void ceph::io_sequence::tester::TestRunner::list_sequence()
     std::unique_ptr<ceph::io_exerciser::IoSequence> seq =
     ceph::io_exerciser::IoSequence::generate_sequence(s,
                                                       obj_size_range,
+                                                      spo.getChosenK(),
+                                                      spo.getChosenM(),
                                                       seqseed.value_or(rng()));
     dout(0) << s << " " << seq->get_name() << dendl;
   }

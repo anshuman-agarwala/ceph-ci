@@ -264,7 +264,7 @@ std::unique_ptr<TripleWriteOp> TripleWriteOp::generate(uint64_t offset1, uint64_
 }
 
 template <ceph::io_exerciser::OpType opType>
-ceph::io_exerciser::InjectErrorOp<opType>::InjectErrorOp(int shard, std::optional<int> type, std::optional<int> when, std::optional<int> duration) :
+ceph::io_exerciser::InjectErrorOp<opType>::InjectErrorOp(int shard, std::optional<uint64_t> type, std::optional<uint64_t> when, std::optional<uint64_t> duration) :
   TestOp<opType>(),
   shard(shard),
   type(type),
@@ -303,49 +303,39 @@ std::string ceph::io_exerciser::InjectErrorOp<opType>::to_string(uint64_t blocks
 }
 
 ceph::io_exerciser::InjectReadErrorOp::InjectReadErrorOp(int shard,
-                                                         std::optional<int> type,
-                                                         std::optional<int> when,
-                                                         std::optional<int> duration) :
+                                                         std::optional<uint64_t> type,
+                                                         std::optional<uint64_t> when,
+                                                         std::optional<uint64_t> duration) :
   InjectErrorOp<OpType::InjectReadError>(shard, type, when, duration)
 {
 
 }
 
 std::unique_ptr<ceph::io_exerciser::InjectReadErrorOp> ceph::io_exerciser
-  ::InjectReadErrorOp::generate(int shard, std::optional<int> type, std::optional<int> when, std::optional<int> duration)
+  ::InjectReadErrorOp::generate(int shard, std::optional<uint64_t> type, std::optional<uint64_t> when, std::optional<uint64_t> duration)
 {
   return std::make_unique<InjectReadErrorOp>(shard, type, when, duration);
 }
 
-constexpr std::string_view ceph::io_exerciser::InjectReadErrorOp::get_inject_type_string() const
-{
-  return "read";
-}
-
 ceph::io_exerciser::InjectWriteErrorOp::InjectWriteErrorOp(int shard,
-                                                           std::optional<int> type,
-                                                           std::optional<int> when,
-                                                           std::optional<int> duration) :
+                                                           std::optional<uint64_t> type,
+                                                           std::optional<uint64_t> when,
+                                                           std::optional<uint64_t> duration) :
   InjectErrorOp<OpType::InjectWriteError>(shard, type, when, duration)
 {
 
 }
 
 std::unique_ptr<ceph::io_exerciser::InjectWriteErrorOp> ceph::io_exerciser
-  ::InjectWriteErrorOp::generate(int shard, std::optional<int> type, std::optional<int> when, std::optional<int> duration)
+  ::InjectWriteErrorOp::generate(int shard, std::optional<uint64_t> type, std::optional<uint64_t> when, std::optional<uint64_t> duration)
 {
   return std::make_unique<InjectWriteErrorOp>(shard, type, when, duration);
-}
-
-constexpr std::string_view ceph::io_exerciser::InjectWriteErrorOp::get_inject_type_string() const
-{
-  return "write";
 }
 
 
 
 template <ceph::io_exerciser::OpType opType>
-ceph::io_exerciser::ClearErrorInjectOp<opType>::ClearErrorInjectOp(int shard, std::optional<int> type) :
+ceph::io_exerciser::ClearErrorInjectOp<opType>::ClearErrorInjectOp(int shard, std::optional<uint64_t> type) :
   TestOp<opType>(),
   shard(shard),
   type(type)
@@ -370,37 +360,27 @@ std::string ceph::io_exerciser::ClearErrorInjectOp<opType>::to_string(uint64_t b
 }
 
 ceph::io_exerciser::ClearReadErrorInjectOp::ClearReadErrorInjectOp(int shard,
-                                                                   std::optional<int> type) :
+                                                                   std::optional<uint64_t> type) :
   ClearErrorInjectOp<OpType::ClearReadErrorInject>(shard, type)
 {
 
 }
 
 std::unique_ptr<ceph::io_exerciser::ClearReadErrorInjectOp> ceph::io_exerciser
-  ::ClearReadErrorInjectOp::generate(int shard, std::optional<int> type)
+  ::ClearReadErrorInjectOp::generate(int shard, std::optional<uint64_t> type)
 {
   return std::make_unique<ClearReadErrorInjectOp>(shard, type);
 }
 
-constexpr std::string_view ceph::io_exerciser::ClearReadErrorInjectOp::get_inject_type_string() const
-{
-  return "read";
-}
-
 ceph::io_exerciser::ClearWriteErrorInjectOp::ClearWriteErrorInjectOp(int shard,
-                                                           std::optional<int> type) :
+                                                           std::optional<uint64_t> type) :
   ClearErrorInjectOp<OpType::ClearWriteErrorInject>(shard, type)
 {
 
 }
 
 std::unique_ptr<ceph::io_exerciser::ClearWriteErrorInjectOp> ceph::io_exerciser
-  ::ClearWriteErrorInjectOp::generate(int shard, std::optional<int> type)
+  ::ClearWriteErrorInjectOp::generate(int shard, std::optional<uint64_t> type)
 {
   return std::make_unique<ClearWriteErrorInjectOp>(shard, type);
-}
-
-constexpr std::string_view ceph::io_exerciser::ClearWriteErrorInjectOp::get_inject_type_string() const
-{
-  return "write";
 }
