@@ -96,9 +96,8 @@ int ec_init(const std::string &profile_str,
   uint64_t stripe_size = atoi(profile["k"].c_str());
   ceph_assert(stripe_size > 0);
   uint64_t stripe_width = stripe_size * stripe_unit;
-  sinfo->reset(new ECUtil::stripe_info_t(stripe_size, stripe_width,
+  sinfo->reset(new ECUtil::stripe_info_t(*ec_impl, nullptr, stripe_width,
     (*ec_impl)->get_coding_chunk_count(), (*ec_impl)->get_chunk_mapping()));
-
   return 0;
 }
 
@@ -115,7 +114,7 @@ int do_test_plugin_exists(const std::vector<const char*> &args) {
   std::lock_guard l{instance.lock};
   int r = instance.load(
     args[0], g_conf().get_val<std::string>("erasure_code_dir"), &plugin, &ss);
-  std::cerr << ss.str() << endl;
+  std::cerr << ss.str() << std::endl;
   return r;
 }
 
