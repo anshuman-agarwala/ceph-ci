@@ -2139,7 +2139,7 @@ bool RGWFormPost::is_integral()
   try {
     s->user = get_owner_info(s);
     auto result = rgw::auth::transform_old_authinfo(
-        this, s->yield, driver, s->user.get());
+        this, s->yield, driver, std::move(s->user));
     if (!result) {
       return false;
     }

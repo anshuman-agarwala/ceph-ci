@@ -248,7 +248,7 @@ namespace rgw {
        * authentication infrastructure. */
       if (! s->auth.identity) {
         auto result = rgw::auth::transform_old_authinfo(
-            op, null_yield, env.driver, s->user.get());
+            op, null_yield, env.driver, std::move(s->user));
         if (!result) {
           ret = result.error();
           abort_req(s, op, ret);
@@ -385,7 +385,7 @@ namespace rgw {
      * infrastructure. */
     if (! s->auth.identity) {
       auto result = rgw::auth::transform_old_authinfo(
-          op, null_yield, env.driver, s->user.get());
+          op, null_yield, env.driver, std::move(s->user));
       if (!result) {
         ret = result.error();
         abort_req(s, op, ret);

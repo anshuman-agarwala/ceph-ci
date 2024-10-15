@@ -2644,7 +2644,7 @@ class RGWUserPermHandler {
       }
 
       auto result = rgw::auth::transform_old_authinfo(
-          sync_env->dpp, null_yield, sync_env->driver, user.get());
+          sync_env->dpp, null_yield, sync_env->driver, std::move(user));
       if (!result) {
         return result.error();
       }
