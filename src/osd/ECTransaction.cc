@@ -607,6 +607,8 @@ void ECTransaction::generate_transactions(
         uint64_t restore_from = (uint64_t)-1;
         uint64_t restore_end = 0;
 
+        if (sinfo.supports_ec_optimizations()) {}
+
         map<int, extent_set> cloneable_range;
         uint64_t clone_max = plan.orig_size;
         if (op.delete_first) {
@@ -646,6 +648,10 @@ void ECTransaction::generate_transactions(
 	if (entry) {
 	  entry->mod_desc.rollback_extents(entry->version.version, rollback_extents);
 	}
+        if (entry->written_shards.size() == ecimpl->get_chunk_count()) {
+          // More efficient to encode an empty set to mean all shards
+          entry->written_shards.clear();
+}
         if (plan.hinfo)
 	  plan.hinfo->set_total_chunk_size_clear_hash(
 	    sinfo.logical_to_next_stripe_offset(plan.projected_size));
