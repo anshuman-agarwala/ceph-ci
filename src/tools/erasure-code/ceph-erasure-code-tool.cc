@@ -96,8 +96,7 @@ int ec_init(const std::string &profile_str,
   uint64_t stripe_size = atoi(profile["k"].c_str());
   ceph_assert(stripe_size > 0);
   uint64_t stripe_width = stripe_size * stripe_unit;
-  sinfo->reset(new ECUtil::stripe_info_t(*ec_impl, nullptr, stripe_width,
-    (*ec_impl)->get_coding_chunk_count(), (*ec_impl)->get_chunk_mapping()));
+  sinfo->reset(new ECUtil::stripe_info_t(*ec_impl, nullptr, stripe_width));
   return 0;
 }
 

@@ -589,6 +589,12 @@ void ECTransaction::generate_transactions(
         debug(oid, "overlay_buffer", to_write, dpp);
       }
 
+      extent_set clone_ranges = to_write.get_extent_superset();
+      clone_ranges.erase(sinfo.logical_to_next_stripe_offset(plan.orig_size));
+      for (auto &[start, len] : clone_ranges) {
+        rollback_extents.emplace_back(start, len);
+      }
+
       if (!to_write.empty()) {
         // Depending on the write, we may or may not have the parity buffers.
         // Here we invent some buffers.
@@ -619,11 +625,12 @@ void ECTransaction::generate_transactions(
         sinfo.ro_range_to_shard_extent_set(0, clone_max, cloneable_range);
 
         for (auto &&[shard, eset] : cloneable_range) {
-          eset.intersection_of(plan.will_write[shard]);
+          eset.intersection_of(clone_ranges);
 
           // First write to this shard
-entry->written_shards.insert(st.first);
           for (auto &[start, len] : eset) {
+            entry->written_shards.insert(shard);
+
             if (start < restore_from) restore_from = start;
             if(start + len > restore_end) restore_end = start + len;
 
@@ -637,10 +644,6 @@ entry->written_shards.insert(st.first);
               len,
               start);
           }
-        }
-
-        if (restore_end != 0) {
-          rollback_extents.emplace_back(restore_from, restore_end - restore_from);
         }
 
 	encode_and_write(pgid, oid, ecimpl, plan, to_write, fadvise_flags,
