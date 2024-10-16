@@ -119,7 +119,7 @@ void RadosIo::applyIoOp(IoOp &op)
       op_info->bl1 = db->generate_data(0, op.length1);
       op_info->wop.write_full(op_info->bl1);
       auto create_cb = [this] (boost::system::error_code ec,
-                               version_t ver) {
+                             version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
@@ -134,7 +134,7 @@ void RadosIo::applyIoOp(IoOp &op)
       op_info = std::make_shared<AsyncOpInfo>();
       op_info->wop.remove();
       auto remove_cb = [this] (boost::system::error_code ec,
-                               version_t ver) {
+                             version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
@@ -241,7 +241,7 @@ void RadosIo::applyIoOp(IoOp &op)
 
       op_info->wop.write(op.offset1 * block_size, op_info->bl1);
       auto write_cb = [this] (boost::system::error_code ec,
-                              version_t ver) {
+                             version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
@@ -261,7 +261,7 @@ void RadosIo::applyIoOp(IoOp &op)
       op_info->wop.write(op.offset1 * block_size, op_info->bl1);
       op_info->wop.write(op.offset2 * block_size, op_info->bl2);
       auto write2_cb = [this] (boost::system::error_code ec,
-                               version_t ver) {
+                             version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
@@ -284,7 +284,7 @@ void RadosIo::applyIoOp(IoOp &op)
       op_info->wop.write(op.offset2 * block_size, op_info->bl2);
       op_info->wop.write(op.offset3 * block_size, op_info->bl3);
       auto write3_cb = [this] (boost::system::error_code ec,
-                               version_t ver) {
+                             version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
