@@ -297,10 +297,6 @@ public:
   uint64_t get_total_chunk_size() const {
     return total_chunk_size;
   }
-  uint64_t get_total_logical_size(const stripe_info_t &sinfo) const {
-    return get_total_chunk_size() *
-      (sinfo.get_stripe_width()/sinfo.get_chunk_size());
-  }
   void set_total_chunk_size_clear_hash(uint64_t new_chunk_size) {
     cumulative_shard_hashes.clear();
     total_chunk_size = new_chunk_size;
