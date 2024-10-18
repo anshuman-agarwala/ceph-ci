@@ -99,8 +99,8 @@ ECTransaction::WritePlanObj::WritePlanObj(
   const std::optional<object_info_t> &soi,
   const ECUtil::HashInfoRef &&hinfo,
   const ECUtil::HashInfoRef &&shinfo) :
-hinfo(std::move(hinfo)),
-shinfo(std::move(shinfo)),
+hinfo(hinfo),
+shinfo(shinfo),
 orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
 {
   extent_set ro_writes;
@@ -132,7 +132,6 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
     ro_writes.insert(start, end - start);
   }
 
-  auto &write = will_write;
   extent_set outter_extent_superset;
 
   std::optional<std::map<int, extent_set>> inner;
@@ -153,61 +152,77 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
     uint64_t inner_len = std::max(inner_off, ECUtil::align_page_prev(raw_end)) - inner_off;
 
     if (inner || outter_off != inner_off || outter_len != inner_len) {
-      if (!inner) inner = std::map(write);
+      if (!inner) inner = std::map(will_write);
       sinfo.ro_range_to_shard_extent_set(inner_off,inner_len, *inner);
     }
 
     // Will write is expanded to page offsets.
     sinfo.ro_range_to_shard_extent_set(outter_off,outter_len,
-      write, outter_extent_superset);
-  }
-  std::map<int, extent_set> &small_set = inner?*inner:write;
-  std::map<int, extent_set> partial_stripe;
-  std::map<int, extent_set> zero;
-
-  sinfo.ro_range_to_shard_extent_set(projected_size,
-    sinfo.logical_to_next_stripe_offset(projected_size), partial_stripe);
-
-  /* The zero stripe is any area that gets zeroed if not written to. It is used
-   * by appends (old size -> new size) and truncates if truncate.second >
-   * truncate.first.
-   */
-  if (orig_size < projected_size) {
-    sinfo.ro_range_to_shard_extent_set(orig_size,
-      projected_size - orig_size, zero);
-  }
-  if (op.truncate && op.truncate->first < op.truncate->second) {
-    sinfo.ro_range_to_shard_extent_set(op.truncate->first,
-      op.truncate->second - op.truncate->first, zero);
+      will_write, outter_extent_superset);
   }
 
   /* Construct the to read on the stack, to avoid having to insert and
-   * erase into maps */
+ * erase into maps */
   std::map<int, extent_set> reads;
-  for (int raw_shard = 0; raw_shard< sinfo.get_k_plus_m(); raw_shard++) {
-    int shard = sinfo.get_shard(raw_shard);
-    extent_set _to_read;
-
-    if (raw_shard < sinfo.get_k()) {
-      _to_read.insert(outter_extent_superset);
-
-      if (small_set.contains(shard)) {
-        _to_read.subtract(small_set.at(shard));
+  if (sinfo.supports_partial_writes())
+  {
+    /* We are not yet attempting to optimise this path and we are instead opting to maintain the old behaviour, where
+     * a full read and write is performed for every stripe.
+     */
+    outter_extent_superset.align(sinfo.get_chunk_size());
+    if (!outter_extent_superset.empty()) {
+      for (int raw_shard = 0; raw_shard < sinfo.get_k_plus_m(); raw_shard++) {
+        int shard = sinfo.get_shard(raw_shard);
+        will_write[shard].insert(outter_extent_superset);
+        reads[shard].insert(outter_extent_superset);
       }
+    }
+  } else {
+    std::map<int, extent_set> &small_set = inner?*inner:will_write;
+    std::map<int, extent_set> partial_stripe;
+    std::map<int, extent_set> zero;
 
-      if (partial_stripe.contains(shard)) {
-        _to_read.subtract(partial_stripe.at(shard));
-      }
+    sinfo.ro_range_to_shard_extent_set(projected_size,
+      sinfo.logical_to_next_stripe_offset(projected_size), partial_stripe);
 
-      if (!_to_read.empty()) {
-        reads.emplace(shard, std::move(_to_read));
-      }
+    /* The zero stripe is any area that gets zeroed if not written to. It is used
+     * by appends (old size -> new size) and truncates if truncate.second >
+     * truncate.first.
+     */
+    if (orig_size < projected_size) {
+      sinfo.ro_range_to_shard_extent_set(orig_size,
+        projected_size - orig_size, zero);
+    }
+    if (op.truncate && op.truncate->first < op.truncate->second) {
+      sinfo.ro_range_to_shard_extent_set(op.truncate->first,
+        op.truncate->second - op.truncate->first, zero);
+    }
 
-      if (zero.contains(shard)) {
-        write[shard].insert(zero.at(shard));
+    for (int raw_shard = 0; raw_shard< sinfo.get_k_plus_m(); raw_shard++) {
+      int shard = sinfo.get_shard(raw_shard);
+      extent_set _to_read;
+
+      if (raw_shard < sinfo.get_k()) {
+        _to_read.insert(outter_extent_superset);
+
+        if (small_set.contains(shard)) {
+          _to_read.subtract(small_set.at(shard));
+        }
+
+        if (partial_stripe.contains(shard)) {
+          _to_read.subtract(partial_stripe.at(shard));
+        }
+
+        if (!_to_read.empty()) {
+          reads.emplace(shard, std::move(_to_read));
+        }
+
+        if (zero.contains(shard)) {
+          will_write[shard].insert(zero.at(shard));
+        }
+      } else {
+        will_write[shard].insert(outter_extent_superset);
       }
-    } else {
-      write[shard].insert(outter_extent_superset);
     }
   }
 
@@ -590,7 +605,14 @@ void ECTransaction::generate_transactions(
       }
 
       extent_set clone_ranges = to_write.get_extent_superset();
-      clone_ranges.erase(sinfo.logical_to_next_stripe_offset(plan.orig_size));
+      uint64_t clone_max = plan.orig_size;
+      if (op.delete_first) {
+        clone_max = 0;
+      } else if (op.truncate && op.truncate->first < clone_max) {
+        clone_max = op.truncate->first;
+      }
+      uint64_t rollback_max = sinfo.logical_to_next_stripe_offset(clone_max);
+      clone_ranges.erase(rollback_max, 0 - rollback_max - 1);
       for (auto &[start, len] : clone_ranges) {
         rollback_extents.emplace_back(start, len);
       }
@@ -616,12 +638,6 @@ void ECTransaction::generate_transactions(
         if (sinfo.supports_ec_optimizations()) {}
 
         map<int, extent_set> cloneable_range;
-        uint64_t clone_max = plan.orig_size;
-        if (op.delete_first) {
-          clone_max = 0;
-        } else if (op.truncate && op.truncate->first < clone_max) {
-          clone_max = op.truncate->first;
-        }
         sinfo.ro_range_to_shard_extent_set(0, clone_max, cloneable_range);
 
         for (auto &&[shard, eset] : cloneable_range) {

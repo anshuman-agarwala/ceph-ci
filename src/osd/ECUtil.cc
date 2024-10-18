@@ -109,8 +109,8 @@ void ECUtil::stripe_info_t::ro_range_to_shards(
     auto shard = chunk_mapping.size() > raw_shard ?
              chunk_mapping[raw_shard] : static_cast<int>(raw_shard);
 
-    int off = start + start_adj;
-    int len =  end + end_adj - start - start_adj;
+    uint64_t off = start + start_adj;
+    uint64_t len =  end + end_adj - start - start_adj;
     if (shard_extent_set) {
       (*shard_extent_set)[shard].insert(off, len);
     }

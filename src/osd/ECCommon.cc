@@ -513,7 +513,7 @@ void ECCommon::ReadPipeline::get_want_to_read_shards(
   const list<ec_align_t> &to_read,
   std::map<int, extent_set> &want_shard_reads)
 {
-  if (cct->_conf->osd_ec_partial_reads) {
+  if (sinfo.supports_partial_reads() && cct->_conf->osd_ec_partial_reads) {
       //optimised.
     for (const auto& single_region : to_read) {
       get_min_want_to_read_shards(single_region, want_shard_reads);

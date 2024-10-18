@@ -1493,7 +1493,11 @@ void ECBackend::submit_transaction(
     std::optional<object_info_t> old_oi = get_object_info_from_obc(obc );
     object_info_t oi = obc->obs.oi;
     std::optional<object_info_t> soi;
-    const ECUtil::HashInfoRef hinfo = get_hinfo_from_disk(oid);
+    ECUtil::HashInfoRef hinfo;
+
+    if (!sinfo.supports_ec_optimizations() || !sinfo.supports_ec_overwrites()) {
+      hinfo = get_hinfo_from_disk(oid);
+    }
 
     hobject_t source;
     if (op.has_source(&source)) {
