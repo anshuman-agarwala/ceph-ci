@@ -23,8 +23,7 @@
 #include "PGBackend.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
-#include "ECTransaction.h"
-#include "ExtentCache.h"
+#include "ECExtentCache.h"
 
 //forward declaration
 struct ECSubWrite;
@@ -35,6 +34,7 @@ struct ECSubReadReply;
 struct RecoveryMessages;
 
 class ECBackend : public PGBackend, public ECCommon {
+
 public:
   RecoveryHandle *open_recovery_op() override;
 
@@ -433,7 +433,8 @@ public:
     ObjectStore *store,
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
-    uint64_t stripe_width);
+    uint64_t stripe_width,
+    ECExtentCache::LRU &ec_extent_cache_lru);
 
   int objects_get_attrs(
     const hobject_t &hoid,
@@ -456,6 +457,5 @@ public:
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };
-ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
 
 #endif

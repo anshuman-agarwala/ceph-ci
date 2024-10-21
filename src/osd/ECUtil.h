@@ -22,9 +22,33 @@
 #include "include/buffer_fwd.h"
 #include "include/ceph_assert.h"
 #include "include/encoding.h"
+#include "common/interval_map.h"
 #include "common/Formatter.h"
 #include "osd_types.h"
-#include "ExtentCache.h"
+
+/// If someone wants these types, but not ExtentCache, move to another file
+struct bl_split_merge {
+  ceph::buffer::list split(
+    uint64_t offset,
+    uint64_t length,
+    ceph::buffer::list &bl) const {
+    ceph::buffer::list out;
+    out.substr_of(bl, offset, length);
+    return out;
+  }
+  bool can_merge(const ceph::buffer::list &left, const ceph::buffer::list &right) const {
+    return true;
+  }
+  ceph::buffer::list merge(ceph::buffer::list &&left, ceph::buffer::list &&right) const {
+    ceph::buffer::list bl{std::move(left)};
+    bl.claim_append(right);
+    return bl;
+  }
+  uint64_t length(const ceph::buffer::list &b) const { return b.length(); }
+};
+
+using extent_set = interval_set<uint64_t>;
+using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
 
 // Setting to 1 turns on very large amounts of level 0 debug containing the
 // contents of buffers. Even on level 20 this is not really wanted.
@@ -142,9 +166,6 @@ public:
     return chunk_mapping;
   }
   int get_shard(int raw_shard) const {
-    if ((int)chunk_mapping.size() < raw_shard)
-      return raw_shard;
-
     return chunk_mapping[raw_shard];
   }
   int get_raw_shard(int shard) const
@@ -447,21 +468,29 @@ public:
 
   void erase_after_ro_offset(uint64_t ro_offset);
   shard_extent_map_t intersect_ro_range(uint64_t ro_offset, uint64_t ro_length) const;
+  shard_extent_map_t intersect(std::optional<std::map<int, extent_set>> const &other) const;
+  shard_extent_map_t intersect(std::map<int, extent_set> const &other) const;
   void insert_in_shard(int shard, uint64_t off, buffer::list &bl);
   void insert_in_shard(int shard, uint64_t off, buffer::list &bl, uint64_t new_start, uint64_t new_end);
   void insert_ro_zero_buffer( uint64_t ro_offset, uint64_t ro_length );
+  void insert(shard_extent_map_t const &other);
   void append_zeros_to_ro_offset( uint64_t ro_offset );
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
   int encode(ErasureCodeInterfaceRef& ecimpl, const HashInfoRef &hinfo, uint64_t before_ro_size);
   void decode(ErasureCodeInterfaceRef& ecimpl, std::map<int, extent_set> want);
-  void get_buffer(int shard, uint64_t offset, uint64_t length, buffer::list &append_to, bool zero_pad);
+  void get_buffer(int shard, uint64_t offset, uint64_t length, buffer::list &append_to, bool zero_pad) const;
   bufferlist get_ro_buffer(uint64_t ro_offset, uint64_t ro_length);
   std::map <int, extent_set> get_extent_set_map();
   void insert_parity_buffers();
   void erase_shard(int shard);
   std::map<int, bufferlist> slice(int offset, int length);
-  std::string debug_string(uint64_t inteval, uint64_t offset);
+  std::string debug_string(uint64_t inteval, uint64_t offset) const;
+  void erase_stripe(uint64_t offset, uint64_t length);
+  bool contains(int shard) const;
+  bool contains(std::optional<std::map<int, extent_set>> const &other) const;
+  bool contains(std::map<int, extent_set> const &other) const;
+  uint64_t size();
 
   void assert_buffer_contents_equal(shard_extent_map_t other) const
   {
@@ -476,6 +505,13 @@ public:
   }
 
   friend std::ostream& operator<<(std::ostream& lhs, const shard_extent_map_t& rhs);
+  friend bool operator==(const shard_extent_map_t& lhs, const shard_extent_map_t& rhs)
+  {
+    return lhs.sinfo == rhs.sinfo
+      && lhs.ro_start == rhs.ro_start
+      && lhs.ro_end == rhs.ro_end
+      && lhs.extent_maps == rhs.extent_maps;
+  }
 };
 
 

@@ -112,10 +112,11 @@ ECBackend::ECBackend(
   ObjectStore *store,
   CephContext *cct,
   ErasureCodeInterfaceRef ec_impl,
-  uint64_t stripe_width)
+  uint64_t stripe_width,
+  ECExtentCache::LRU &ec_extent_cache_lru)
   : PGBackend(cct, pg, store, coll, ch),
     read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener()),
-    rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
+    rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this, ec_extent_cache_lru),
     recovery_backend(cct, this->coll, ec_impl, this->sinfo, read_pipeline, unstable_hashinfo_registry, get_parent(), this),
     ec_impl(ec_impl),
     sinfo(ec_impl, &(get_parent()->get_pool()), stripe_width),
@@ -1147,16 +1148,10 @@ void ECBackend::handle_sub_write_reply(
       get_parent()->update_peer_last_complete_ondisk(from, op.last_complete);
     }
   }
-  if (op.applied) {
-    trace.event("sub write applied");
-    ceph_assert(i->second->pending_apply.count(from));
-    i->second->pending_apply.erase(from);
-  }
 
   if (i->second->pending_commit.empty() &&
       i->second->on_all_commit &&
-      // also wait for apply, to preserve ordering with luminous peers.
-      i->second->pending_apply.empty()) {
+      !i->second->pending_cache_ops) {
     dout(10) << __func__ << " Calling on_all_commit on " << i->second << dendl;
     i->second->on_all_commit->complete(0);
     i->second->on_all_commit = 0;
@@ -1171,7 +1166,11 @@ void ECBackend::handle_sub_write_reply(
     dout(0) << __func__ << " Error inject - marking OSD down" << dendl;
     get_parent()->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
   }
-  rmw_pipeline.check_ops();
+
+  if (i->second->pending_commit.empty())
+  {
+    rmw_pipeline.try_finish_rmw();
+  }
 }
 
 void ECBackend::handle_sub_read_reply(
@@ -1385,13 +1384,13 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
   PGTransactionUPtr t;
 
   void generate_transactions(
-      ceph::ErasureCodeInterfaceRef &ecimpl,
-      pg_t pgid,
-      const ECUtil::stripe_info_t &sinfo,
-      std::map<hobject_t,extent_map> *written,
-      std::map<shard_id_t, ObjectStore::Transaction> *transactions,
-      DoutPrefixProvider *dpp,
-      const ceph_release_t require_osd_release) final
+    ceph::ErasureCodeInterfaceRef &ecimpl,
+    pg_t pgid,
+    const ECUtil::stripe_info_t &sinfo,
+    map<hobject_t, ECUtil::shard_extent_map_t>* written,
+    std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+    DoutPrefixProvider *dpp,
+    const ceph_release_t require_osd_release) final
   {
     assert(t);
     ECTransaction::generate_transactions(
@@ -1466,7 +1465,7 @@ void ECBackend::submit_transaction(
   OpRequestRef client_op
   )
 {
-  auto op = std::make_unique<ECClassicalOp>();
+  auto op = std::make_shared<ECClassicalOp>();
   auto obc_map = t->obc_map;
   op->t = std::move(t);
   op->hoid = hoid;
@@ -1480,6 +1479,7 @@ void ECBackend::submit_transaction(
   op->tid = tid;
   op->reqid = reqid;
   op->client_op = client_op;
+  op->pipeline = &rmw_pipeline;
   if (client_op) {
     op->trace = client_op->pg_trace;
   }
@@ -1582,8 +1582,9 @@ void ECBackend::objects_read_async(
       auto dpp = ec->get_parent()->get_dpp();
       ldpp_dout(dpp, 20) << "objects_read_async_cb: got: " << results
 			 << dendl;
-      ldpp_dout(dpp, 20) << "objects_read_async_cb: cache: " << ec->rmw_pipeline.cache
-			 << dendl;
+      // FIXME
+    //   ldpp_dout(dpp, 20) << "objects_read_async_cb: cache: " << ec->rmw_pipeline.extent_cache
+			 // << dendl;
 
       auto &got = results.at(hoid);
 

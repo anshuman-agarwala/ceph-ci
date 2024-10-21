@@ -252,7 +252,7 @@ void ECTransaction::generate_transactions(
   const ECUtil::stripe_info_t &sinfo,
   const map<hobject_t, ECUtil::shard_extent_map_t> &partial_extents,
   vector<pg_log_entry_t> &entries,
-  map<hobject_t, extent_map> *written_map,
+  map<hobject_t, ECUtil::shard_extent_map_t>* written_map,
   map<shard_id_t, ObjectStore::Transaction> *transactions,
   set<hobject_t> *temp_added,
   set<hobject_t> *temp_removed,
@@ -279,8 +279,6 @@ void ECTransaction::generate_transactions(
       const hobject_t &oid = opair.first;
       auto &op = opair.second;
       auto &obc_map = t.obc_map;
-      //FIXME: Currently unused
-      //auto& written = (*written_map)[oid];
 
       auto iter = obj_to_log.find(oid);
       pg_log_entry_t *entry = iter != obj_to_log.end() ? iter->second : nullptr;
@@ -671,6 +669,8 @@ void ECTransaction::generate_transactions(
 	encode_and_write(pgid, oid, ecimpl, plan, to_write, fadvise_flags,
 	  transactions, dpp);
       }
+
+      written_map->emplace(oid, std::move(to_write));
 
       if (!rollback_extents.empty() && entry) {
 	if (entry) {
