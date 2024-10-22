@@ -1334,8 +1334,7 @@ private:
     // calls to complete. All the handling though is in C_Read_Finisher.
     void complete(int r) override {
       finish(r);
-      if (CRF->iofinished)
-        delete this;
+      delete this;
     }
   };
 
