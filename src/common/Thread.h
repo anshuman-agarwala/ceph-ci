@@ -21,6 +21,7 @@
 #include <system_error>
 #include <thread>
 #include <cstring>
+#include <mutex>
 
 #include <pthread.h>
 #include <sys/types.h>
@@ -37,6 +38,7 @@ class Thread {
   pid_t pid;
   int cpuid;
   static inline thread_local std::string thread_name;
+  static inline thread_local std::once_flag thread_name_once;
 
   void *entry_wrapper();
 
@@ -65,6 +67,13 @@ class Thread {
   int detach();
   int set_affinity(int cpuid);
   static const std::string get_thread_name() {
+    auto save_thread_name = []() {
+      char tn[16] = {0,};
+      pthread_getname_np(pthread_self(), tn, sizeof(tn));
+      tn[15] = '\0';
+      Thread::thread_name = tn;
+    };
+    std::call_once(Thread::thread_name_once, save_thread_name);
     return Thread::thread_name;
   }
 };

@@ -493,13 +493,19 @@ void Log::dump_recent()
   _flush(m_flush, false);
 
   _log_message("--- begin dump of recent events ---", true);
-  std::set<std::pair<pthread_t, const char *>> recent_pthread_ids;
+  std::set<std::string> recent_pthread_ids; // pthread_id^name
   {
     EntryVector t;
     t.insert(t.end(), std::make_move_iterator(m_recent.begin()), std::make_move_iterator(m_recent.end()));
     m_recent.clear();
     for (const auto& e : t) {
-      recent_pthread_ids.emplace(std::make_pair(e.m_thread, e.m_thread_name));
+      std::ostringstream ss;
+      // since the address of the e.m_thread_name is different for every event,
+      // new elements get added to the set even when the pthread id and the
+      // actual name is same
+      // to avoid duplication, such a scheme is necessary
+      ss << e.m_thread << "^" << e.m_thread_name;
+      recent_pthread_ids.emplace(ss.str());
     }
     _flush(t, true);
   }
@@ -515,11 +521,13 @@ void Log::dump_recent()
 			   m_stderr_log, m_stderr_crash), true);
 
   _log_message("--- pthread ID / name mapping for recent threads ---", true);
-  for (auto& [pthread_id, pthread_name] : recent_pthread_ids)
+  for (auto& id_name : recent_pthread_ids)
   {
+    std::string id = id_name.substr(0, id_name.find('^'));
+    std::string name = id_name.substr(id_name.find('^')+1);
     // we want the ID to be printed in the same format as we use for a log entry.
     // The reason is easier grepping.
-    _log_message(fmt::format("  {:x} / {}", tid_to_int(pthread_id), pthread_name), true);
+    _log_message(fmt::format("  {:x} / {}", std::stoul(id), name), true);
   }
 
   _log_message(fmt::format("  max_recent {:9}", m_recent.capacity()), true);
