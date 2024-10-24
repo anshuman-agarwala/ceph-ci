@@ -20,14 +20,15 @@ ObjectContextLoader::load_and_lock_head(Manager &manager, RWState::State lock_ty
   ceph_assert(manager.target.is_head());
   ceph_assert(manager.head_state.is_empty());
   ceph_assert(manager.target_state.is_empty());
-  auto [obc, existed] = obc_registry.get_cached_obc(manager.target);
+  auto [obc, _] = obc_registry.get_cached_obc(manager.target);
   manager.set_state_obc(manager.target_state, obc);
   manager.set_state_obc(manager.head_state, obc);
 
-  if (existed) {
+  if (manager.target_state.obc->loading) {
     co_await manager.target_state.lock_to(lock_type);
   } else {
     manager.target_state.lock_excl_sync();
+    manager.target_state.obc->loading = true;
     co_await load_obc(manager.target_state.obc);
     manager.target_state.demote_excl_to(lock_type);
   }
@@ -44,13 +45,14 @@ ObjectContextLoader::load_and_lock_clone(Manager &manager, RWState::State lock_t
   ceph_assert(manager.target_state.is_empty());
 
   if (manager.head_state.is_empty()) {
-    auto [obc, existed] = obc_registry.get_cached_obc(manager.target.get_head());
+    auto [obc, _] = obc_registry.get_cached_obc(manager.target.get_head());
     manager.set_state_obc(manager.head_state, obc);
 
-    if (existed) {
+    if (manager.head_state.obc->loading) {
       co_await manager.head_state.lock_to(RWState::RWREAD);
     } else {
       manager.head_state.lock_excl_sync();
+      manager.head_state.obc->loading = true;
       co_await load_obc(manager.head_state.obc);
       manager.head_state.demote_excl_to(RWState::RWREAD);
     }
@@ -93,13 +95,14 @@ ObjectContextLoader::load_and_lock_clone(Manager &manager, RWState::State lock_t
       manager.head_state.state = RWState::RWNONE;
     }
   } else {
-    auto [obc, existed] = obc_registry.get_cached_obc(manager.target);
+    auto [obc, _] = obc_registry.get_cached_obc(manager.target);
     manager.set_state_obc(manager.target_state, obc);
 
-    if (existed) {
+    if (manager.target_state.obc->loading) {
       co_await manager.target_state.lock_to(RWState::RWREAD);
     } else {
       manager.target_state.lock_excl_sync();
+      manager.target_state.obc->loading = true;
       co_await load_obc(manager.target_state.obc);
       manager.target_state.obc->set_clone_ssc(manager.head_state.obc->ssc);
       manager.target_state.demote_excl_to(RWState::RWREAD);
