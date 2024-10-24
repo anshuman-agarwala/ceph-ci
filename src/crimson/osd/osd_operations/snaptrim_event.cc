@@ -388,6 +388,9 @@ SnapTrimObjSubEvent::remove_or_update(
 SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t
 SnapTrimObjSubEvent::start()
 {
+  obc_orderer = pg->obc_loader.get_obc_orderer(
+    coid.get_head());
+
   ceph_assert(pg->is_active_clean());
 
   auto exit_handle = seastar::defer([this] {
@@ -396,7 +399,7 @@ SnapTrimObjSubEvent::start()
   });
 
   co_await enter_stage<interruptor>(
-    client_pp().check_already_complete_get_obc);
+    obc_orderer->obc_pp().process);
 
   logger().debug("{}: getting obc for {}", *this, coid);
 
@@ -413,7 +416,6 @@ SnapTrimObjSubEvent::start()
 
   logger().debug("{}: got obc={}", *this, obc_manager.get_obc()->get_oid());
 
-  co_await enter_stage<interruptor>(client_pp().process);
   auto all_completed = interruptor::now();
   {
     // as with PG::submit_executer, we need to build the pg log entries
@@ -440,7 +442,7 @@ SnapTrimObjSubEvent::start()
     co_await std::move(submitted);
   }
 
-  co_await enter_stage<interruptor>(client_pp().wait_repop);
+  co_await enter_stage<interruptor>(obc_orderer->obc_pp().wait_repop);
 
   co_await std::move(all_completed);
 
