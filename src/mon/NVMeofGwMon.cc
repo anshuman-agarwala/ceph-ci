@@ -608,10 +608,10 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   if (sub.size() == 0) {
     avail = gw_availability_t::GW_CREATED;
   } else {
-    bool listener_found = false;
+    bool listener_found = true;
     for (auto &subs: sub) {
-      if (subs.listeners.size()) {
-        listener_found = true;
+      if (subs.listeners.size() == 0) {
+        listener_found = false;
         break;
       }
     }
