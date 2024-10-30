@@ -13,7 +13,6 @@
  */
 
 #include <iostream>
-#include <sstream>
 #include <errno.h>
 #include <signal.h>
 #include "osd/ECUtil.h"
@@ -491,5 +490,5 @@ TEST(ECUtil, shard_extent_map_t_insert_ro_buffer_3)
   semap.insert_ro_extent_map(emap_in);
   bufferlist out = semap.get_ro_buffer(ro_offset, ro_length);
 
-  ASSERT_TRUE(out.contents_equal(ref)) << semap.debug_string();
+  ASSERT_TRUE(out.contents_equal(ref)) << semap.debug_string(2048, 0);
 }
