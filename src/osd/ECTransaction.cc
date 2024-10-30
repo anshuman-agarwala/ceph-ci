@@ -162,10 +162,13 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
   }
 
   /* Construct the to read on the stack, to avoid having to insert and
- * erase into maps */
+   * erase into maps */
   std::map<int, extent_set> reads;
   if (!sinfo.supports_partial_writes())
   {
+    map<int, extent_set> read_mask;
+    sinfo.ro_range_to_shard_extent_set(0, projected_size, read_mask);
+
     /* We are not yet attempting to optimise this path and we are instead opting to maintain the old behaviour, where
      * a full read and write is performed for every stripe.
      */
@@ -174,7 +177,10 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
       for (int raw_shard = 0; raw_shard < sinfo.get_k_plus_m(); raw_shard++) {
         int shard = sinfo.get_shard(raw_shard);
         will_write[shard].insert(outter_extent_superset);
-        reads[shard].insert(outter_extent_superset);
+        if (read_mask.contains(shard)) {
+          reads[shard].insert(outter_extent_superset);
+          reads[shard].intersection_of(read_mask[shard]);
+        }
       }
     }
   } else {

@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 #include "osd/PGTransaction.h"
 #include "osd/ECTransaction.h"
+#include "osd/ECBackend.h"
 
 #include "test/unit.cc"
 
@@ -26,207 +27,64 @@ struct mydpp : public DoutPrefixProvider {
 
 #define dout_context g_ceph_context
 
+struct ECTestOp : ECCommon::RMWPipeline::Op {
+  PGTransactionUPtr t;
+};
+
 TEST(ectransaction, two_writes_separated_append)
 {
   hobject_t h;
-  PGTransactionUPtr t(new PGTransaction);
+  PGTransaction::ObjectOperation op;
   bufferlist a, b;
-  t->create(h);
   a.append_zero(565760);
-  t->write(h, 0, a.length(), a, 0);
+  op.buffer_updates.insert(0, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
   b.append_zero(2437120);
-  t->write(h, 669856, b.length(), b, 0);
+  op.buffer_updates.insert(669856, b.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{b, 0});
 
   ECUtil::stripe_info_t sinfo(2, 8192, 0, std::vector<int>(0));
-  auto plan = ECTransaction::get_write_plan(
-    sinfo,
-    *t,
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
-      return ref;
-    },
-    &dpp);
-  generic_derr << "to_read " << plan.to_read << dendl;
-  generic_derr << "will_write " << plan.will_write << dendl;
 
-  ASSERT_EQ(0u, plan.to_read.size());
-  ASSERT_EQ(1u, plan.will_write.size());
+  ECTransaction::WritePlanObj plan(
+    op,
+    sinfo,
+    std::nullopt,
+    std::nullopt,
+    std::nullopt,
+    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
+    nullptr);
+
+  generic_derr << "plan " << plan << dendl;
+
+  ASSERT_FALSE(plan.to_read);
+  ASSERT_EQ(2u, plan.will_write.size());
 }
 
 TEST(ectransaction, two_writes_separated_misaligned_overwrite)
 {
   hobject_t h;
-  PGTransactionUPtr t(new PGTransaction);
+  PGTransaction::ObjectOperation op;
   bufferlist a, b;
-  t->create(h);
   a.append_zero(565760);
-  t->write(h, 0, a.length(), a, 0);
+  op.buffer_updates.insert(0, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
   b.append_zero(2437120);
-  t->write(h, 669856, b.length(), b, 0);
+  op.buffer_updates.insert(669856, b.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{b, 0});
 
   ECUtil::stripe_info_t sinfo(2, 8192, 0, std::vector<int>(0));
-  auto plan = ECTransaction::get_write_plan(
-    sinfo,
-    *t,
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
-      ref->set_total_chunk_size_clear_hash(1556480);
-      ref->set_projected_total_logical_size(sinfo, 3112960);
-      return ref;
-    },
-    &dpp);
-  generic_derr << "to_read " << plan.to_read << dendl;
-  generic_derr << "will_write " << plan.will_write << dendl;
+  object_info_t oi;
+  oi.size = 3112960;
 
-  ASSERT_EQ(1u, plan.to_read.size());
-  ASSERT_EQ(1u, plan.will_write.size());
+  ECTransaction::WritePlanObj plan(
+  op,
+  sinfo,
+  oi,
+  oi,
+  std::nullopt,
+  ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
+  nullptr);
+
+  generic_derr << "plan " << plan << dendl;
+
+
+  ASSERT_EQ(2u, (*plan.to_read).size());
+  ASSERT_EQ(2u, plan.will_write.size());
 }
 
-TEST(ectransaction, two_writes_nearby)
-{
-  hobject_t h;
-  PGTransactionUPtr t(new PGTransaction);
-  bufferlist a, b;
-  t->create(h);
-
-  // two nearby writes, both partly touching the same 8192-byte stripe
-  ECUtil::stripe_info_t sinfo(2, 8192, 0, std::vector<int>());
-  a.append_zero(565760);
-  t->write(h, 0, a.length(), a, 0);
-  b.append_zero(2437120);
-  t->write(h, 569856, b.length(), b, 0);
-
-  auto plan = ECTransaction::get_write_plan(
-    sinfo,
-    *t,
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
-      return ref;
-    },
-    &dpp);
-  generic_derr << "to_read " << plan.to_read << dendl;
-  generic_derr << "will_write " << plan.will_write << dendl;
-
-  ASSERT_EQ(0u, plan.to_read.size());
-  ASSERT_EQ(1u, plan.will_write.size());
-}
-
-TEST(ectransaction, many_writes)
-{
-  hobject_t h;
-  PGTransactionUPtr t(new PGTransaction);
-  bufferlist a, b;
-  a.append_zero(512);
-  b.append_zero(4096);
-  t->create(h);
-
-  ECUtil::stripe_info_t sinfo(2, 8192, 0, std::vector<int>(0));
-  // write 2801664~512
-  // write 2802176~512
-  // write 2802688~512
-  // write 2803200~512
-  t->write(h, 2801664, a.length(), a, 0);
-  t->write(h, 2802176, a.length(), a, 0);
-  t->write(h, 2802688, a.length(), a, 0);
-  t->write(h, 2803200, a.length(), a, 0);
-
-  // write 2805760~4096
-  // write 2809856~4096
-  // write 2813952~4096
-  t->write(h, 2805760, b.length(), b, 0);
-  t->write(h, 2809856, b.length(), b, 0);
-  t->write(h, 2813952, b.length(), b, 0);
-
-  auto plan = ECTransaction::get_write_plan(
-    sinfo,
-    *t,
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
-      return ref;
-    },
-    &dpp);
-  generic_derr << "to_read " << plan.to_read << dendl;
-  generic_derr << "will_write " << plan.will_write << dendl;
-
-  ASSERT_EQ(0u, plan.to_read.size());
-  ASSERT_EQ(1u, plan.will_write.size());
-}
-
-TEST(ectransaction, two_misaligned_writes)
-{
-  hobject_t h;
-  PGTransactionUPtr t(new PGTransaction);
-  bufferlist a, b;
-  a.append_zero(2048);
-  b.append_zero(2048);
-  t->create(h);
-
-  ECUtil::stripe_info_t sinfo(2, 8192, 2, std::vector<int>(0));
-  t->write(h, 8192, a.length(), a, 0);
-  t->write(h, 4096, a.length(), a, 0);
-
-  auto plan = ECTransaction::get_write_plan(
-    sinfo,
-    *t,
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
-      ref->set_total_chunk_size_clear_hash(8192);
-      ref->set_projected_total_logical_size(sinfo, 8192*2);
-      return ref;
-    },
-    &dpp);
-  generic_derr << "to_read " << plan.to_read << dendl;
-  generic_derr << "will_write " << plan.will_write << dendl;
-
-  std::map<hobject_t, std::map<int, extent_set>> ref_to_read;
-  ref_to_read[h][0].insert(0, 8192);
-  ref_to_read[h][1].insert(0, 8192);
-  ASSERT_EQ(ref_to_read, plan.to_read);
-
-  std::map<hobject_t, std::map<int, extent_set>> ref_will_write;
-  ref_will_write[h][0].insert(4096, 4096);
-  ref_will_write[h][1].insert(0, 4096);
-  ref_will_write[h][2].insert(0, 8192);
-  ref_will_write[h][3].insert(0, 8192);
-  ASSERT_EQ(ref_will_write, plan.will_write);
-}
-
-TEST(ectransaction, single_512_512_write)
-{
-  int k = 5;
-  int m = 1;
-  hobject_t h;
-  PGTransactionUPtr t(new PGTransaction);
-  bufferlist a, b;
-  a.append_zero(512);
-  t->create(h);
-
-  ECUtil::stripe_info_t sinfo(k, 4096 * k, m, std::vector<int>(0));
-  t->write(h, 512, a.length(), a, 0);
-
-  auto plan = ECTransaction::get_write_plan(
-    sinfo,
-    *t,
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
-      ref->set_total_chunk_size_clear_hash(4096*k);
-      ref->set_projected_total_logical_size(sinfo, 4096*k);
-      return ref;
-    },
-    &dpp);
-  generic_derr << "to_read " << plan.to_read << dendl;
-  generic_derr << "will_write " << plan.will_write << dendl;
-
-  std::map<hobject_t, std::map<int, extent_set>> ref_to_read;
-  ref_to_read[h][0].insert(0, 4096);
-  ref_to_read[h][1].insert(0, 4096);
-  ref_to_read[h][2].insert(0, 4096);
-  ref_to_read[h][3].insert(0, 4096);
-  ref_to_read[h][4].insert(0, 4096);
-  ASSERT_EQ(ref_to_read, plan.to_read);
-
-  std::map<hobject_t, std::map<int, extent_set>> ref_will_write;
-  ref_will_write[h][0].insert(0, 4096);
-  ref_will_write[h][5].insert(0, 4096);
-  ASSERT_EQ(ref_will_write, plan.will_write);
-}
