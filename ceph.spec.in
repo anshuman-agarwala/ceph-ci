@@ -138,7 +138,7 @@
 %bcond_without cephadm_bundling
 %bcond_without cephadm_pip_deps
 %bcond_without dwz
-%if %{without dwz}
+%if %{!?with dwz}
 # disable dwz for %50% speedup at the cost of ~33% space
 %global _find_debuginfo_dwz_opts %{nil}
 %endif
