@@ -164,7 +164,7 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
   /* Construct the to read on the stack, to avoid having to insert and
  * erase into maps */
   std::map<int, extent_set> reads;
-  if (sinfo.supports_partial_writes())
+  if (!sinfo.supports_partial_writes())
   {
     /* We are not yet attempting to optimise this path and we are instead opting to maintain the old behaviour, where
      * a full read and write is performed for every stripe.
