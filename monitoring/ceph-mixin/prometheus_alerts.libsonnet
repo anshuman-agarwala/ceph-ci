@@ -936,6 +936,26 @@
           },
         },
         {
+          alert: 'NVMeoFListenersUnbalancedCount',
+          'for': '10m',
+          expr: '(sum(ceph_nvmeof_subsystem_listener_count) by (nqn)) < scalar(count(ceph_nvmeof_gateway_info)) and (sum(ceph_nvmeof_subsystem_listener_count) by (nqn) != 0)',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Not enough listeners added to {{ $labels.nqn }} subsystem',
+            description: 'For every subsystem, each gateway should have a listener to balance traffic between gateways.',
+          },
+        },
+        {
+          alert: 'NVMeoFZeroListeners',
+          'for': '10m',
+          expr: 'sum(ceph_nvmeof_subsystem_listener_count) by (nqn) == 0',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'No listeners added to {{ $labels.nqn }} subsystem',
+            description: 'NVMeoF gateway configuration incomplete; one of the subsystems have zero listeners.',
+          },
+        },
+        {
           alert: 'NVMeoFHighHostCPU',
           'for': '10m',
           expr: '100-((100*(avg by(cluster,host) (label_replace(rate(node_cpu_seconds_total{mode="idle"}[5m]),"host","$1","instance","(.*):.*")) * on(cluster, host) group_right label_replace(ceph_nvmeof_gateway_info,"host","$1","instance","(.*):.*")))) >= %.2f' % [$._config.NVMeoFHighHostCPU],
