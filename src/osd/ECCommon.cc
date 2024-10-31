@@ -870,7 +870,7 @@ struct ECDummyOp : ECCommon::RMWPipeline::Op {
     const ceph_release_t require_osd_release) final
   {
     // NOP, as -- in constrast to ECClassicalOp -- there is no
-    // transaction involvedf
+    // transaction involved
   }
 };
 
@@ -906,8 +906,11 @@ void ECCommon::RMWPipeline::try_finish_rmw()
       }
     }
 
-    for (auto &&[_, c]: op.cache_ops)
+    for (auto &&[_, c]: op.cache_ops) {
       extent_cache.complete(c);
+      delete c;
+    }
+    op.cache_ops.clear();
 
     tid_to_op_map.erase(op.tid);
   }
@@ -922,8 +925,11 @@ void ECCommon::RMWPipeline::on_change()
   waiting_commit.clear();
 
   for (auto &&[_, op]: tid_to_op_map) {
-    for (auto &&[_, cop]: op->cache_ops)
+    for (auto &&[_, cop]: op->cache_ops) {
       extent_cache.complete(cop);
+      delete cop;
+    }
+    op->cache_ops.clear();
   }
   tid_to_op_map.clear();
 }

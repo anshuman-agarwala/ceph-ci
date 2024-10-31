@@ -97,6 +97,9 @@ namespace ECExtentCache {
     for (auto && [shard, emap] : buffers.get_extent_maps()) {
       if (writing.contains(shard)) {
         writing.at(shard).subtract(buffers.get_extent_map(shard).get_interval_set());
+        if(writing.at(shard).empty()) {
+          writing.erase(shard);
+        }
       }
     }
     cache_maybe_ready();
