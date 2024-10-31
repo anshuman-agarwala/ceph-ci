@@ -227,10 +227,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{}.{}: process[_pg]_op complete, completing handle",
 	   *pgref, *this, this_instance_id);
   co_await interruptor::make_interruptible(ihref.handle.complete());
-
-  DEBUGDPP("{}.{}: process[_pg]_op complete,"
-	   "removing request from orderer",
-	   *pgref, *this, this_instance_id);
 }
 
 seastar::future<> ClientRequest::with_pg_process(
@@ -249,7 +245,10 @@ seastar::future<> ClientRequest::with_pg_process(
     [this, pgref, this_instance_id, &ihref]() mutable {
       return with_pg_process_interruptible(
 	pgref, this_instance_id, ihref
-      ).then_interruptible([this, pgref] {
+      ).then_interruptible([FNAME, this, this_instance_id, pgref] {
+	DEBUGDPP("{}.{}: with_pg_process_interruptible complete,"
+		 " completing request",
+		 *pgref, *this, this_instance_id);
 	complete_request(*pgref);
       });
     }, [FNAME, this, this_instance_id, pgref](std::exception_ptr eptr) {
