@@ -525,7 +525,7 @@ struct ECCommon {
    */
 
   struct RMWPipeline : ECExtentCache::BackendRead {
-    struct Op : boost::intrusive::list_base_hook<>, public ECExtentCache::CacheReady
+    struct Op : boost::intrusive::list_base_hook<>
     {
       /// From submit_transaction caller, describes operation
       hobject_t hoid;
@@ -592,9 +592,11 @@ struct ECCommon {
         DoutPrefixProvider *dpp,
         const ceph_release_t require_osd_release = ceph_release_t::unknown) = 0;
 
-      void cache_ready(hobject_t& oid, ECUtil::shard_extent_map_t& result) override
+      void cache_ready(hobject_t& oid, const std::optional<ECUtil::shard_extent_map_t>& result)
       {
-        remote_shard_extent_map.insert(std::pair(oid, result));
+        if (result) {
+          remote_shard_extent_map.insert(std::pair(oid, *result));
+        }
 
         if (!--pending_cache_ops) pipeline->cache_ready(*this);
       }

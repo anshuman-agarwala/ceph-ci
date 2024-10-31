@@ -77,18 +77,31 @@ namespace ECExtentCache {
     LRU &lru;
     const ECUtil::stripe_info_t &sinfo;
 
+    void request(OpRef &op, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write);
+
   public:
-  explicit PG(BackendRead &backend_read,
-    LRU &lru, const ECUtil::stripe_info_t &sinfo) :
-    backend_read(backend_read),
-    lru(lru),
-    sinfo(sinfo) {}
+    explicit PG(BackendRead &backend_read,
+      LRU &lru, const ECUtil::stripe_info_t &sinfo) :
+      backend_read(backend_read),
+      lru(lru),
+      sinfo(sinfo) {}
 
     // Insert some data into the cache.
     void read_done(hobject_t const& oid, ECUtil::shard_extent_map_t const&& update);
     void write_done(OpRef &op, ECUtil::shard_extent_map_t const&& update);
     void complete(OpRef &read);
-    void request(OpRef &op, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write);
+
+    template<typename CacheReadyCb>
+    OpRef request(hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write, CacheReadyCb &&ready_cb) {
+
+      GenContextURef<OpRef &> ctx = make_gen_lambda_context<OpRef &, CacheReadyCb>(
+            std::forward<CacheReadyCb>(ready_cb));
+      OpRef op_ref = std::make_shared<Op>(std::move(ctx));
+
+      request(op_ref, oid, to_read, write);
+
+      return op_ref;
+    }
     bool idle(hobject_t &oid) const;
   };
 
@@ -110,11 +123,6 @@ namespace ECExtentCache {
     explicit LRU(uint64_t max_size) : max_size(max_size) {}
   };
 
-  struct CacheReady {
-    virtual void cache_ready(hobject_t& oid, ECUtil::shard_extent_map_t& result) = 0;
-
-    virtual ~CacheReady() = default;
-  };
 
   class Op
   {
@@ -127,11 +135,11 @@ namespace ECExtentCache {
     std::map<int, extent_set> writes;
     std::optional<ECUtil::shard_extent_map_t> result;
     bool complete = false;
-    std::shared_ptr<CacheReady> cache_ready;
+    GenContextURef<OpRef &> cache_ready_cb;
 
   public:
-    explicit Op(std::shared_ptr<CacheReady> &&cache_ready);
-
+    explicit Op(GenContextURef<OpRef &> &&cache_ready_cb) :
+      cache_ready_cb(std::move(cache_ready_cb)) {}
     std::optional<ECUtil::shard_extent_map_t> get_result() { return result; }
     std::map<int, extent_set> get_writes() { return writes; }
 

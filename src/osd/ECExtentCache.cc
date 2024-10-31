@@ -33,7 +33,7 @@ namespace ECExtentCache {
     {
       op->result = cache.intersect(op->reads);
       op->complete = true;
-      op->cache_ready->cache_ready(op->oid, *op->result);
+      op->cache_ready_cb.release()->complete(op);
     }
   }
 
@@ -214,8 +214,4 @@ namespace ECExtentCache {
   {
     return objects.contains(oid) && objects.at(oid).waiting_ops.empty();
   }
-
-  Op::Op(std::shared_ptr<CacheReady> &&cache_ready):
-    cache_ready(std::move(cache_ready)) {}
-
 } // ECExtentCache

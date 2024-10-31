@@ -718,9 +718,12 @@ void ECCommon::RMWPipeline::start_rmw(OpRef op)
 
   op->pending_cache_ops = op->plan.plans.size();
   for (auto &&[oid, plan] : op->plan.plans) {
-    op->cache_ops.emplace(oid, ECExtentCache::OpRef(
-      new ECExtentCache::Op(dynamic_pointer_cast<ECExtentCache::CacheReady, Op>(op))));
-    extent_cache.request(op->cache_ops[oid], oid, plan.to_read, plan.will_write);
+    ECExtentCache::OpRef cache_op = extent_cache.request(oid, plan.to_read, plan.will_write,
+      [op](ECExtentCache::OpRef &cache_op)
+      {
+        op->cache_ops.emplace(op->hoid, cache_op);
+        op->cache_ready(op->hoid, cache_op->get_result());
+      });
   }
 }
 
@@ -897,19 +900,24 @@ void ECCommon::RMWPipeline::try_finish_rmw()
         nop->roll_forward_to = op.version;
         nop->tid = tid;
         nop->reqid = op.reqid;
-        nop->cache_ops.emplace(op.hoid, ECExtentCache::OpRef(
-          new ECExtentCache::Op(dynamic_pointer_cast<ECExtentCache::CacheReady, Op>(nop))));
         nop->pending_cache_ops = 1;
         nop->pipeline = this;
-        extent_cache.request(nop->cache_ops.at(op.hoid), op.hoid, std::nullopt, map<int, extent_set>());
+
+        ECExtentCache::OpRef cache_op = extent_cache.request(op.hoid, std::nullopt, map<int, extent_set>(),
+          [nop](ECExtentCache::OpRef cache_op)
+          {
+            nop->cache_ops.emplace(nop->hoid, std::move(cache_op));
+            nop->cache_ready(nop->hoid, std::nullopt);
+          });
+
         tid_to_op_map[tid] = std::move(nop);
       }
     }
 
     for (auto &&[_, c]: op.cache_ops) {
       extent_cache.complete(c);
-      delete c;
     }
+
     op.cache_ops.clear();
 
     tid_to_op_map.erase(op.tid);
@@ -927,7 +935,6 @@ void ECCommon::RMWPipeline::on_change()
   for (auto &&[_, op]: tid_to_op_map) {
     for (auto &&[_, cop]: op->cache_ops) {
       extent_cache.complete(cop);
-      delete cop;
     }
     op->cache_ops.clear();
   }
