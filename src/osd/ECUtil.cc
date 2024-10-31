@@ -359,6 +359,9 @@ namespace ECUtil {
   void shard_extent_map_t::insert_in_shard(int shard, uint64_t off,
     buffer::list &bl)
   {
+    if (bl.length() == 0)
+      return;
+
     extent_maps[shard].insert(off, bl.length(), bl);
     uint64_t new_start = calc_ro_offset(sinfo->get_raw_shard(shard), off);
     uint64_t new_end = calc_ro_offset(sinfo->get_raw_shard(shard), off + bl.length() - 1) + 1;
