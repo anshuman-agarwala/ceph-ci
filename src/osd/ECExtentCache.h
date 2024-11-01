@@ -43,26 +43,6 @@ namespace ECExtentCache {
     }
   };
 
-  class Line
-  {
-  public:
-    bool in_lru;
-    int ref_count;
-    Address address;
-
-    friend bool operator==(const Line& lhs, const Line& rhs)
-    {
-      return lhs.in_lru == rhs.in_lru
-        && lhs.ref_count == rhs.ref_count
-        && lhs.address == rhs.address;
-    }
-
-    friend bool operator!=(const Line& lhs, const Line& rhs)
-    {
-      return !(lhs == rhs);
-    }
-  };
-
   struct BackendRead {
     virtual void backend_read(hobject_t oid, std::map<int, extent_set> const &request) = 0;
     virtual ~BackendRead() = default;
@@ -115,7 +95,7 @@ namespace ECExtentCache {
     ceph::mutex mutex = ceph::make_mutex("ECExtentCache::LRU");;
 
     std::map<hobject_t, std::list<uint64_t>> free_maybe();
-    void pin(OpRef &op, uint64_t alignment);
+    void pin(OpRef &op, uint64_t alignment, Object &object);
     std::map<hobject_t, std::list<uint64_t>> unpin(OpRef &op, uint64_t alignment);
     void inc_size(uint64_t size);
     void dec_size(uint64_t size);
@@ -150,6 +130,8 @@ namespace ECExtentCache {
 
     friend class PG;
     friend class Op;
+    friend class Line;
+
 
     PG &pg;
     hobject_t oid;
@@ -159,7 +141,7 @@ namespace ECExtentCache {
     std::map<int, extent_set> writing;
     ECUtil::shard_extent_map_t cache;
     std::list<OpRef> waiting_ops;
-
+    uint64_t line_count = 0;
 
     uint64_t free(uint64_t offset, uint64_t length);
     void request(OpRef &op);
@@ -170,7 +152,37 @@ namespace ECExtentCache {
     void cache_maybe_ready();
 
   public:
-    Object(PG &pg) : pg(pg), sinfo(pg.sinfo), cache(&pg.sinfo) {}
+    Object(PG &pg, hobject_t oid) : pg(pg), oid(oid), sinfo(pg.sinfo), cache(&pg.sinfo) {}
+  };
+
+
+  class Line
+  {
+  public:
+    bool in_lru = false;
+    int ref_count = 0;
+    Address address;
+    Object &object;
+
+    Line(Object &object, Address &address) : address(address) , object(object) {
+      object.line_count++;
+    }
+
+    ~Line() {
+      object.line_count--;
+    }
+
+    friend bool operator==(const Line& lhs, const Line& rhs)
+    {
+      return lhs.in_lru == rhs.in_lru
+        && lhs.ref_count == rhs.ref_count
+        && lhs.address == rhs.address;
+    }
+
+    friend bool operator!=(const Line& lhs, const Line& rhs)
+    {
+      return !(lhs == rhs);
+    }
   };
 } // ECExtentCaches
 

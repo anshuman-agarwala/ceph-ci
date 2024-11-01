@@ -16,7 +16,8 @@ namespace ECExtentCache {
     uint64_t old_size = cache.size();
     cache.erase_stripe(offset, length);
 
-    if (cache.empty()) {
+    if (line_count == 0) {
+      ceph_assert(cache.empty());
       pg.objects.erase(oid);
     }
 
@@ -47,20 +48,20 @@ namespace ECExtentCache {
         if (reading.contains(shard)) request.subtract(reading.at(shard));
         if (writing.contains(shard)) request.subtract(writing.at(shard));
 
-        // Store the set of writes we are doing in this IO after subtracting the previous set.
-        // We require that the overlapping reads and writes in the requested IO are either read
-        // or were written by a previous IO.
-        if (op->writes.contains(shard)) writing[shard].insert(op->writes.at(shard));
         if (!request.empty()) {
           requesting[shard].insert(request);
         }
       }
     }
 
-    // Record the writes that will be made by this IO. Future IOs will not need to read this.
+    // Store the set of writes we are doing in this IO after subtracting the previous set.
+    // We require that the overlapping reads and writes in the requested IO are either read
+    // or were written by a previous IO.
+    for (auto &&[shard, eset]: op->writes) {
+      if (op->writes.contains(shard)) writing[shard].insert(op->writes.at(shard));
+    }
 
     waiting_ops.emplace_back(op);
-
     cache_maybe_ready();
     send_reads();
   }
@@ -114,9 +115,9 @@ namespace ECExtentCache {
     op->writes = write;
 
     if (!objects.contains(op->oid)) {
-      objects.emplace(op->oid, Object(*this));
+      objects.emplace(op->oid, Object(*this, op->oid));
     }
-    lru.pin(op, sinfo.get_chunk_size());
+    lru.pin(op, sinfo.get_chunk_size(), objects.at(op->oid));
     objects.at(op->oid).request(op);
   }
 
@@ -132,7 +133,7 @@ namespace ECExtentCache {
     lru.inc_size(size_added);
   }
 
-  void LRU::pin(OpRef &op, uint64_t alignment)
+  void LRU::pin(OpRef &op, uint64_t alignment, Object &object)
   {
     mutex.lock();
     extent_set eset;
@@ -143,9 +144,10 @@ namespace ECExtentCache {
     for (auto &&[start, len]: eset ) {
       for (uint64_t to_pin = start; to_pin < start + len; to_pin += alignment) {
         Address a = Address(op->oid, to_pin);
-        Line &l = lines[a];
+        if (!lines.contains(a))
+          lines.emplace(a, std::move(Line(object, a)));
+        Line &l = lines.at(a);
         if (l.in_lru) lru.remove(l);
-        else l.address = a;
         l.in_lru = false;
         l.ref_count++;
       }
