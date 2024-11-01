@@ -176,12 +176,18 @@ class TestAdminCommands(CephFSTestCase):
         health_warn = 'MDS_TRIM'
 
         # for generating health warning MDS_TRIM
-        self.config_set('mds', 'mds_debug_subtrees', 'true')
+        #self.config_set('mds', 'mds_debug_subtrees', 'true')
         # this will really really slow the trimming, so that MDS_TRIM stays
         # for longer.
-        self.config_set('mds', 'mds_log_max_segments', '0')
-        self.config_set('mds', 'mds_log_warn_factor', '1')
-        self.mount_a.open_n_background('.', 400)
+        self.config_set('mds', 'mds_log_warn_factor', '3')
+        self.config_set('mds', 'mds_log_max_segments', '7')
+        o = self.get_ceph_cmd_stdout('config get mds mds_log_max_segments')
+        log.info(f'{o}')
+        self.mount_a.open_n_background('.', 999)
+        self.mount_a.open_n_background('.', 999)
+        self.mount_a.open_n_background('.', 999)
+        self.mount_a.open_n_background('.', 999)
+        self.mount_a.open_n_background('.', 999)
 
         self.wait_for_health(health_warn, 30)
 

@@ -318,7 +318,16 @@ void Beacon::notify_health(MDSRank const *mds)
   // Detect MDS_HEALTH_TRIM condition
   // Indicates MDS is not trimming promptly
   {
+    dout(0) << "here123 mds_log_max_segments = " << g_conf()->mds_log_max_segments << dendl;
+    dout(0) << "here123 mds_log_max_segments = " << g_conf().get_val<uint64_t>("mds_log_max_segments"); 
+    //dout(0) << "here123 mds_log_max_segments = " << g_conf().get_val<double>("mds_log_max_segments") << dendl;
+    dout(0) << "here123 mds_log_warn_factor = " << g_conf().get_val<double>("mds_log_warn_factor") << dendl;
+    dout(0) << "here123 mds->mdlog->get_num_segments() = " << mds->mdlog->get_num_segments() << dendl;
+
     if (mds->mdlog->get_num_segments() > (size_t)(g_conf()->mds_log_max_segments * g_conf().get_val<double>("mds_log_warn_factor"))) {
+
+      dout(0) << "here123 raising health warning MDS_TRIM " << dendl;
+
       CachedStackStringStream css;
       *css << "Behind on trimming (" << mds->mdlog->get_num_segments()
         << "/" << g_conf()->mds_log_max_segments << ")";

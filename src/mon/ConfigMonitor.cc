@@ -541,6 +541,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     name = ConfFile::normalize_key_name(name);
     
     if (prefix == "config set" && !force) {
+      dout(0) << "here1234 config set" << dendl;
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	opt = mon.mgrmon()->find_module_option(name);
@@ -586,6 +587,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     }
     key += name;
 
+    dout(0) << "here1234 " << prefix << " " << who << " " << key << " " << value << dendl;
     if (prefix == "config set") {
       bufferlist bl;
       bl.append(value);
