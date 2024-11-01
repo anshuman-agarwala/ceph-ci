@@ -142,8 +142,10 @@ namespace ECExtentCache {
 
     for (auto &&[start, len]: eset ) {
       for (uint64_t to_pin = start; to_pin < start + len; to_pin += alignment) {
-        Line &l = lines[Address(op->oid, to_pin)];
+        Address a = Address(op->oid, to_pin);
+        Line &l = lines[a];
         if (l.in_lru) lru.remove(l);
+        else l.address = a;
         l.in_lru = false;
         l.ref_count++;
       }
