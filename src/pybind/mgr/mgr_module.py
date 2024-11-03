@@ -543,6 +543,8 @@ class CLICommand(object):
 
 
 def CLIReadCommand(prefix: str, poll: bool = False) -> CLICommand:
+    if prefix == 'nvmf subsystem list':
+        print(f'CLIReadCommand called with {prefix=} {poll=}')
     return CLICommand(prefix, "r", poll)
 
 
