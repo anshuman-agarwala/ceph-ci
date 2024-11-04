@@ -204,12 +204,20 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
         op.truncate->second - op.truncate->first, zero);
     }
 
+    map<int, extent_set> existing_mask;
+    sinfo.ro_range_to_shard_extent_set(0, orig_size, existing_mask);
+
+
     for (int raw_shard = 0; raw_shard< sinfo.get_k_plus_m(); raw_shard++) {
       int shard = sinfo.get_shard(raw_shard);
-      extent_set _to_read;
 
       if (raw_shard < sinfo.get_k()) {
-        _to_read.insert(outter_extent_superset);
+        if (!existing_mask.contains(shard))
+          continue;
+
+        extent_set _to_read;
+
+        _to_read.intersection_of(outter_extent_superset, existing_mask[shard]);
 
         if (small_set.contains(shard)) {
           _to_read.subtract(small_set.at(shard));
@@ -223,9 +231,10 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
           reads.emplace(shard, std::move(_to_read));
         }
 
-        if (zero.contains(shard)) {
-          will_write[shard].insert(zero.at(shard));
-        }
+        // FIXME - we need to handle the padding properly
+        // if (zero.contains(shard)) {
+        //   will_write[shard].insert(zero.at(shard));
+        // }
       } else {
         will_write[shard].insert(outter_extent_superset);
       }
