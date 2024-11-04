@@ -11,6 +11,7 @@
 #include "osd/osd_op_util.h"
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/object_context_loader.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/client_request_common.h"
@@ -93,6 +94,7 @@ public:
     // don't leave any references on the source core, so we just bypass it by using
     // intrusive_ptr instead.
     using ref_t = boost::intrusive_ptr<instance_handle_t>;
+    std::optional<ObjectContextLoader::Orderer> obc_orderer;
     PipelineHandle handle;
 
     std::tuple<
@@ -100,13 +102,10 @@ public:
       PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
       PGPipeline::WaitForActive::BlockingEvent,
       PGActivationBlocker::BlockingEvent,
-      PGPipeline::RecoverMissing::BlockingEvent,
+      CommonOBCPipeline::Process::BlockingEvent,
       scrub::PGScrubber::BlockingEvent,
-      PGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent,
-      PGPipeline::LockOBC::BlockingEvent,
-      PGPipeline::Process::BlockingEvent,
-      PGPipeline::WaitRepop::BlockingEvent,
-      PGPipeline::SendReply::BlockingEvent,
+      CommonOBCPipeline::WaitRepop::BlockingEvent,
+      CommonOBCPipeline::SendReply::BlockingEvent,
       CompletionEvent
       > pg_tracking_events;
 
@@ -210,7 +209,7 @@ public:
     void requeue(Ref<PG> pg);
     void clear_and_cancel(PG &pg);
   };
-  void complete_request();
+  void complete_request(PG &pg);
 
   static constexpr OperationTypeCode type = OperationTypeCode::client_request;
 

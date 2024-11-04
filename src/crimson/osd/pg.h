@@ -517,6 +517,9 @@ public:
 
 
   // Utility
+  bool is_active() const {
+    return peering_state.is_active();
+  }
   bool is_active_clean() const {
     return peering_state.is_active() && peering_state.is_clean();
   }
@@ -589,11 +592,6 @@ public:
   using with_obc_func_t =
     std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
-  load_obc_iertr::future<> with_locked_obc(
-    const hobject_t &hobj,
-    const OpInfo &op_info,
-    with_obc_func_t&& f);
-
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
   void update_stats(const pg_stat_t &stat);
   interruptible_future<> update_snap_map(
@@ -663,6 +661,7 @@ private:
     const OpInfo &op_info,
     std::vector<OSDOp>& ops);
 
+  seastar::shared_mutex submit_lock;
   using submit_executer_ret = std::tuple<
     interruptible_future<>,
     interruptible_future<>>;
