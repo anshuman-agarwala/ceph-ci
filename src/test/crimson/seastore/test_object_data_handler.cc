@@ -255,9 +255,12 @@ struct object_data_handler_test_t:
     Transaction &t,
     laddr_t addr,
     extent_len_t len) {
-    auto ext = with_trans_intr(t, [&](auto& trans) {
+    auto maybe_indirect_ext = with_trans_intr(t, [&](auto& trans) {
 	return tm->read_extent<ObjectDataBlock>(trans, addr, len);
 	}).unsafe_get();
+    EXPECT_FALSE(maybe_indirect_ext.is_clone);
+    EXPECT_FALSE(maybe_indirect_ext.is_indirect());
+    auto ext = maybe_indirect_ext.extent;
     EXPECT_EQ(addr, ext->get_laddr());
     return ext;
   }
