@@ -1,6 +1,7 @@
 overrides:
   ceph:
     cephfs:
+      max_mds: 4
       fs:
         - name: a
         - name: b
