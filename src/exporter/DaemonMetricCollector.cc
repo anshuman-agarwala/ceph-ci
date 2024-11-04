@@ -31,6 +31,11 @@ using json_array = boost::json::array;
 
 void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
   timer.async_wait([&](const boost::system::error_code &e) {
+    if (shutdown_flag) {
+      timer.cancel();
+      dout(1) << "Metric collector request loop cancelled" << dendl;
+      return;
+    }
     std::cerr << e << std::endl;
     update_sockets();
 
@@ -41,6 +46,7 @@ void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
     dump_asok_metrics(sort_metrics, prio_limit, true, dump_response, schema_response, true);
     auto stats_period = g_conf().get_val<int64_t>("exporter_stats_period");
     // time to wait before sending requests again
+    boost::this_thread::interruption_point();
     timer.expires_from_now(std::chrono::seconds(stats_period));
     request_loop(timer);
   });
@@ -48,11 +54,15 @@ void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
 
 void DaemonMetricCollector::main() {
   // time to wait before sending requests again
-
+  shutdown_flag = false;
   boost::asio::io_context io;
   boost::asio::steady_timer timer{io, std::chrono::seconds(0)};
   request_loop(timer);
   io.run();
+}
+
+void DaemonMetricCollector::shutdown(){
+  shutdown_flag = true;
 }
 
 std::string DaemonMetricCollector::get_metrics() {
@@ -498,4 +508,15 @@ std::string Metric::dump() {
 DaemonMetricCollector &collector_instance() {
   static DaemonMetricCollector instance;
   return instance;
+}
+
+// Entry point for the DaemonMetricCollector thread
+void collector_thread_entrypoint() {
+    DaemonMetricCollector &collector = collector_instance();
+    try {
+        collector.main();
+    } catch (boost::thread_interrupted&) {
+        collector.shutdown();
+        std::cout << "Ceph exporter daemon metrics collector stopped" << std::endl;
+    }
 }
