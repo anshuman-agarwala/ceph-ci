@@ -24,7 +24,7 @@ ECBackend::_read(const hobject_t& hoid,
 }
 
 ECBackend::rep_op_fut_t
-ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
+ECBackend::submit_transaction(const std::vector<pg_shard_should_send> &shards,
                               const hobject_t& hoid,
                               ceph::os::Transaction&& txn,
                               osd_op_params_t&& osd_op_p,

@@ -33,7 +33,7 @@ private:
     _read(const hobject_t& hoid, uint64_t off,
 	  uint64_t len, uint32_t flags) override;
   rep_op_fut_t submit_transaction(
-    const std::set<pg_shard_t> &pg_shards,
+    const std::vector<pg_shard_should_send> &shards,
     const hobject_t& hoid,
     ceph::os::Transaction&& txn,
     osd_op_params_t&& osd_op_p,
@@ -68,6 +68,7 @@ private:
     epoch_t min_epoch,
     epoch_t map_epoch,
     const std::vector<pg_log_entry_t> &log_entries,
+    bool send_op,
     ceph_tid_t tid);
 
   seastar::future<> request_committed(

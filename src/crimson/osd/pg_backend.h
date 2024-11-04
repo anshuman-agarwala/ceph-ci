@@ -411,8 +411,9 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
+  using pg_shard_should_send = std::pair<pg_shard_t, bool>;
   virtual rep_op_fut_t
-  submit_transaction(const std::set<pg_shard_t> &pg_shards,
+  submit_transaction(const std::vector<pg_shard_should_send> &shards,
 		     const hobject_t& hoid,
 		     ceph::os::Transaction&& txn,
 		     osd_op_params_t&& osd_op_p,

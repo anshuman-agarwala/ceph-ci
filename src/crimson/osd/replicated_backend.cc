@@ -44,6 +44,7 @@ MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
   epoch_t min_epoch,
   epoch_t map_epoch,
   const std::vector<pg_log_entry_t> &log_entries,
+  bool send_op,
   ceph_tid_t tid)
 {
   ceph_assert(pg_shard != whoami);
@@ -57,7 +58,7 @@ MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
     min_epoch,
     tid,
     osd_op_p.at_version);
-  if (pg.should_send_op(pg_shard, hoid)) {
+  if (send_op) {
     m->set_data(encoded_txn);
   } else {
     ceph::os::Transaction t;
@@ -73,12 +74,13 @@ MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
 }
 
 ReplicatedBackend::rep_op_fut_t
-ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
-                                      const hobject_t& hoid,
-                                      ceph::os::Transaction&& t,
-                                      osd_op_params_t&& opp,
-                                      epoch_t min_epoch, epoch_t map_epoch,
-				      std::vector<pg_log_entry_t>&& logv)
+ReplicatedBackend::submit_transaction(
+  const std::vector<pg_shard_should_send> &shards,
+  const hobject_t& hoid,
+  ceph::os::Transaction&& t,
+  osd_op_params_t&& opp,
+  epoch_t min_epoch, epoch_t map_epoch,
+  std::vector<pg_log_entry_t>&& logv)
 {
   LOG_PREFIX(ReplicatedBackend::submit_transaction);
   DEBUGDPP("object {}", dpp, hoid);
@@ -87,8 +89,9 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
   auto osd_op_p = std::move(opp);
 
   const ceph_tid_t tid = shard_services.get_tid();
+  size_t num_pendings = shards.size() + 1 /*myself*/;
   auto pending_txn =
-    pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
+    pending_trans.try_emplace(tid, num_pendings, osd_op_p.at_version).first;
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
@@ -97,17 +100,22 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
   }
 
   auto sends = std::make_unique<std::vector<seastar::future<>>>();
-  for (auto pg_shard : pg_shards) {
-    if (pg_shard != whoami) {
-      auto m = new_repop_msg(
+  for (auto &[pg_shard, should_send] : shards) {
+    MURef<MOSDRepOp> m;
+    if (should_send) {
+      m = new_repop_msg(
 	pg_shard, hoid, encoded_txn, osd_op_p,
-	min_epoch, map_epoch, log_entries, tid);
-      pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
-      // TODO: set more stuff. e.g., pg_states
-      sends->emplace_back(
-	shard_services.send_to_osd(
-	  pg_shard.osd, std::move(m), map_epoch));
+	min_epoch, map_epoch, log_entries, true, tid);
+    } else {
+      m = new_repop_msg(
+	pg_shard, hoid, encoded_txn, osd_op_p,
+	min_epoch, map_epoch, log_entries, false, tid);
     }
+    pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
+    // TODO: set more stuff. e.g., pg_states
+    sends->emplace_back(
+      shard_services.send_to_osd(
+	pg_shard.osd, std::move(m), map_epoch));
   }
 
   co_await pg.update_snap_map(log_entries, txn);

@@ -907,15 +907,28 @@ void PG::mutate_object(
   }
 }
 
+void PG::enqueue_push_for_backfill(
+  const hobject_t &obj,
+  const eversion_t &v,
+  const std::vector<pg_shard_t> &peers)
+{
+  assert(recovery_handler);
+  assert(recovery_handler->backfill_state);
+  auto backfill_state = recovery_handler->backfill_state.get();
+  backfill_state->enqueue_standalone_push(obj, v, peers);
+}
+
 PG::interruptible_future<
   std::tuple<PG::interruptible_future<>,
              PG::interruptible_future<>>>
 PG::submit_transaction(
   ObjectContextRef&& obc,
+  ObjectContextRef&& new_clone,
   ceph::os::Transaction&& txn,
   osd_op_params_t&& osd_op_p,
   std::vector<pg_log_entry_t>&& log_entries)
 {
+  auto _new_clone = std::move(new_clone);
   if (__builtin_expect(stopping, false)) {
     co_return std::make_tuple(
         interruptor::make_interruptible(seastar::make_exception_future<>(
@@ -937,8 +950,30 @@ PG::submit_transaction(
     projected_log.add(entry);
   }
 
+  std::vector<PGBackend::pg_shard_should_send> shards;
+  std::vector<pg_shard_t> to_push_clone;
+  const auto &pg_shards = peering_state.get_acting_recovery_backfill();
+  for (auto &pg_shard : pg_shards) {
+    if (pg_shard == pg_whoami) {
+      continue;
+    }
+    auto &hoid = obc->obs.oi.soid;
+    if (should_send_op(pg_shard, hoid)) {
+      shards.emplace_back(pg_shard, true);
+    } else {
+      shards.emplace_back(pg_shard, false);
+      if (_new_clone && is_missing_on_peer(pg_shard, hoid)) {
+        // The head is in the push queue but hasn't been pushed yet.
+        // We need to ensure that the newly created clone will be 
+        // pushed as well, otherwise we might skip it.
+        // See: https://tracker.ceph.com/issues/68808
+        to_push_clone.push_back(pg_shard);
+      }
+    }
+  }
+
   auto [submitted, all_completed] = co_await backend->submit_transaction(
-      peering_state.get_acting_recovery_backfill(),
+      shards,
       obc->obs.oi.soid,
       std::move(txn),
       std::move(osd_op_p),
@@ -948,13 +983,20 @@ PG::submit_transaction(
   co_return std::make_tuple(
     std::move(submitted),
     all_completed.then_interruptible(
-      [this, at_version,
-      last_complete=peering_state.get_info().last_complete](auto acked) {
+      [this, last_complete=peering_state.get_info().last_complete,
+      _new_clone, at_version, to_push_clone=std::move(to_push_clone)]
+      (auto acked) {
       for (const auto& peer : acked) {
         peering_state.update_peer_last_complete_ondisk(
           peer.shard, peer.last_complete_ondisk);
       }
       peering_state.complete_write(at_version, last_complete);
+      if (_new_clone && !to_push_clone.empty()) {
+        enqueue_push_for_backfill(
+          _new_clone->obs.oi.soid,
+          _new_clone->obs.oi.version,
+          to_push_clone);
+      }
       return seastar::now();
     })
   );
@@ -1154,11 +1196,13 @@ PG::submit_executer_fut PG::submit_executer(
     [FNAME, this](auto&& txn,
 		  auto&& obc,
 		  auto&& osd_op_p,
-		  auto&& log_entries) {
+		  auto&& log_entries,
+                  auto&& new_clone) {
       DEBUGDPP("object {} submitting txn", *this, obc->get_oid());
       mutate_object(obc, txn, osd_op_p);
       return submit_transaction(
 	std::move(obc),
+        std::move(new_clone),
 	std::move(txn),
 	std::move(osd_op_p),
 	std::move(log_entries));
