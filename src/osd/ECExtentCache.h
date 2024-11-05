@@ -17,32 +17,6 @@ namespace ECExtentCache {
   class Op;
   typedef std::shared_ptr<Op> OpRef;
 
-  class Address
-  {
-  public:
-    hobject_t oid;
-    uint64_t offset;
-
-    friend bool operator==(const Address& lhs, const Address& rhs)
-    {
-      return lhs.oid == rhs.oid
-        && lhs.offset == rhs.offset;
-    }
-
-    friend bool operator!=(const Address& lhs, const Address& rhs)
-    {
-      return !(lhs == rhs);
-    }
-  };
-
-  struct AddressHasher
-  {
-    std::size_t operator()(const Address& a) const
-    {
-      return ((std::size_t)a.oid.get_hash()) ^ std::hash<uint64_t>{}(a.offset);
-    }
-  };
-
   struct BackendRead {
     virtual void backend_read(hobject_t oid, std::map<int, extent_set> const &request) = 0;
     virtual ~BackendRead() = default;
@@ -56,8 +30,10 @@ namespace ECExtentCache {
     BackendRead &backend_read;
     LRU &lru;
     const ECUtil::stripe_info_t &sinfo;
+    std::list<OpRef> waiting_ops;
+    void cache_maybe_ready();
 
-    void request(OpRef &op, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write);
+    OpRef request(GenContextURef<OpRef &> &&ctx, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write);
 
   public:
     explicit PG(BackendRead &backend_read,
@@ -70,31 +46,35 @@ namespace ECExtentCache {
     void read_done(hobject_t const& oid, ECUtil::shard_extent_map_t const&& update);
     void write_done(OpRef &op, ECUtil::shard_extent_map_t const&& update);
     void complete(OpRef &read);
+    void discard_lru();
 
     template<typename CacheReadyCb>
-    OpRef request(hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write, CacheReadyCb &&ready_cb) {
+    OpRef request(hobject_t const &oid,
+      std::optional<std::map<int, extent_set>> const &to_read,
+      std::map<int, extent_set> const &write,
+      eversion_t version,
+      CacheReadyCb &&ready_cb) {
 
       GenContextURef<OpRef &> ctx = make_gen_lambda_context<OpRef &, CacheReadyCb>(
             std::forward<CacheReadyCb>(ready_cb));
-      OpRef op_ref = std::make_shared<Op>(std::move(ctx));
 
-      request(op_ref, oid, to_read, write);
-
-      return op_ref;
+      return request(std::move(ctx), oid, to_read, write);
     }
     bool idle(hobject_t &oid) const;
   };
 
   class LRU {
     friend class PG;
+    friend class Object;
 
-    unordered_map<Address, Line, AddressHasher> lines;
     std::list<Line> lru;
     uint64_t max_size = 0;
     uint64_t size = 0;
     ceph::mutex mutex = ceph::make_mutex("ECExtentCache::LRU");;
 
-    std::map<hobject_t, std::list<uint64_t>> free_maybe();
+    void free_maybe();
+    void free_to_size(uint64_t target_size);
+    void discard();
     void pin(OpRef &op, uint64_t alignment, Object &object);
     std::map<hobject_t, std::list<uint64_t>> unpin(OpRef &op, uint64_t alignment);
     void inc_size(uint64_t size);
@@ -110,16 +90,18 @@ namespace ECExtentCache {
     friend class PG;
     friend class LRU;
 
-    hobject_t oid;
+    Object &object;
     std::optional<std::map<int, extent_set>> reads;
     std::map<int, extent_set> writes;
     std::optional<ECUtil::shard_extent_map_t> result;
     bool complete = false;
     GenContextURef<OpRef &> cache_ready_cb;
 
+    extent_set get_pin_eset(uint64_t alignment);
+
   public:
-    explicit Op(GenContextURef<OpRef &> &&cache_ready_cb) :
-      cache_ready_cb(std::move(cache_ready_cb)) {}
+    explicit Op(GenContextURef<OpRef &> &&cache_ready_cb, Object &object) :
+      object(object), cache_ready_cb(std::move(cache_ready_cb)) {}
     std::optional<ECUtil::shard_extent_map_t> get_result() { return result; }
     std::map<int, extent_set> get_writes() { return writes; }
 
@@ -131,6 +113,7 @@ namespace ECExtentCache {
     friend class PG;
     friend class Op;
     friend class Line;
+    friend class LRU;
 
 
     PG &pg;
@@ -140,16 +123,19 @@ namespace ECExtentCache {
     std::map<int, extent_set> reading;
     std::map<int, extent_set> writing;
     ECUtil::shard_extent_map_t cache;
-    std::list<OpRef> waiting_ops;
-    uint64_t line_count = 0;
+    unordered_map<uint64_t, Line> lines;
+    int active_ios = 0;
 
-    uint64_t free(uint64_t offset, uint64_t length);
     void request(OpRef &op);
     void send_reads();
     uint64_t read_done(ECUtil::shard_extent_map_t const &result);
     uint64_t write_done(OpRef &op, ECUtil::shard_extent_map_t const &result);
+    void check_buffers_pinned(ECUtil::shard_extent_map_t const &buffers);
+    void check_cache_pinned();
     uint64_t insert(ECUtil::shard_extent_map_t const &buffers);
-    void cache_maybe_ready();
+    void unpin(OpRef &op);
+    void delete_maybe();
+    uint64_t erase_line(Line &l);
 
   public:
     Object(PG &pg, hobject_t oid) : pg(pg), oid(oid), sinfo(pg.sinfo), cache(&pg.sinfo) {}
@@ -161,22 +147,17 @@ namespace ECExtentCache {
   public:
     bool in_lru = false;
     int ref_count = 0;
-    Address address;
+    uint64_t offset;
     Object &object;
 
-    Line(Object &object, Address &address) : address(address) , object(object) {
-      object.line_count++;
-    }
-
-    ~Line() {
-      object.line_count--;
-    }
+    Line(Object &object, uint64_t offset) : offset(offset) , object(object) {}
 
     friend bool operator==(const Line& lhs, const Line& rhs)
     {
       return lhs.in_lru == rhs.in_lru
         && lhs.ref_count == rhs.ref_count
-        && lhs.address == rhs.address;
+        && lhs.offset == rhs.offset
+        && lhs.object.oid == rhs.object.oid;
     }
 
     friend bool operator!=(const Line& lhs, const Line& rhs)

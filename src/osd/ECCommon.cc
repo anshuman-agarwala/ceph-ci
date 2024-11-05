@@ -718,7 +718,7 @@ void ECCommon::RMWPipeline::start_rmw(OpRef op)
 
   op->pending_cache_ops = op->plan.plans.size();
   for (auto &&[oid, plan] : op->plan.plans) {
-    ECExtentCache::OpRef cache_op = extent_cache.request(oid, plan.to_read, plan.will_write,
+    ECExtentCache::OpRef cache_op = extent_cache.request(oid, plan.to_read, plan.will_write, op->version,
       [op](ECExtentCache::OpRef &cache_op)
       {
         op->cache_ops.emplace(op->hoid, cache_op);
@@ -778,6 +778,13 @@ void ECCommon::RMWPipeline::cache_ready(Op &op)
   std::vector<std::pair<int, Message*>> messages;
   messages.reserve(get_parent()->get_acting_recovery_backfill_shards().size());
   set<pg_shard_t> backfill_shards = get_parent()->get_backfill_shards();
+
+  if (op.version.version != 0) {
+    if (oid_to_version.contains(op.hoid)) {
+      ceph_assert(oid_to_version.at(op.hoid) <= op.version);
+    }
+    oid_to_version[op.hoid] = op.version;
+  }
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
@@ -851,8 +858,6 @@ void ECCommon::RMWPipeline::cache_ready(Op &op)
     (*i)();
   }
 
-  /* Complete the write - note that this might cause another write to occur
-   * re-entrantly */
   for (auto &&[oid, cop]: op.cache_ops) {
     if (written.contains(oid)) {
       extent_cache.write_done(cop, std::move(written.at(oid)));
@@ -903,7 +908,7 @@ void ECCommon::RMWPipeline::try_finish_rmw()
         nop->pending_cache_ops = 1;
         nop->pipeline = this;
 
-        ECExtentCache::OpRef cache_op = extent_cache.request(op.hoid, std::nullopt, map<int, extent_set>(),
+        ECExtentCache::OpRef cache_op = extent_cache.request(op.hoid, std::nullopt, map<int, extent_set>(), op.version,
           [nop](ECExtentCache::OpRef cache_op)
           {
             nop->cache_ops.emplace(nop->hoid, std::move(cache_op));
@@ -939,6 +944,8 @@ void ECCommon::RMWPipeline::on_change()
     op->cache_ops.clear();
   }
   tid_to_op_map.clear();
+  oid_to_version.clear();
+  extent_cache.discard_lru();
 }
 
 void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {

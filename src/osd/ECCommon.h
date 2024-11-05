@@ -620,6 +620,7 @@ struct ECCommon {
     friend std::ostream &operator<<(std::ostream &lhs, const Op &rhs);
 
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
+    std::map<hobject_t, eversion_t> oid_to_version;
 
     op_list waiting_commit;       /// writes waiting on initial commit
     eversion_t completed_to;

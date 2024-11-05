@@ -11,35 +11,39 @@ using namespace ECUtil;
 
 namespace ECExtentCache {
 
-  uint64_t Object::free(uint64_t offset, uint64_t length)
+  void PG::cache_maybe_ready()
   {
-    uint64_t old_size = cache.size();
-    cache.erase_stripe(offset, length);
+    while (!waiting_ops.empty()) {
+      OpRef op = waiting_ops.front();
+      if (!op->object.cache.contains(op->reads))
+        return;
 
-    if (line_count == 0) {
-      ceph_assert(cache.empty());
-      pg.objects.erase(oid);
-    }
-
-    return old_size - cache.size();
-  }
-
-  void Object::cache_maybe_ready()
-  {
-    if (waiting_ops.empty())
-      return;
-
-    OpRef op = waiting_ops.front();
-    if (cache.contains(op->reads))
-    {
-      op->result = cache.intersect(op->reads);
+      op->result = op->object.cache.intersect(op->reads);
       op->complete = true;
       op->cache_ready_cb.release()->complete(op);
+
+      /* The front of waiting ops is removed if write_done() is called. */
+      if (op == waiting_ops.front())
+        return;
     }
   }
 
   void Object::request(OpRef &op)
   {
+    uint64_t alignment = sinfo.get_chunk_size();
+    extent_set eset = op->get_pin_eset(sinfo.get_chunk_size());
+
+    for (auto &&[start, len]: eset ) {
+      for (uint64_t to_pin = start; to_pin < start + len; to_pin += alignment) {
+        if (!lines.contains(to_pin))
+          lines.emplace(to_pin, Line(*this, to_pin));
+        Line &l = lines.at(to_pin);
+        if (l.in_lru) pg.lru.lru.remove(l);
+        l.in_lru = false;
+        l.ref_count++;
+      }
+    }
+
     /* else add to read */
     if (op->reads) {
       for (auto &&[shard, eset]: *(op->reads)) {
@@ -60,9 +64,8 @@ namespace ECExtentCache {
     for (auto &&[shard, eset]: op->writes) {
       if (op->writes.contains(shard)) writing[shard].insert(op->writes.at(shard));
     }
+    active_ios++;
 
-    waiting_ops.emplace_back(op);
-    cache_maybe_ready();
     send_reads();
   }
 
@@ -83,16 +86,27 @@ namespace ECExtentCache {
     return size_change;
   }
 
-  uint64_t Object::write_done(OpRef &op, shard_extent_map_t const &buffers)
-  {
-    ceph_assert(op == waiting_ops.front());
-    waiting_ops.pop_front();
-    uint64_t size_change = insert(buffers);
-    return size_change;
+  void Object::check_buffers_pinned(shard_extent_map_t const &buffers) {
+    extent_set eset = buffers.get_extent_superset();
+    uint64_t alignment = sinfo.get_chunk_size();
+    eset.align(alignment);
+
+    for (auto &&[start, len]: eset ) {
+      for (uint64_t to_pin = start; to_pin < start + len; to_pin += alignment) {
+        ceph_assert(lines.contains(to_pin));
+      }
+    }
+  }
+
+  void Object::check_cache_pinned() {
+    check_buffers_pinned(cache);
   }
 
   uint64_t Object::insert(shard_extent_map_t const &buffers)
   {
+    check_buffers_pinned(buffers);
+    check_cache_pinned();
+
     uint64_t old_size = cache.size();
     cache.insert(buffers);
     for (auto && [shard, emap] : buffers.get_extent_maps()) {
@@ -103,62 +117,87 @@ namespace ECExtentCache {
         }
       }
     }
-    cache_maybe_ready();
 
     return cache.size() - old_size;
   }
 
-  void PG::request(OpRef &op, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write)
+  void Object::unpin(OpRef &op) {
+    uint64_t alignment = sinfo.get_chunk_size();
+    extent_set eset = op->get_pin_eset(alignment);
+
+    for (auto &&[start, len]: eset ) {
+      for (uint64_t to_pin = start; to_pin < start + len; to_pin += alignment) {
+        Line &l = lines.at(to_pin);
+        ceph_assert(l.ref_count);
+        if (!--l.ref_count) {
+          l.in_lru = true;
+          pg.lru.lru.emplace_back(l);
+        }
+      }
+    }
+
+    ceph_assert(active_ios > 0);
+    active_ios--;
+    delete_maybe();
+  }
+
+  void Object::delete_maybe() {
+    if (lines.empty() && active_ios == 0) {
+      ceph_assert(cache.empty());
+      pg.objects.erase(oid);
+    }
+  }
+
+  uint64_t Object::erase_line(Line &line) {
+    uint64_t size_delta = cache.size();
+    cache.erase_stripe(line.offset, sinfo.get_chunk_size());
+    lines.erase(line.offset);
+    size_delta -= cache.size();
+    check_cache_pinned();
+    delete_maybe();
+    return size_delta;
+  }
+
+  OpRef PG::request(GenContextURef<OpRef &> && ctx, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write)
   {
-    op->oid = oid;
+    if (!objects.contains(oid)) {
+      objects.emplace(oid, Object(*this, oid));
+    }
+    OpRef op = std::make_shared<Op>(std::move(ctx), objects.at(oid));
+    lru.mutex.lock();
     op->reads = to_read;
     op->writes = write;
+    op->object.request(op);
 
-    if (!objects.contains(op->oid)) {
-      objects.emplace(op->oid, Object(*this, op->oid));
-    }
-    lru.pin(op, sinfo.get_chunk_size(), objects.at(op->oid));
-    objects.at(op->oid).request(op);
+    waiting_ops.emplace_back(op);
+
+    cache_maybe_ready();
+    lru.mutex.unlock();
+
+    return op;
   }
 
   void PG::read_done(hobject_t const& oid, shard_extent_map_t const&& update)
   {
+    lru.mutex.lock();
     uint64_t size = objects.at(oid).read_done(update);
     lru.inc_size(size);
+    cache_maybe_ready();
+    lru.mutex.unlock();
   }
 
   void PG::write_done(OpRef &op, shard_extent_map_t const&& update)
   {
-    uint64_t size_added = objects.at(op->oid).write_done(op, update);
+    ceph_assert(ceph_mutex_is_locked_by_me(lru.mutex));
+    ceph_assert(op == waiting_ops.front());
+    waiting_ops.pop_front();
+    uint64_t size_added = op->object.insert(update);
     lru.inc_size(size_added);
   }
 
-  void LRU::pin(OpRef &op, uint64_t alignment, Object &object)
-  {
-    mutex.lock();
-    extent_set eset;
-    for (auto &&[_, e]: op->writes) eset.insert(e);
-
-    eset.align(alignment);
-
-    for (auto &&[start, len]: eset ) {
-      for (uint64_t to_pin = start; to_pin < start + len; to_pin += alignment) {
-        Address a = Address(op->oid, to_pin);
-        if (!lines.contains(a))
-          lines.emplace(a, std::move(Line(object, a)));
-        Line &l = lines.at(a);
-        if (l.in_lru) lru.remove(l);
-        l.in_lru = false;
-        l.ref_count++;
-      }
-    }
-    mutex.unlock();
-  }
-
   void LRU::inc_size(uint64_t _size) {
-    mutex.lock();
+    ceph_assert(ceph_mutex_is_locked_by_me(mutex));
     size += _size;
-    mutex.unlock();
   }
 
   void LRU::dec_size(uint64_t _size) {
@@ -168,54 +207,45 @@ namespace ECExtentCache {
 
   void PG::complete(OpRef &op) {
     lru.mutex.lock();
-    map<hobject_t, list<uint64_t>> free_list = lru.unpin(op, sinfo.get_chunk_size());
-
-    uint64_t size_delta = 0;
-
-    for (auto &&[oid, offsets] : free_list) {
-      for (auto offset : offsets) {
-        size_delta += objects.at(oid).free(offset, sinfo.get_chunk_size());
-      }
-    }
-
-    lru.dec_size(size_delta);
+    op->object.unpin(op);
+    lru.free_maybe();
     lru.mutex.unlock();
   }
 
-  map<hobject_t, list<uint64_t>> LRU::unpin(OpRef &op, uint64_t alignment)
-  {
-    extent_set eset;
-    for (auto &&[_, e]: op->writes) eset.insert(e);
-    eset.align(alignment);
-
-    for (auto &&[start, len]: eset ) {
-      for (uint64_t to_pin = start; to_pin < start + len; to_pin += alignment) {
-        Line &l = lines.at(Address(op->oid, to_pin));
-        ceph_assert(l.ref_count);
-        if (!--l.ref_count) {
-          l.in_lru = true;
-          lru.emplace_back(l);
-        }
-      }
-    }
-    return free_maybe();
+  void PG::discard_lru() {
+    lru.mutex.lock();
+    lru.discard();
+    lru.mutex.unlock();
   }
 
-  map<hobject_t, list<uint64_t>> LRU::free_maybe() {
-    map<hobject_t, list<uint64_t>> to_erase;
-    while (max_size < size && !lru.empty())
+  void LRU::free_to_size(uint64_t target_size) {
+    while (target_size < size && !lru.empty())
     {
-      Line &l = lru.front();
-      to_erase[l.address.oid].emplace_back(l.address.offset);
+      Line l = lru.front();
       lru.pop_front();
-      lines.erase(l.address);
+      dec_size(l.object.erase_line(l));
     }
+  }
 
-    return to_erase;
+  void LRU::free_maybe() {
+    free_to_size(max_size);
+  }
+
+  void LRU::discard() {
+    free_to_size(0);
   }
 
   bool PG::idle(hobject_t &oid) const
   {
-    return objects.contains(oid) && objects.at(oid).waiting_ops.empty();
+    return objects.contains(oid) && waiting_ops.empty();
+  }
+
+  extent_set Op::get_pin_eset(uint64_t alignment) {
+    extent_set eset;
+    for (auto &&[_, e]: writes) eset.insert(e);
+    if (reads) for (auto &&[_, e]: *reads) eset.insert(e);
+    eset.align(alignment);
+
+    return eset;
   }
 } // ECExtentCache

@@ -402,6 +402,9 @@ namespace ECUtil {
   void shard_extent_map_t::insert_in_shard(int shard, uint64_t off,
     buffer::list &bl)
   {
+    if (bl.length() == 0)
+      return;
+
     extent_maps[shard].insert(off, bl.length(), bl);
     uint64_t new_start = calc_ro_offset(sinfo->get_raw_shard(shard), off);
     uint64_t new_end = calc_ro_offset(sinfo->get_raw_shard(shard), off + bl.length() - 1) + 1;
@@ -721,10 +724,13 @@ namespace ECUtil {
 
   void shard_extent_map_t::erase_stripe(uint64_t offset, uint64_t length)
   {
-    for ( auto &&[shard, emap]: extent_maps) {
+    for ( auto iter = extent_maps.begin(); iter != extent_maps.end(); ) {
+      auto && [shard, emap] = *iter;
       emap.erase(offset, length);
       if (emap.empty()) {
-        extent_maps.erase(shard);
+        iter = extent_maps.erase(iter);
+      } else {
+        ++iter;
       }
     }
     compute_ro_range();
