@@ -40,7 +40,6 @@ class CephNvmeof(ContainerDaemonForm):
         config_json: Dict,
         image: str = DefaultImages.NVMEOF.value.name,
     ):
-        # type: (CephadmContext, str, Union[int, str], Dict, str) -> None
         self.ctx = ctx
         self.fsid = fsid
         self.daemon_id = daemon_id
