@@ -710,7 +710,7 @@ bool ECCommon::read_request_t::operator==(const read_request_t &other) const {
 
 void ECCommon::RMWPipeline::start_rmw(OpRef op)
 {
-  // FIXME
+  // // FIXME
   dout(0) << __func__ << ": ALEX : " << *op << dendl;
 
   ceph_assert(!tid_to_op_map.count(op->tid));
@@ -718,7 +718,7 @@ void ECCommon::RMWPipeline::start_rmw(OpRef op)
 
   op->pending_cache_ops = op->plan.plans.size();
   for (auto &&[oid, plan] : op->plan.plans) {
-    ECExtentCache::OpRef cache_op = extent_cache.request(oid, plan.to_read, plan.will_write, op->version,
+    ECExtentCache::OpRef cache_op = extent_cache.request(oid, plan.to_read, plan.will_write, plan.projected_size,
       [op](ECExtentCache::OpRef &cache_op)
       {
         op->cache_ops.emplace(op->hoid, cache_op);
@@ -908,7 +908,10 @@ void ECCommon::RMWPipeline::try_finish_rmw()
         nop->pending_cache_ops = 1;
         nop->pipeline = this;
 
-        ECExtentCache::OpRef cache_op = extent_cache.request(op.hoid, std::nullopt, map<int, extent_set>(), op.version,
+        ECExtentCache::OpRef cache_op = extent_cache.request(op.hoid,
+          std::nullopt,
+          map<int, extent_set>(),
+          op.plan.plans.at(op.hoid).projected_size,
           [nop](ECExtentCache::OpRef cache_op)
           {
             nop->cache_ops.emplace(nop->hoid, std::move(cache_op));

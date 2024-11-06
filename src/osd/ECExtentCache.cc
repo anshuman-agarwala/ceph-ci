@@ -158,15 +158,17 @@ namespace ECExtentCache {
     return size_delta;
   }
 
-  OpRef PG::request(GenContextURef<OpRef &> && ctx, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write)
+  OpRef PG::request(GenContextURef<OpRef &> && ctx, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write, uint64_t projected_size)
   {
     if (!objects.contains(oid)) {
       objects.emplace(oid, Object(*this, oid));
     }
     OpRef op = std::make_shared<Op>(std::move(ctx), objects.at(oid));
+
     lru.mutex.lock();
     op->reads = to_read;
     op->writes = write;
+    op->object.projected_size = projected_size;
     op->object.request(op);
 
     waiting_ops.emplace_back(op);
@@ -193,6 +195,14 @@ namespace ECExtentCache {
     waiting_ops.pop_front();
     uint64_t size_added = op->object.insert(update);
     lru.inc_size(size_added);
+  }
+
+  uint64_t PG::get_projected_size(hobject_t const &oid) {
+    return objects.at(oid).projected_size;
+  }
+
+  bool PG::contains_object(hobject_t const &oid) {
+    return objects.contains(oid);
   }
 
   void LRU::inc_size(uint64_t _size) {

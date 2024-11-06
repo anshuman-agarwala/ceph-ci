@@ -1487,10 +1487,9 @@ void ECBackend::submit_transaction(
 
   op->t->safe_create_traverse(
     [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
-    const auto& [oid, op] = i;
+    const auto& [oid, inner_op] = i;
     ECUtil::HashInfoRef shinfo;
     auto &obc = obc_map.at(oid);
-    std::optional<object_info_t> old_oi = get_object_info_from_obc(obc );
     object_info_t oi = obc->obs.oi;
     std::optional<object_info_t> soi;
     ECUtil::HashInfoRef hinfo;
@@ -1500,18 +1499,28 @@ void ECBackend::submit_transaction(
     }
 
     hobject_t source;
-    if (op.has_source(&source)) {
+    if (inner_op.has_source(&source)) {
       // typically clone or mv
       plans.invalidates_cache = true;
       shinfo = get_hinfo_from_disk(source);
       soi = get_object_info_from_obc(obc_map.at(source));
     }
 
-    plans.plans.emplace(oid,
-      ECTransaction::WritePlanObj(op, sinfo, old_oi, oi, soi, std::move(hinfo), std::move(shinfo)));
+    uint64_t old_object_size = 0;
+    if (rmw_pipeline.extent_cache.contains_object(oid)) {
+      old_object_size = rmw_pipeline.extent_cache.get_projected_size(oid);
+    } else {
+      std::optional<object_info_t> old_oi = get_object_info_from_obc(obc );
+      if (old_oi && !inner_op.delete_first) {
+        old_object_size = old_oi->size;
+      }
+    }
 
-    if (plans.plans.at(oid).to_read)
-      plans.want_read = true;
+    ECTransaction::WritePlanObj plan(inner_op,
+      sinfo, old_object_size, oi, soi, std::move(hinfo), std::move(shinfo));
+
+    if (plan.to_read) plans.want_read = true;
+    plans.plans.emplace(oid, std::move(plan));
   });
   ldpp_dout(get_parent()->get_dpp(), 20) << __func__
              << " plans=" << plans

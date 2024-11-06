@@ -33,7 +33,7 @@ namespace ECExtentCache {
     std::list<OpRef> waiting_ops;
     void cache_maybe_ready();
 
-    OpRef request(GenContextURef<OpRef &> &&ctx, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write);
+    OpRef request(GenContextURef<OpRef &> &&ctx, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write, uint64_t projected_size);
 
   public:
     explicit PG(BackendRead &backend_read,
@@ -47,18 +47,20 @@ namespace ECExtentCache {
     void write_done(OpRef &op, ECUtil::shard_extent_map_t const&& update);
     void complete(OpRef &read);
     void discard_lru();
+    bool contains_object(hobject_t const &oid);
+    uint64_t get_projected_size(hobject_t const &oid);
 
     template<typename CacheReadyCb>
     OpRef request(hobject_t const &oid,
       std::optional<std::map<int, extent_set>> const &to_read,
       std::map<int, extent_set> const &write,
-      eversion_t version,
+      uint64_t projected_size,
       CacheReadyCb &&ready_cb) {
 
       GenContextURef<OpRef &> ctx = make_gen_lambda_context<OpRef &, CacheReadyCb>(
             std::forward<CacheReadyCb>(ready_cb));
 
-      return request(std::move(ctx), oid, to_read, write);
+      return request(std::move(ctx), oid, to_read, write, projected_size);
     }
     bool idle(hobject_t &oid) const;
   };
@@ -125,6 +127,7 @@ namespace ECExtentCache {
     ECUtil::shard_extent_map_t cache;
     unordered_map<uint64_t, Line> lines;
     int active_ios = 0;
+    uint64_t projected_size = 0;
 
     void request(OpRef &op);
     void send_reads();

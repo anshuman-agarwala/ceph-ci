@@ -37,7 +37,7 @@ namespace ECTransaction {
     WritePlanObj(
       const PGTransaction::ObjectOperation &op,
       const ECUtil::stripe_info_t &sinfo,
-      const std::optional<object_info_t> &old_oi,
+      uint64_t orig_size,
       const std::optional<object_info_t> &oi,
       const std::optional<object_info_t> &soi,
       const ECUtil::HashInfoRef &&hinfo,

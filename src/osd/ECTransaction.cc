@@ -94,14 +94,14 @@ static void encode_and_write(
 ECTransaction::WritePlanObj::WritePlanObj(
   const PGTransaction::ObjectOperation &op,
   const ECUtil::stripe_info_t &sinfo,
-  const std::optional<object_info_t> &old_oi,
+  uint64_t orig_size,
   const std::optional<object_info_t> &oi,
   const std::optional<object_info_t> &soi,
   const ECUtil::HashInfoRef &&hinfo,
   const ECUtil::HashInfoRef &&shinfo) :
 hinfo(hinfo),
 shinfo(shinfo),
-orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
+orig_size(orig_size)
 {
   extent_set ro_writes;
 
@@ -187,9 +187,13 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
     std::map<int, extent_set> &small_set = inner?*inner:will_write;
     std::map<int, extent_set> partial_stripe;
     std::map<int, extent_set> zero;
+    extent_set zero_parity;
+    std::map<int, extent_set> orig;
 
     sinfo.ro_range_to_shard_extent_set(projected_size,
       sinfo.logical_to_next_stripe_offset(projected_size), partial_stripe);
+
+    sinfo.ro_range_to_shard_extent_set(0, orig_size, orig);
 
     /* The zero stripe is any area that gets zeroed if not written to. It is used
      * by appends (old size -> new size) and truncates if truncate.second >
@@ -197,7 +201,7 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
      */
     if (orig_size < projected_size) {
       sinfo.ro_range_to_shard_extent_set(orig_size,
-        projected_size - orig_size, zero);
+        projected_size - orig_size, zero, zero_parity);
     }
     if (op.truncate && op.truncate->first < op.truncate->second) {
       sinfo.ro_range_to_shard_extent_set(op.truncate->first,
@@ -209,7 +213,10 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
       extent_set _to_read;
 
       if (raw_shard < sinfo.get_k()) {
-        _to_read.insert(outter_extent_superset);
+        if (!orig.contains(shard))
+          continue;
+
+        _to_read.intersection_of(outter_extent_superset, orig.at((shard)));
 
         if (small_set.contains(shard)) {
           _to_read.subtract(small_set.at(shard));
@@ -219,12 +226,12 @@ orig_size((!op.delete_first && old_oi) ? old_oi->size : 0)
           _to_read.subtract(partial_stripe.at(shard));
         }
 
-        if (!_to_read.empty()) {
-          reads.emplace(shard, std::move(_to_read));
-        }
-
         if (zero.contains(shard)) {
           will_write[shard].insert(zero.at(shard));
+        }
+
+        if (!_to_read.empty()) {
+          reads.emplace(shard, std::move(_to_read));
         }
       } else {
         will_write[shard].insert(outter_extent_superset);
