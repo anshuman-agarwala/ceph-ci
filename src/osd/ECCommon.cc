@@ -596,9 +596,8 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
 
     int subchunk_size =
       sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
-    //FIXME
-    dout(0) << __func__
-             << " ALEX to_read=" << to_read
+    dout(20) << __func__
+             << " to_read=" << to_read
              << " subchunk_size=" << subchunk_size
              << " chunk_size=" << sinfo.get_chunk_size() << dendl;
 
@@ -639,9 +638,8 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct_for_rmw(
 
     int subchunk_size =
       sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
-    //FIXME
-    dout(0) << __func__
-             << " ALEX shard_want_to_read=" << shard_want_to_read
+    dout(20) << __func__
+             << " shard_want_to_read=" << shard_want_to_read
              << " subchunk_size=" << subchunk_size
              << " chunk_size=" << sinfo.get_chunk_size() << dendl;
 
@@ -710,8 +708,7 @@ bool ECCommon::read_request_t::operator==(const read_request_t &other) const {
 
 void ECCommon::RMWPipeline::start_rmw(OpRef op)
 {
-  // // FIXME
-  dout(0) << __func__ << ": ALEX : " << *op << dendl;
+  dout(20) << __func__ << " op=" << *op << dendl;
 
   ceph_assert(!tid_to_op_map.count(op->tid));
   tid_to_op_map[op->tid] = op;
@@ -755,10 +752,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op)
     get_parent()->get_dpp(),
     get_osdmap()->require_osd_release);
 
-  //FIXME dout(20) << __func__ << ": " << cache << dendl;
-  //FIXME
-  dout(0) << __func__ << ": ALEX written: " << written << dendl;
-  dout(20) << __func__ << ": op: " << op << dendl;
+  dout(20) << __func__ << ": written: " << written << ", op: " << op << dendl;
 
   if (!sinfo.supports_ec_overwrites()) {
     for (auto &&i: op.log_entries) {
