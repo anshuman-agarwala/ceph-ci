@@ -45,6 +45,8 @@ public:
   NVMeofGwMon(Monitor &mn, Paxos &p, const std::string& service_name)
     : PaxosService(mn, p, service_name) {
     map.mon = &mn;
+    global_rebalance_index = 1;
+    tick_ratio = 0;
   }
   ~NVMeofGwMon() override {}
 
@@ -83,6 +85,9 @@ public:
   void check_sub(Subscription *sub);
 
 private:
+  // used for calculate pool & group GW responsible for rebalance
+  uint32_t global_rebalance_index;
+  uint8_t  tick_ratio;
   void synchronize_last_beacon();
   void process_gw_down(const NvmeGwId &gw_id,
      const NvmeGroupKey& group_key, bool &propose_pending,

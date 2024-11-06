@@ -66,6 +66,11 @@ void NVMeofGwMon::on_shutdown()
 
 void NVMeofGwMon::tick()
 {
+  if (++tick_ratio == 12) {
+      global_rebalance_index ++;
+      dout(10) <<  "rebalance index " << global_rebalance_index << dendl;
+      tick_ratio = 0;
+  }
   if (!is_active() || !mon.is_leader()) {
     dout(10) << "NVMeofGwMon leader : " << mon.is_leader()
 	     << "active : " << is_active()  << dendl;
@@ -317,6 +322,13 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
     f->dump_string("group", group);
     if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA)) {
       f->dump_string("features", "LB");
+      if (map.created_gws[group_key].size()) {
+         uint32_t index = (global_rebalance_index % map.created_gws[group_key].size()) + 1;
+         dout(10) << "reb index " << index << " global num "
+             << global_rebalance_index <<" size "
+             << map.created_gws[group_key].size() <<  dendl;
+         f->dump_unsigned ("rebalance_ana_group", index);
+      }
     }
     f->dump_unsigned("num gws", map.created_gws[group_key].size());
     if (map.created_gws[group_key].size() == 0) {
