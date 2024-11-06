@@ -113,7 +113,7 @@ public:
   }
   stripe_info_t( uint64_t k, uint64_t stripe_width, int m, std::vector<int> _chunk_mapping)
     : stripe_width(stripe_width),
-      plugin_flags(0),
+      plugin_flags(0xFFFFFFFFFFFFFFFFul), // Everything enabled for test harnesses.
       chunk_size(stripe_width / k),
       pool(nullptr),
       k(k),
@@ -470,8 +470,8 @@ public:
   shard_extent_map_t intersect_ro_range(uint64_t ro_offset, uint64_t ro_length) const;
   shard_extent_map_t intersect(std::optional<std::map<int, extent_set>> const &other) const;
   shard_extent_map_t intersect(std::map<int, extent_set> const &other) const;
-  void insert_in_shard(int shard, uint64_t off, buffer::list &bl);
-  void insert_in_shard(int shard, uint64_t off, buffer::list &bl, uint64_t new_start, uint64_t new_end);
+  void insert_in_shard(int shard, uint64_t off, const buffer::list &bl);
+  void insert_in_shard(int shard, uint64_t off, const buffer::list &bl, uint64_t new_start, uint64_t new_end);
   void insert_ro_zero_buffer( uint64_t ro_offset, uint64_t ro_length );
   void insert(shard_extent_map_t const &other);
   void append_zeros_to_ro_offset( uint64_t ro_offset );
@@ -479,12 +479,14 @@ public:
   extent_set get_extent_superset() const;
   int encode(ErasureCodeInterfaceRef& ecimpl, const HashInfoRef &hinfo, uint64_t before_ro_size);
   void decode(ErasureCodeInterfaceRef& ecimpl, std::map<int, extent_set> want);
-  void get_buffer(int shard, uint64_t offset, uint64_t length, buffer::list &append_to, bool zero_pad) const;
+  void get_buffer(int shard, uint64_t offset, uint64_t length, buffer::list &append_to) const;
+  void zero_pad(int shard, uint64_t offset, uint64_t length);
+  void zero_pad(uint64_t offset, uint64_t length);
   bufferlist get_ro_buffer(uint64_t ro_offset, uint64_t ro_length);
   std::map <int, extent_set> get_extent_set_map();
   void insert_parity_buffers();
   void erase_shard(int shard);
-  std::map<int, bufferlist> slice(int offset, int length);
+  std::map<int, bufferlist> slice(int offset, int length) const;
   std::string debug_string(uint64_t inteval, uint64_t offset) const;
   void erase_stripe(uint64_t offset, uint64_t length);
   bool contains(int shard) const;
@@ -498,7 +500,7 @@ public:
       for (auto &&i : emap) {
         bufferlist bl = i.get_val();
         bufferlist otherbl;
-        other.get_buffer(shard, i.get_off(), i.get_len(), otherbl, false);
+        other.get_buffer(shard, i.get_off(), i.get_len(), otherbl);
         ceph_assert(bl.contents_equal(otherbl));
       }
     }

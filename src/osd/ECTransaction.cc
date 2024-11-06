@@ -82,7 +82,8 @@ static void encode_and_write(
 
       for (auto &&[offset, len]: to_write_eset) {
 	buffer::list bl;
-	shard_extent_map.get_buffer(shard_id, offset, len, bl, true);
+        shard_extent_map.zero_pad(shard_id, offset, len);
+	shard_extent_map.get_buffer(shard_id, offset, len, bl);
         t.write(coll_t(spg_t(pgid, shard_id)),
 	  ghobject_t(oid, ghobject_t::NO_GEN, shard_id),
 	  offset, bl.length(), bl, flags);
@@ -101,7 +102,7 @@ ECTransaction::WritePlanObj::WritePlanObj(
   const ECUtil::HashInfoRef &&shinfo) :
 hinfo(hinfo),
 shinfo(shinfo),
-orig_size(orig_size)
+orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
 {
   extent_set ro_writes;
 
@@ -187,21 +188,22 @@ orig_size(orig_size)
     std::map<int, extent_set> &small_set = inner?*inner:will_write;
     std::map<int, extent_set> partial_stripe;
     std::map<int, extent_set> zero;
-    extent_set zero_parity;
     std::map<int, extent_set> orig;
 
     sinfo.ro_range_to_shard_extent_set(projected_size,
       sinfo.logical_to_next_stripe_offset(projected_size), partial_stripe);
 
-    sinfo.ro_range_to_shard_extent_set(0, orig_size, orig);
+    uint64_t aligned_orig_size = ECUtil::align_page_next(orig_size);
+
+    sinfo.ro_range_to_shard_extent_set(0,orig_size, orig);
 
     /* The zero stripe is any area that gets zeroed if not written to. It is used
      * by appends (old size -> new size) and truncates if truncate.second >
      * truncate.first.
      */
-    if (orig_size < projected_size) {
-      sinfo.ro_range_to_shard_extent_set(orig_size,
-        projected_size - orig_size, zero, zero_parity);
+    if (aligned_orig_size < projected_size) {
+      sinfo.ro_range_to_shard_extent_set(aligned_orig_size,
+        projected_size - aligned_orig_size, zero, outter_extent_superset);
     }
     if (op.truncate && op.truncate->first < op.truncate->second) {
       sinfo.ro_range_to_shard_extent_set(op.truncate->first,
@@ -213,21 +215,19 @@ orig_size(orig_size)
       extent_set _to_read;
 
       if (raw_shard < sinfo.get_k()) {
+
+        if (zero.contains(shard)) {
+          will_write[shard].insert(zero.at(shard));
+        }
+
         if (!orig.contains(shard))
           continue;
 
         _to_read.intersection_of(outter_extent_superset, orig.at((shard)));
+        _to_read.align(CEPH_PAGE_SIZE);
 
         if (small_set.contains(shard)) {
           _to_read.subtract(small_set.at(shard));
-        }
-
-        if (partial_stripe.contains(shard)) {
-          _to_read.subtract(partial_stripe.at(shard));
-        }
-
-        if (zero.contains(shard)) {
-          will_write[shard].insert(zero.at(shard));
         }
 
         if (!_to_read.empty()) {

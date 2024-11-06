@@ -160,12 +160,13 @@ namespace ECExtentCache {
 
   OpRef PG::request(GenContextURef<OpRef &> && ctx, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write, uint64_t projected_size)
   {
+    lru.mutex.lock();
+
     if (!objects.contains(oid)) {
       objects.emplace(oid, Object(*this, oid));
     }
     OpRef op = std::make_shared<Op>(std::move(ctx), objects.at(oid));
 
-    lru.mutex.lock();
     op->reads = to_read;
     op->writes = write;
     op->object.projected_size = projected_size;
