@@ -119,13 +119,12 @@ namespace ECExtentCache {
 
 
     PG &pg;
-    hobject_t oid;
     ECUtil::stripe_info_t const &sinfo;
     std::map<int, extent_set> requesting;
     std::map<int, extent_set> reading;
     std::map<int, extent_set> writing;
     ECUtil::shard_extent_map_t cache;
-    unordered_map<uint64_t, Line> lines;
+    std::map<uint64_t, Line> lines;
     int active_ios = 0;
     uint64_t projected_size = 0;
 
@@ -141,7 +140,8 @@ namespace ECExtentCache {
     uint64_t erase_line(Line &l);
 
   public:
-    Object(PG &pg, hobject_t oid) : pg(pg), oid(oid), sinfo(pg.sinfo), cache(&pg.sinfo) {}
+    hobject_t oid;
+    Object(PG &pg, hobject_t oid) : pg(pg), sinfo(pg.sinfo), cache(&pg.sinfo), oid(oid) {}
   };
 
 
