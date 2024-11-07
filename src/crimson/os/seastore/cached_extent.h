@@ -349,6 +349,17 @@ public:
   virtual void on_initial_write() {}
 
   /**
+   * on_fully_loaded
+   *
+   * Called when ptr is ready. Normally this should be used to initiate
+   * the extent to be identical to CachedExtent(ptr).
+   *
+   * Note this doesn't mean the content is fully read, use on_clean_read for
+   * this purpose.
+   */
+  virtual void on_fully_loaded() {}
+
+  /**
    * on_clean_read
    *
    * Called after read of initially written extent.
@@ -883,7 +894,7 @@ protected:
   CachedExtent(CachedExtent &&other) = delete;
 
   /// construct a fully loaded CachedExtent
-  CachedExtent(ceph::bufferptr &&_ptr)
+  explicit CachedExtent(ceph::bufferptr &&_ptr)
     : length(_ptr.length()),
       loaded_length(_ptr.length()) {
     ptr = std::move(_ptr);
@@ -895,7 +906,8 @@ protected:
   }
 
   /// construct a partially loaded CachedExtent
-  CachedExtent(extent_len_t _length)
+  /// must be identical with CachedExtent(ptr) after on_fully_loaded()
+  explicit CachedExtent(extent_len_t _length)
     : length(_length),
       loaded_length(0),
       buffer_space(std::in_place) {
@@ -1051,6 +1063,7 @@ protected:
       loaded_length = _length;
       buffer_space.reset();
       assert(is_fully_loaded());
+      on_fully_loaded();
       load_ranges_t ret;
       ret.push_back(offset, *ptr);
       return ret;
@@ -1064,6 +1077,7 @@ protected:
       ptr = buffer_space->to_full_ptr(length);
       buffer_space.reset();
       assert(is_fully_loaded());
+      on_fully_loaded();
       // adjust ret since the ptr has been rebuild
       for (load_range_t& range : ret.ranges) {
         auto range_length = range.ptr.length();
