@@ -7,10 +7,16 @@ from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteComman
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
+from ..controllers.nvmeof import NVMeoFSubsystem
 
+test = NVMeoFSubsystem()
+
+@CLIReadCommand('dashboard tomer-test2')
+def test123(_, gw_group):
+    return 0, test.list(gw_group)
 
 @CLIReadCommand('dashboard tomer-test')
-def list_nvmeof_gateways(_):
+def list_nvmeof_gateways2(_):
     '''
     List NVMe-oF gateways
     '''
