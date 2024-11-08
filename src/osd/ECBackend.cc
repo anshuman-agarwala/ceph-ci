@@ -562,7 +562,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       for (int w : want) {
 	want_shard_reads[w].insert(from, amount);
       }
-      read_request_t read_request(want_shard_reads, op.recovery_progress.first && !op.obc);
+      read_request_t read_request(want_shard_reads, op.recovery_progress.first && !op.obc, op.recovery_info.size);
       int r = read_pipeline.get_min_avail_to_read_shards(
         op.hoid, true, false, read_request);
       if (r != 0) {
@@ -1218,6 +1218,29 @@ if (cct->_conf->bluestore_debug_inject_read_err) {
       buffers_read.insert_in_shard(from.shard, offset, buffer_list);
     }
   }
+  for (auto &&[hoid, req] : rop.to_read) {
+    for (auto &&[shard, read] : req.shard_reads) {
+      if (read.zero_pad.empty())
+        continue;
+
+      if (!rop.complete.contains(hoid) ||
+        !rop.complete.at(hoid).buffers_read.contains(shard.shard.id)) {
+
+        if (!read.extents.empty()) continue; // Complete the actual read first.
+
+        // If we are first here, populate the completion.
+        if (!rop.complete.contains(hoid)) {
+          rop.complete.emplace(hoid, read_result_t(&sinfo));
+        }
+      }
+      for (auto &&[off, len] : read.zero_pad) {
+        bufferlist bl;
+        bl.append_zero(len);
+        auto &buffers_read = rop.complete.at(hoid).buffers_read;
+        buffers_read.insert_in_shard(shard.shard.id, off, bl);
+      }
+    }
+  }
   for (auto &&[hoid, attr] : op.attrs_read) {
     ceph_assert(!op.errors.count(hoid));	// if read error better not have sent an attribute
     if (!rop.to_read.count(hoid)) {
@@ -1540,6 +1563,7 @@ int ECBackend::objects_read_sync(
 
 void ECBackend::objects_read_async(
   const hobject_t &hoid,
+  uint64_t object_size,
   const list<pair<ECCommon::ec_align_t,
                   pair<bufferlist*, Context*>>> &to_read,
   Context *on_complete,
@@ -1645,6 +1669,7 @@ void ECBackend::objects_read_async(
   objects_read_and_reconstruct(
     reads,
     fast_read,
+    object_size,
     make_gen_lambda_context<
       ECCommon::ec_extents_t &&, cb>(
 	cb(this,
@@ -1658,14 +1683,15 @@ void ECBackend::objects_read_and_reconstruct(
     std::list<ECBackend::ec_align_t>
   > &reads,
   bool fast_read,
+  uint64_t object_size,
   GenContextURef<ECCommon::ec_extents_t &&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct(
-    reads, fast_read, std::move(func));
+    reads, fast_read, object_size, std::move(func));
 }
 
 void ECBackend::objects_read_and_reconstruct_for_rmw(
-  const map<hobject_t, map<int, extent_set>> &to_read,
+  map<hobject_t, read_request_t> &&to_read,
   GenContextURef<ECCommon::ec_extents_t &&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct_for_rmw(

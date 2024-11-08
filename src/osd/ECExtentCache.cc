@@ -75,7 +75,7 @@ namespace ECExtentCache {
       return; // Read busy
 
     reading.swap(requesting);
-    pg.backend_read.backend_read(oid, reading);
+    pg.backend_read.backend_read(oid, reading, current_size);
   }
 
   uint64_t Object::read_done(shard_extent_map_t const &buffers)
@@ -158,7 +158,12 @@ namespace ECExtentCache {
     return size_delta;
   }
 
-  OpRef PG::request(GenContextURef<OpRef &> && ctx, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write, uint64_t projected_size)
+  OpRef PG::request(GenContextURef<OpRef &> && ctx,
+    hobject_t const &oid,
+    std::optional<std::map<int, extent_set>> const &to_read,
+    std::map<int, extent_set> const &write,
+    uint64_t orig_size,
+    uint64_t projected_size)
   {
     lru.mutex.lock();
 
@@ -169,7 +174,9 @@ namespace ECExtentCache {
 
     op->reads = to_read;
     op->writes = write;
-    op->object.projected_size = projected_size;
+    op->object.projected_size = op->projected_size = projected_size;
+    if (op->object.active_ios == 0)
+      op->object.current_size = orig_size;
     op->object.request(op);
 
     waiting_ops.emplace_back(op);
@@ -195,6 +202,7 @@ namespace ECExtentCache {
     ceph_assert(op == waiting_ops.front());
     waiting_ops.pop_front();
     uint64_t size_added = op->object.insert(update);
+    op->object.current_size = op->projected_size;
     lru.inc_size(size_added);
   }
 

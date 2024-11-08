@@ -18,7 +18,7 @@ namespace ECExtentCache {
   typedef std::shared_ptr<Op> OpRef;
 
   struct BackendRead {
-    virtual void backend_read(hobject_t oid, std::map<int, extent_set> const &request) = 0;
+    virtual void backend_read(hobject_t oid, std::map<int, extent_set> const &request, uint64_t object_size) = 0;
     virtual ~BackendRead() = default;
   };
 
@@ -33,7 +33,12 @@ namespace ECExtentCache {
     std::list<OpRef> waiting_ops;
     void cache_maybe_ready();
 
-    OpRef request(GenContextURef<OpRef &> &&ctx, hobject_t const &oid, std::optional<std::map<int, extent_set>> const &to_read, std::map<int, extent_set> const &write, uint64_t projected_size);
+    OpRef request(GenContextURef<OpRef &> &&ctx,
+      hobject_t const &oid,
+      std::optional<std::map<int, extent_set>> const &to_read,
+      std::map<int, extent_set> const &write,
+      uint64_t orig_size,
+      uint64_t projected_size);
 
   public:
     explicit PG(BackendRead &backend_read,
@@ -54,13 +59,14 @@ namespace ECExtentCache {
     OpRef request(hobject_t const &oid,
       std::optional<std::map<int, extent_set>> const &to_read,
       std::map<int, extent_set> const &write,
+      uint64_t orig_size,
       uint64_t projected_size,
       CacheReadyCb &&ready_cb) {
 
       GenContextURef<OpRef &> ctx = make_gen_lambda_context<OpRef &, CacheReadyCb>(
             std::forward<CacheReadyCb>(ready_cb));
 
-      return request(std::move(ctx), oid, to_read, write, projected_size);
+      return request(std::move(ctx), oid, to_read, write, orig_size, projected_size);
     }
     bool idle(hobject_t &oid) const;
   };
@@ -97,6 +103,7 @@ namespace ECExtentCache {
     std::map<int, extent_set> writes;
     std::optional<ECUtil::shard_extent_map_t> result;
     bool complete = false;
+    uint64_t projected_size;
     GenContextURef<OpRef &> cache_ready_cb;
 
     extent_set get_pin_eset(uint64_t alignment);
@@ -127,6 +134,7 @@ namespace ECExtentCache {
     std::map<uint64_t, Line> lines;
     int active_ios = 0;
     uint64_t projected_size = 0;
+    uint64_t current_size = 0;
 
     void request(OpRef &op);
     void send_reads();

@@ -242,14 +242,12 @@ struct ECCommon {
   virtual void objects_read_and_reconstruct(
     const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
-    GenContextURef<ec_extents_t &&> &&func) = 0;
-
-  virtual void objects_read_and_reconstruct_for_rmw(
-    const std::map<hobject_t, std::map<int, extent_set>> &to_read,
+    uint64_t object_size,
     GenContextURef<ec_extents_t &&> &&func) = 0;
 
   struct shard_read_t {
     extent_set extents;
+    extent_set zero_pad;
     std::vector<std::pair<int, int>> subchunk;
     bool operator==(const shard_read_t &other) const;
   };
@@ -261,20 +259,28 @@ struct ECCommon {
     const std::map<int, extent_set> shard_want_to_read;
     std::map<pg_shard_t, shard_read_t> shard_reads;
     bool want_attrs = false;
+    uint64_t object_size;
     read_request_t(
       const std::list<ec_align_t> &to_read,
       const std::map<int, extent_set> shard_want_to_read,
-      bool want_attrs) :
+      bool want_attrs, uint64_t object_size) :
         to_read(to_read),
         flags(to_read.front().flags),
         shard_want_to_read(shard_want_to_read),
-        want_attrs(want_attrs) {}
+        want_attrs(want_attrs),
+        object_size(object_size) {}
     read_request_t(const std::map<int, extent_set> shard_want_to_read,
-      bool want_attrs) :
+      bool want_attrs, uint64_t object_size) :
         shard_want_to_read(shard_want_to_read),
-        want_attrs(want_attrs) {}
+        want_attrs(want_attrs),
+        object_size(object_size) {}
     bool operator==(const read_request_t &other) const;
   };
+
+  virtual void objects_read_and_reconstruct_for_rmw(
+    std::map<hobject_t, read_request_t> &&to_read,
+    GenContextURef<ec_extents_t &&> &&func) = 0;
+
   friend std::ostream &operator<<(std::ostream &lhs, const read_request_t &rhs);
   struct ReadOp;
   /**
@@ -393,10 +399,11 @@ struct ECCommon {
     void objects_read_and_reconstruct(
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
+      uint64_t object_size,
       GenContextURef<ec_extents_t &&> &&func);
 
     void objects_read_and_reconstruct_for_rmw(
-      const std::map<hobject_t, std::map<int, extent_set>> &to_read,
+      std::map<hobject_t, read_request_t> &&to_read,
       GenContextURef<ECCommon::ec_extents_t &&> &&func);
 
     template <class F, class G>
@@ -602,11 +609,12 @@ struct ECCommon {
       }
     };
 
-    void backend_read(hobject_t oid, std::map<int, extent_set> const &request) override  {
-      std::map<hobject_t, std::map<int, extent_set>> to_read;
-      to_read[oid] = request;
+    void backend_read(hobject_t oid, std::map<int, extent_set> const &request, uint64_t object_size) override  {
+      std::map<hobject_t, read_request_t> to_read;
+      to_read.emplace(oid, read_request_t(request, false, object_size));
 
-      objects_read_async_no_cache(to_read,
+      objects_read_async_no_cache(
+        std::move(to_read),
         [this](ec_extents_t &&results)
         {
           for (auto &&[oid, result] : results) {
@@ -640,11 +648,11 @@ struct ECCommon {
 
     template <typename Func>
     void objects_read_async_no_cache(
-      const std::map<hobject_t,std::map<int, extent_set>> &to_read,
+      std::map<hobject_t,read_request_t> &&to_read,
       Func &&on_complete
     ) {
       ec_backend.objects_read_and_reconstruct_for_rmw(
-        to_read,
+        std::move(to_read),
         make_gen_lambda_context<
         ECCommon::ec_extents_t &&, Func>(
             std::forward<Func>(on_complete)));

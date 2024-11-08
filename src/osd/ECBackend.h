@@ -143,6 +143,7 @@ public:
   void objects_read_and_reconstruct(
     const std::map<hobject_t, std::list<ECCommon::ec_align_t>> &reads,
     bool fast_read,
+    uint64_t object_size,
     GenContextURef<ECCommon::ec_extents_t &&> &&func) override;
 
   /**
@@ -153,11 +154,12 @@ public:
    * Otherwise this is the same as objects_read_and_reconstruct.
    */
   void objects_read_and_reconstruct_for_rmw(
-    const std::map<hobject_t, std::map<int, extent_set>> &reads,
+    std::map<hobject_t, read_request_t> &&reads,
     GenContextURef<ECCommon::ec_extents_t &&> &&func) override;
 
   void objects_read_async(
     const hobject_t &hoid,
+    uint64_t object_size,
     const std::list<std::pair<ECCommon::ec_align_t,
                               std::pair<ceph::buffer::list*, Context*>>> &to_read,
     Context *on_complete,
