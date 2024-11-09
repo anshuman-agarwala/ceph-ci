@@ -1188,7 +1188,7 @@ void ECBackend::handle_sub_read_reply(
   }
   ReadOp &rop = iter->second;
 
-if (cct->_conf->bluestore_debug_inject_read_err) {
+  if (cct->_conf->bluestore_debug_inject_read_err) {
     for (auto i = op.buffers_read.begin();
 	 i != op.buffers_read.end();
 	 ++i) {
@@ -1197,6 +1197,8 @@ if (cct->_conf->bluestore_debug_inject_read_err) {
 	op.buffers_read.erase(i->first);
 	op.attrs_read.erase(i->first);
 	op.errors[i->first] = -EIO;
+
+        rop.debug_log.emplace_back(ECUtil::INJECT_EIO, op.from);
       }
 
     }
@@ -1204,6 +1206,8 @@ if (cct->_conf->bluestore_debug_inject_read_err) {
   for (auto &&[hoid, offset_buffer_map] : op.buffers_read) {
     ceph_assert(!op.errors.contains(hoid));	// If attribute error we better not have sent a buffer
     if (!rop.to_read.contains(hoid)) {
+      rop.debug_log.emplace_back(ECUtil::CANCELLED, op.from);
+
       // We canceled this read! @see filter_read_op
       dout(20) << __func__ << " to_read skipping" << dendl;
       continue;
@@ -1217,6 +1221,7 @@ if (cct->_conf->bluestore_debug_inject_read_err) {
     for (auto &&[offset, buffer_list] : offset_buffer_map) {
       buffers_read.insert_in_shard(from.shard, offset, buffer_list);
     }
+    rop.debug_log.emplace_back(ECUtil::READ_DONE, op.from, buffers_read);
   }
   for (auto &&[hoid, req] : rop.to_read) {
     for (auto &&[shard, read] : req.shard_reads) {
@@ -1239,6 +1244,7 @@ if (cct->_conf->bluestore_debug_inject_read_err) {
         auto &buffers_read = rop.complete.at(hoid).buffers_read;
         buffers_read.insert_in_shard(shard.shard.id, off, bl);
       }
+      rop.debug_log.emplace_back(ECUtil::ZERO_DONE, shard, read.zero_pad);
     }
   }
   for (auto &&[hoid, attr] : op.attrs_read) {
@@ -1257,6 +1263,7 @@ if (cct->_conf->bluestore_debug_inject_read_err) {
     }
     auto &complete = rop.complete.at(hoid);
     complete.errors.emplace(from, err);
+    rop.debug_log.emplace_back(ECUtil::ERROR, op.from, complete.buffers_read);
     complete.buffers_read.erase_shard(from.shard);
     dout(20) << __func__ << " shard=" << from << " error=" << err << dendl;
   }
@@ -1293,6 +1300,7 @@ if (cct->_conf->bluestore_debug_inject_read_err) {
 	  // During recovery there may be multiple osds with copies of the same shard,
 	  // so getting EIO from one may result in multiple passes through this code path.
 	  if (!rop.do_redundant_reads) {
+	    rop.debug_log.emplace_back(ECUtil::REQUEST_MISSING, op.from);
 	    int r = read_pipeline.send_all_remaining_reads(oid, rop);
 	    if (r == 0) {
 	      // We changed the rop's to_read and not incrementing is_complete
@@ -1313,6 +1321,7 @@ if (cct->_conf->bluestore_debug_inject_read_err) {
         ceph_assert(rop.complete.at(oid).r == 0);
 	if (!rop.complete.at(oid).errors.empty()) {
 	  if (cct->_conf->osd_read_ec_check_for_errors) {
+	    rop.debug_log.emplace_back(ECUtil::COMPLETE_ERROR, op.from);
 	    dout(10) << __func__ << ": Not ignoring errors, use one shard err=" << err << dendl;
 	    err = rop.complete.at(oid).errors.begin()->second;
             rop.complete.at(oid).r = err;
@@ -1321,6 +1330,7 @@ if (cct->_conf->bluestore_debug_inject_read_err) {
 				       << iter->first << " enough copies available";
 	    dout(10) << __func__ << " Error(s) ignored for " << iter->first
 		     << " enough copies available" << dendl;
+	    rop.debug_log.emplace_back(ECUtil::ERROR_CLEAR, op.from);
 	    rop.complete.at(oid).errors.clear();
 	  }
 	}
@@ -1337,6 +1347,7 @@ if (cct->_conf->bluestore_debug_inject_read_err) {
              is_complete == rop.complete.size()) {
     dout(20) << __func__ << " Complete: " << rop << dendl;
     rop.trace.event("ec read complete");
+    rop.debug_log.emplace_back(ECUtil::COMPLETE, op.from);
     read_pipeline.complete_read_op(rop);
   } else {
     dout(10) << __func__ << " readop not complete: " << rop << dendl;

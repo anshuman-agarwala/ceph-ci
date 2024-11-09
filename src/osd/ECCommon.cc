@@ -471,6 +471,11 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
       op.source_to_obj[shard].insert(hoid);
     }
     for (auto &&[shard, shard_read] : read_request.shard_reads) {
+      if (!shard_read.extents.empty())
+        op.debug_log.emplace_back(ECUtil::READ_REQUEST, shard, shard_read.extents);
+      if (!shard_read.zero_pad.empty())
+        op.debug_log.emplace_back(ECUtil::ZERO_REQUEST, shard, shard_read.zero_pad);
+
       for (auto extent = shard_read.extents.begin();
       		extent != shard_read.extents.end();
 		extent++) {

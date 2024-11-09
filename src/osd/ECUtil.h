@@ -490,6 +490,7 @@ public:
   std::string debug_string(uint64_t inteval, uint64_t offset) const;
   void erase_stripe(uint64_t offset, uint64_t length);
   bool contains(int shard) const;
+  bool contains(int shard, extent_set other_eset) const;
   bool contains(std::optional<std::map<int, extent_set>> const &other) const;
   bool contains(std::map<int, extent_set> const &other) const;
   uint64_t size();
@@ -516,6 +517,43 @@ public:
   }
 };
 
+typedef enum {
+  READ_REQUEST,
+  ZERO_REQUEST,
+  READ_DONE,
+  ZERO_DONE,
+  INJECT_EIO,
+  CANCELLED,
+  ERROR,
+  REQUEST_MISSING,
+  COMPLETE_ERROR,
+  ERROR_CLEAR,
+  COMPLETE
+} log_event_t;
+
+struct log_entry_t {
+  const log_event_t event;
+  const pg_shard_t shard;
+  const extent_set io;
+
+  log_entry_t(
+      const log_event_t event,
+      const pg_shard_t &shard,
+      const extent_set &io) :
+  event(event), shard(shard), io(io) {}
+  log_entry_t(
+    const log_event_t event,
+    const pg_shard_t &shard) :
+  event(event), shard(shard) {}
+  log_entry_t(
+   const log_event_t event,
+   const pg_shard_t &shard,
+   const shard_extent_map_t &extent_map) :
+  event(event), shard(shard),
+  io(extent_map.contains(shard.shard.id)?
+    extent_map.get_extent_map(shard.shard.id).get_interval_set():
+    extent_set()) {}
+};
 
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();

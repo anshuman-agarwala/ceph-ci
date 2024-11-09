@@ -612,8 +612,12 @@ namespace ECUtil {
     std::map<int, bufferlist> slice;
 
     for (auto &&[shard, emap]: extent_maps) {
-      get_buffer(shard, offset, length, slice[shard]);
-      slice[shard].rebuild_aligned_size_and_memory(length, SIMD_ALIGN);
+      bufferlist shard_bl;
+      get_buffer(shard, offset, length, shard_bl);
+      if (shard_bl.length()) {
+        shard_bl.rebuild_aligned_size_and_memory(length, SIMD_ALIGN);
+        slice.emplace(shard, std::move(shard_bl));
+      }
     }
 
     return slice;
@@ -625,7 +629,8 @@ namespace ECUtil {
     const extent_map &emap = extent_maps.at(shard);
     auto &&[range, _] = emap.get_containing_range(offset, length);
 
-    ceph_assert(range != emap.end() && range.contains(offset, length));
+    if(range == emap.end() || !range.contains(offset, length))
+      return;
 
     if (range.get_len() == length) {
       buffer::list bl = range.get_val();

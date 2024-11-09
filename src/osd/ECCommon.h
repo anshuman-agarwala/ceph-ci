@@ -376,6 +376,8 @@ struct ECCommon {
 
     std::set<pg_shard_t> in_progress;
 
+    std::list<ECUtil::log_entry_t> debug_log;
+
     ReadOp(
       int priority,
       ceph_tid_t tid,
