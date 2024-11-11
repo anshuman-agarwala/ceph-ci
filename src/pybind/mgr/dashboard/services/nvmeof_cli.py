@@ -7,7 +7,7 @@ from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteComman
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
-# from ..services.nvmeof_client import NVMeoFClient
+from ..services.nvmeof_client import NVMeoFClient
 
 
 # try:
