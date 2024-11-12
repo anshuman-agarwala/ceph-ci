@@ -138,6 +138,9 @@ public:
   bool supports_ec_overwrites() const {
     return pool->allows_ecoverwrites();
   }
+  bool require_hinfo() const {
+    return !supports_ec_overwrites() || !supports_ec_optimizations();
+  }
   bool supports_partial_reads() const {
     return (plugin_flags & ErasureCodeInterface::FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION) != 0;
   }
@@ -171,6 +174,10 @@ public:
   int get_raw_shard(int shard) const
   {
     return chunk_mapping_reverse.at(shard);
+  }
+  /* Return a "span" - which can be iterated over */
+  auto get_parity_shards() const {
+    return std::span(chunk_mapping).subspan(k, m);
   }
   // FIXME: get_k() preferred... but changing would create a big change.
   int get_data_chunk_count() const {
@@ -273,6 +280,19 @@ public:
                         NULL);
   }
 
+  void ro_range_to_shard_extent_set_with_parity(
+    uint64_t ro_offset,
+    uint64_t ro_size,
+    std::map<int, extent_set> &shard_extent_set) const {
+    extent_set parity;
+    ro_range_to_shards(ro_offset, ro_size, &shard_extent_set, &parity, NULL,
+                        NULL);
+
+    for (int shard : get_parity_shards()) {
+      shard_extent_set[shard].insert(parity);
+    }
+  }
+
   void ro_range_to_shard_extent_map(
     uint64_t ro_offset,
     uint64_t ro_size,
@@ -293,12 +313,6 @@ inline uint64_t align_page_next(uint64_t val) {
 inline uint64_t align_page_prev(uint64_t val) {
   return val & ~page_mask();
 }
-
-int decode(
-  ErasureCodeInterfaceRef &ec_impl,
-  const std::list<std::set<int>> want_to_read,
-  const std::list<std::map<int, bufferlist>> chunk_list,
-  bufferlist *out);
 
 int decode(
   const stripe_info_t &sinfo,
@@ -478,8 +492,10 @@ public:
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
   int encode(ErasureCodeInterfaceRef& ecimpl, const HashInfoRef &hinfo, uint64_t before_ro_size);
-  void decode(ErasureCodeInterfaceRef& ecimpl, std::map<int, extent_set> want);
+  int decode(ErasureCodeInterfaceRef& ecimpl, std::map<int, extent_set> want);
   void get_buffer(int shard, uint64_t offset, uint64_t length, buffer::list &append_to) const;
+  void get_shard_first_buffer(int shard, buffer::list &append_to) const;
+  uint64_t get_shard_first_offset(int shard) const;
   void zero_pad(int shard, uint64_t offset, uint64_t length);
   void zero_pad(uint64_t offset, uint64_t length);
   bufferlist get_ro_buffer(uint64_t ro_offset, uint64_t ro_length);
@@ -494,6 +510,7 @@ public:
   bool contains(std::optional<std::map<int, extent_set>> const &other) const;
   bool contains(std::map<int, extent_set> const &other) const;
   uint64_t size();
+  void clear();
 
   void assert_buffer_contents_equal(shard_extent_map_t other) const
   {
@@ -553,6 +570,8 @@ struct log_entry_t {
   io(extent_map.contains(shard.shard.id)?
     extent_map.get_extent_map(shard.shard.id).get_interval_set():
     extent_set()) {}
+
+  friend std::ostream& operator<<(std::ostream& out, const log_entry_t& lhs);
 };
 
 bool is_hinfo_key_string(const std::string &key);

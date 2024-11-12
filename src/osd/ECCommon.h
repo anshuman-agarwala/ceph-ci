@@ -315,7 +315,7 @@ struct ECCommon {
   struct ReadCompleter {
     virtual void finish_single_request(
       const hobject_t &hoid,
-      read_result_t &res,
+      read_result_t &&res,
       ECCommon::read_request_t &req) = 0;
 
     virtual void finish(int priority) && = 0;
@@ -421,7 +421,7 @@ struct ECCommon {
       F&& on_erase,
       G&& on_schedule_recovery);
 
-    void complete_read_op(ReadOp &rop);
+    void complete_read_op(ReadOp &&rop);
 
     void start_read_op(
       int priority,

@@ -121,7 +121,9 @@ ostream &operator<<(ostream &lhs, const ECCommon::ReadOp &rhs)
 	     << ", priority=" << rhs.priority
 	     << ", obj_to_source=" << rhs.obj_to_source
 	     << ", source_to_obj=" << rhs.source_to_obj
-	     << ", in_progress=" << rhs.in_progress << ")";
+	     << ", in_progress=" << rhs.in_progress
+             << ", debug_log=" << rhs.debug_log
+             << ")";
 }
 
 void ECCommon::ReadOp::dump(Formatter *f) const
@@ -163,7 +165,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::Op &rhs)
   return lhs;
 }
 
-void ECCommon::ReadPipeline::complete_read_op(ReadOp &rop)
+void ECCommon::ReadPipeline::complete_read_op(ReadOp &&rop)
 {
   dout(20) << __func__ << " completing " << rop << dendl;
   map<hobject_t, read_request_t>::iterator req_iter =
@@ -174,7 +176,7 @@ void ECCommon::ReadPipeline::complete_read_op(ReadOp &rop)
   for (; req_iter != rop.to_read.end(); ++req_iter, ++resiter) {
     rop.on_complete->finish_single_request(
       req_iter->first,
-      resiter->second,
+      std::move(resiter->second),
       req_iter->second);
   }
   ceph_assert(rop.on_complete);
@@ -311,13 +313,16 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
 
   extent_set extra_extents;
   map<int, extent_set> read_mask;
-  extent_set read_mask_superset;
-  sinfo.ro_range_to_shard_extent_set(0,
-    ECUtil::align_page_next(read_request.object_size),
-    read_mask, read_mask_superset);
-  for (int i=sinfo.get_k(); i<sinfo.get_k_plus_m(); i++) {
-    read_mask[sinfo.get_shard(i)] = read_mask_superset;
-  }
+  map<int, extent_set> partial_stripe_mask;
+
+  ceph_assert(read_request.object_size != 0);
+
+  uint64_t page_aligned_end = ECUtil::align_page_next(read_request.object_size);
+  uint64_t stripe_aligned_end = sinfo.logical_to_next_stripe_offset(page_aligned_end);
+
+  sinfo.ro_range_to_shard_extent_set_with_parity(0, page_aligned_end, read_mask);
+  sinfo.ro_range_to_shard_extent_set(page_aligned_end, stripe_aligned_end,
+    partial_stripe_mask);
 
   /* First deal with missing shards */
   for (auto &&[shard, extent_set] : read_request.shard_want_to_read) {
@@ -336,22 +341,22 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
       continue;
     }
     pg_shard_t pg_shard = shards[shard_id_t(shard)];
+    extent_set extents = extra_extents;
     shard_read_t shard_read;
     shard_read.subchunk = subchunk;
-    shard_read.extents.union_of(extra_extents);
 
     if (read_request.shard_want_to_read.contains(shard)) {
-      shard_read.extents.union_of(read_request.shard_want_to_read.at(shard));
+      extents.union_of(read_request.shard_want_to_read.at(shard));
     }
 
-    shard_read.extents.align(CEPH_PAGE_SIZE);
-    shard_read.zero_pad = shard_read.extents;
-    if (read_mask.contains(shard)) {
-      shard_read.extents.intersection_of(read_mask.at(shard));
-      shard_read.zero_pad.subtract(read_mask.at(shard));
-    } else {
-      shard_read.extents = extent_set();
+    extents.align(CEPH_PAGE_SIZE);
+    if (partial_stripe_mask.contains(shard)) {
+      shard_read.zero_pad.intersection_of(extents, partial_stripe_mask.at(shard));
     }
+    if (read_mask.contains(shard)) {
+      shard_read.extents.intersection_of(extents, read_mask.at(shard));
+    }
+
     read_request.shard_reads[pg_shard] = shard_read;
   }
 
@@ -549,7 +554,7 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
 
   void finish_single_request(
     const hobject_t &hoid,
-    ECCommon::read_result_t &res,
+    ECCommon::read_result_t &&res,
     ECCommon::read_request_t &req) override
   {
     auto* cct = read_pipeline.cct;
@@ -564,6 +569,7 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
 #endif
     /* Decode any missing buffers */
     res.buffers_read.decode(read_pipeline.ec_impl, req.shard_want_to_read);
+
 
 #if DEBUG_EC_BUFFERS
     dout(0) << __func__ << "after decode: " << res.buffers_read.debug_string(2048, 8) << dendl;
@@ -915,7 +921,7 @@ void ECCommon::RMWPipeline::try_finish_rmw()
     if (op.version > committed_to)
       committed_to = op.version;
 
-    if (get_osdmap()->require_osd_release >= ceph_release_t::kraken && extent_cache.idle(op.hoid)) {
+    if (get_osdmap()->require_osd_release >= ceph_release_t::kraken && extent_cache.idle()) {
       // FIXME: This needs to be implemented as a flushing write.
       if (op.version > get_parent()->get_log().get_can_rollback_to()) {
         // submit a dummy, transaction-empty op to kick the rollforward

@@ -254,9 +254,9 @@ namespace ECExtentCache {
     free_to_size(0);
   }
 
-  bool PG::idle(hobject_t &oid) const
+  bool PG::idle() const
   {
-    return objects.contains(oid) && waiting_ops.empty();
+    return waiting_ops.empty();
   }
 
   extent_set Op::get_pin_eset(uint64_t alignment) {

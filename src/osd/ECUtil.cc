@@ -143,33 +143,6 @@ void ECUtil::stripe_info_t::ro_range_to_shards(
   }
 }
 
-/* This variant of decode allows for minimal reads. It expects the caller to
- * provide a map of buffers for each stripe that needs to be decoded.
- *
- * For each stripe, there is a corresponding set of "want_to_read" which is
- * the set of shards which need to be decoded.
- */
-int ECUtil::decode(
-  ErasureCodeInterfaceRef &ec_impl,
-  const list<set<int>> want_to_read,
-  const list<map<int, bufferlist>> chunk_list,
-  bufferlist *out)
-{
-  ceph_assert(out);
-  ceph_assert(out->length() == 0);
-
-  auto want_to_read_iter = want_to_read.begin();
-  for (auto chunks : chunk_list) {
-    ceph_assert(want_to_read_iter != want_to_read.end());
-    bufferlist bl;
-    int r = ec_impl->decode_concat(*want_to_read_iter, chunks, &bl);
-    ceph_assert(r == 0);
-    out->claim_append(bl);
-    want_to_read_iter++;
-  }
-  return 0;
-}
-
 /** This variant of decode requires that the set of shards contained in
  * want_to_read is the same for every stripe. Unlike the previous decode, this
  * variant is able to take the entire buffer list of each shard in a single
@@ -271,8 +244,8 @@ int ECUtil::decode(
     for (auto j = to_decode.begin();
 	 j != to_decode.end();
 	 ++j) {
-      chunks[j->first].substr_of(j->second, 
-                                 i*repair_data_per_chunk, 
+      chunks[j->first].substr_of(j->second,
+                                 i*repair_data_per_chunk,
                                  repair_data_per_chunk);
     }
     map<int, bufferlist> out_bls;
@@ -393,6 +366,11 @@ namespace ECUtil {
     }
 
     return size;
+  }
+
+  void shard_extent_map_t::clear() {
+    ro_start = ro_end = invalid_offset;
+    extent_maps.clear();
   }
 
 
@@ -559,16 +537,21 @@ namespace ECUtil {
     return 0;
   }
 
-  void shard_extent_map_t::decode(ErasureCodeInterfaceRef& ecimpl,
+  int shard_extent_map_t::decode(ErasureCodeInterfaceRef& ecimpl,
     map<int, extent_set> want)
   {
     bool decoded = false;
+    int r = 0;
     for (auto &&[shard, eset]: want) {
       /* We are assuming here that a shard that has been read does not need
        * to be decoding. The ECBackend::handle_sub_read_reply code will erase
        * buffers for any shards with missing reads, so this should be safe.
        */
       if (extent_maps.contains(shard))
+        continue;
+
+      /* Use encode to encode the parity */
+      if (sinfo->get_raw_shard(shard) >= sinfo->get_k())
         continue;
 
       decoded = true;
@@ -597,7 +580,11 @@ namespace ECUtil {
          * The chunk size passed in is only used in the clay encoding. It is
          * NOT the size of the decode.
          */
-        ecimpl->decode(want_to_read, s, &decoded, sinfo->get_chunk_size());
+        int r_i = ecimpl->decode(want_to_read, s, &decoded, sinfo->get_chunk_size());
+        if (r_i) {
+          r = r_i;
+          break;
+        }
 
         ceph_assert(decoded[shard].length() == length);
         insert_in_shard(shard, offset, decoded[shard], ro_start, ro_end);
@@ -605,6 +592,8 @@ namespace ECUtil {
     }
 
     if (decoded) compute_ro_range();
+
+    return r;
   }
 
   std::map<int, bufferlist> shard_extent_map_t::slice(int offset, int length) const
@@ -642,6 +631,30 @@ namespace ECUtil {
       bl.substr_of(range.get_val(), offset - range.get_off(), length);
       append_to.append(bl);
     }
+  }
+
+  void shard_extent_map_t::get_shard_first_buffer(int shard, buffer::list &append_to) const {
+
+    if (!extent_maps.contains(shard))
+      return;
+    const extent_map &emap = extent_maps.at(shard);
+    auto range = emap.begin();
+    if (range == emap.end())
+      return;
+
+    append_to.append(range.get_val());
+  }
+
+  uint64_t shard_extent_map_t::get_shard_first_offset(int shard) const {
+
+    if (!extent_maps.contains(shard))
+      return invalid_offset;
+    const extent_map &emap = extent_maps.at(shard);
+    auto range = emap.begin();
+    if (range == emap.end())
+      return invalid_offset;
+
+    return range.get_off();
   }
 
   void shard_extent_map_t::zero_pad(int shard, uint64_t offset, uint64_t length)
@@ -884,6 +897,26 @@ std::ostream& operator<<(std::ostream& out, const shard_extent_map_t& rhs)
   // sinfo not thought to be needed for debug, as it is constant.
   return out << "shard_extent_map: ({" << rhs.ro_start << "~"
     << rhs.ro_end << "}, maps=" << rhs.extent_maps << ")";
+}
+
+std::ostream& operator<<(std::ostream& out, const log_entry_t& rhs)
+{
+  switch(rhs.event) {
+  case READ_REQUEST: out << "READ_REQUEST"; break;
+  case ZERO_REQUEST: out << "ZERO_REQUEST"; break;
+  case READ_DONE: out << "READ_DONE"; break;
+  case ZERO_DONE: out << "ZERO_DONE"; break;
+  case INJECT_EIO: out << "INJECT_EIO"; break;
+  case CANCELLED: out << "CANCELLED"; break;
+  case ERROR: out << "ERROR"; break;
+  case REQUEST_MISSING: out << "REQUEST_MISSING"; break;
+  case COMPLETE_ERROR: out << "COMPLETE_ERROR"; break;
+  case ERROR_CLEAR: out << "ERROR_CLEAR"; break;
+  case COMPLETE: out << "COMPLETE"; break;
+  default:
+    ceph_assert(false);
+  }
+  return out << "[" << rhs.shard << "]->" << rhs.io << "\n";
 }
 }
 

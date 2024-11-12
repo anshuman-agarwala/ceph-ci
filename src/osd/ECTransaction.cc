@@ -711,12 +711,6 @@ void ECTransaction::generate_transactions(
 	    hbuf);
 	}
       }
-
-      /* FIXME: FAIL REVIEW
-      Need to put something in here to update written.  I think written is only
-      used as an update the cache, so is actually just the plan.will_write
-      populated with buffers.
-      */
     });
 }
 

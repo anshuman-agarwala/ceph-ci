@@ -68,7 +68,7 @@ namespace ECExtentCache {
 
       return request(std::move(ctx), oid, to_read, write, orig_size, projected_size);
     }
-    bool idle(hobject_t &oid) const;
+    bool idle() const;
   };
 
   class LRU {

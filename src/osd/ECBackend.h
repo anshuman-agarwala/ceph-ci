@@ -255,14 +255,11 @@ public:
     }
 
     // must be filled if state == WRITING
-    std::map<int, ceph::buffer::list> returned_data;
+    std::optional<ECUtil::shard_extent_map_t> returned_data;
     std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
     ECUtil::HashInfoRef hinfo;
     ObjectContextRef obc;
     std::set<pg_shard_t> waiting_on_pushes;
-
-    // valid in state READING
-    std::pair<uint64_t, uint64_t> extent_requested;
 
     void dump(ceph::Formatter *f) const;
 
@@ -297,7 +294,7 @@ public:
     RecoveryMessages *m);
   void handle_recovery_read_complete(
     const hobject_t &hoid,
-    ECUtil::shard_extent_map_t &buffers_read,
+    ECUtil::shard_extent_map_t &&buffers_read,
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs,
     RecoveryMessages *m);
   void handle_recovery_push(
