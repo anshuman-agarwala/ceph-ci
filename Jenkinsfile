@@ -24,9 +24,23 @@ pipeline {
     stage("build") {
       steps {
         script {
-          copyArtifacts projectName: "ceph-dev-new-setup", filter: "dist/sha1", selector: downstream(upstreamProjectName: "${env.JOB_NAME}", upstreamBuildNumber: "${env.BUILD_ID}")
+          copyArtifacts(
+            projectName: "ceph-dev-new-setup",
+            filter: "dist/sha1",
+            selector: downstream(
+              upstreamProjectName: "${env.JOB_NAME}",
+              upstreamBuildNumber: "${env.BUILD_ID}",
+            )
+          )
           readProperties file: "${WORKSPACE}/dist/sha1"
-          copyArtifacts projectName: "ceph-dev-new-setup", filter: "dist/branch", selector: downstream(upstreamProjectName: "${env.JOB_NAME}", upstreamBuildNumber: "${env.BUILD_ID}")
+          copyArtifacts(
+            projectName: "ceph-dev-new-setup",
+            filter: "dist/branch",
+            selector: downstream(
+              upstreamProjectName: "${env.JOB_NAME}",
+              upstreamBuildNumber: "${env.BUILD_ID}"
+            )
+          )
           readProperties file: "${WORKSPACE}/dist/branch"
           buildName nameTemplate: "#${BUILD_NUMBER} ${BRANCH}, ${SHA1}, ${DISTROS}, ${FLAVOR}"
           build(
