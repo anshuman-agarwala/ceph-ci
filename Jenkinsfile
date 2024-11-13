@@ -4,7 +4,7 @@ pipeline {
     stage("build") {
       steps {
         script {
-          buildName nameTemplate: "#${BUILD_NUMBER} ${BRANCH}, ${SHA1}, ${DISTROS}, ${FLAVOR}"
+          buildName nameTemplate: "#${BUILD_NUMBER} ${BRANCH}, ${GIT_COMMIT}, ${DISTROS}, ${FLAVOR}"
           build(
             job: "ceph-dev-new-build",
             parameters: [
