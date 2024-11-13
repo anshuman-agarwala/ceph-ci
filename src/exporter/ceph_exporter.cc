@@ -1,16 +1,31 @@
 #include "common/ceph_argparse.h"
 #include "common/config.h"
-#include "exporter/DaemonMetricCollector.h"
-#include "exporter/web_server.h"
+#include "common/debug.h"
 #include "global/global_init.h"
 #include "global/global_context.h"
-
+#include "global/signal_handler.h"
+#include "exporter/DaemonMetricCollector.h"
+#include "exporter/web_server.h"
 #include <boost/thread/thread.hpp>
 #include <iostream>
 #include <map>
 #include <string>
+#include <atomic>
+#include <chrono>
+#include <thread>
 
 #define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_ceph_exporter
+
+static std::atomic<bool> stop_signal_received(false);
+
+static void handle_signal(int signum)
+{
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
+  dout(1) << __func__ << ": " << "notifying terminate" << dendl;
+  stop_signal_received.store(true);
+}
 
 static void usage() {
   std::cout << "usage: ceph-exporter [options]\n"
@@ -27,6 +42,12 @@ static void usage() {
 }
 
 int main(int argc, char **argv) {
+
+  // Register signal handlers
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler_oneshot(SIGINT, handle_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
@@ -64,8 +85,31 @@ int main(int argc, char **argv) {
   }
   common_init_finish(g_ceph_context);
 
+  // Start the web server thread
   boost::thread server_thread(web_server_thread_entrypoint);
-  DaemonMetricCollector &collector = collector_instance();
-  collector.main();
+
+  // Start the DaemonMetricCollector thread
+  boost::thread collector_thread(collector_thread_entrypoint);
+
+  // Main loop that waits for stop signals
+  while (!stop_signal_received.load()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGINT, handle_signal);
+  unregister_async_signal_handler(SIGTERM, handle_signal);
+  shutdown_async_signal_handler();
+
+  // Stop the server and collector threads by interrupting them
+  stop_web_server();
+  server_thread.interrupt();  // Interrupt the web server thread
+  collector_thread.interrupt();  // Interrupt the DaemonMetricCollector thread
+
   server_thread.join();
+  collector_thread.join();
+
+  dout(1) << "Ceph exporter stopped" << dendl;
+
+  return 0;
 }
