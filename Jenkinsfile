@@ -28,6 +28,7 @@ pipeline {
             script: "git rev-parse HEAD",
             returnStdout: true,
           )
+          println "SHA1 = ${SHA1}"
           build(
             job: "ceph-dev-new-build",
             parameters: [
