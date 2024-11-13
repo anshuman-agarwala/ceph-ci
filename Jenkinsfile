@@ -3,6 +3,7 @@ pipeline {
   stages {
     stage("build") {
       steps {
+        script {
           buildName nameTemplate: "#${BUILD_NUMBER} ${BRANCH}, ${SHA1}, ${DISTROS}, ${FLAVOR}"
           build(
             job: "ceph-dev-new-build",
