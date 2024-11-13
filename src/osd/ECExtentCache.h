@@ -7,6 +7,8 @@
 
 #include "ECUtil.h"
 
+#define LRU_ENABLED false
+
 namespace ECExtentCache {
 
   class Address;
@@ -32,6 +34,7 @@ namespace ECExtentCache {
     const ECUtil::stripe_info_t &sinfo;
     std::list<OpRef> waiting_ops;
     void cache_maybe_ready();
+    bool lru_enabled;
 
     OpRef request(GenContextURef<OpRef &> &&ctx,
       hobject_t const &oid,
@@ -40,12 +43,17 @@ namespace ECExtentCache {
       uint64_t orig_size,
       uint64_t projected_size);
 
+    void lock();
+    void unlock();
+    void assert_lru_is_locked_by_me();
+
   public:
     explicit PG(BackendRead &backend_read,
       LRU &lru, const ECUtil::stripe_info_t &sinfo) :
       backend_read(backend_read),
       lru(lru),
-      sinfo(sinfo) {}
+      sinfo(sinfo),
+      lru_enabled(LRU_ENABLED) {}
 
     // Insert some data into the cache.
     void read_done(hobject_t const& oid, ECUtil::shard_extent_map_t const&& update);

@@ -581,7 +581,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       }
 
       read_request_t read_request(want,
-        op.recovery_progress.first && !op.obc, op.obc?op.obc->obs.oi.size:-1);
+        op.recovery_progress.first && !op.obc, op.obc?op.obc->obs.oi.size:get_recovery_chunk_size());
 
       int r = read_pipeline.get_min_avail_to_read_shards(
         op.hoid, true, false, read_request);

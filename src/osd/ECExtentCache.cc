@@ -10,24 +10,6 @@ using namespace std;
 using namespace ECUtil;
 
 namespace ECExtentCache {
-
-  void PG::cache_maybe_ready()
-  {
-    while (!waiting_ops.empty()) {
-      OpRef op = waiting_ops.front();
-      if (!op->object.cache.contains(op->reads))
-        return;
-
-      op->result = op->object.cache.intersect(op->reads);
-      op->complete = true;
-      op->cache_ready_cb.release()->complete(op);
-
-      /* The front of waiting ops is removed if write_done() is called. */
-      if (op == waiting_ops.front())
-        return;
-    }
-  }
-
   void Object::request(OpRef &op)
   {
     uint64_t alignment = sinfo.get_chunk_size();
@@ -38,7 +20,8 @@ namespace ECExtentCache {
         if (!lines.contains(to_pin))
           lines.emplace(to_pin, Line(*this, to_pin));
         Line &l = lines.at(to_pin);
-        if (l.in_lru) pg.lru.lru.remove(l);
+        if (!pg.lru_enabled) ceph_assert(!l.in_lru);
+        else if (l.in_lru) pg.lru.lru.remove(l);
         l.in_lru = false;
         l.ref_count++;
       }
@@ -130,8 +113,12 @@ namespace ECExtentCache {
         Line &l = lines.at(to_pin);
         ceph_assert(l.ref_count);
         if (!--l.ref_count) {
-          l.in_lru = true;
-          pg.lru.lru.emplace_back(l);
+          if (pg.lru_enabled) {
+            l.in_lru = true;
+            pg.lru.lru.emplace_back(l);
+          } else {
+            erase_line(l);
+          }
         }
       }
     }
@@ -158,6 +145,35 @@ namespace ECExtentCache {
     return size_delta;
   }
 
+  void PG::cache_maybe_ready()
+  {
+    while (!waiting_ops.empty()) {
+      OpRef op = waiting_ops.front();
+      if (!op->object.cache.contains(op->reads))
+        return;
+
+      op->result = op->object.cache.intersect(op->reads);
+      op->complete = true;
+      op->cache_ready_cb.release()->complete(op);
+
+      /* The front of waiting ops is removed if write_done() is called. */
+      if (op == waiting_ops.front())
+        return;
+    }
+  }
+
+  void PG::lock() {
+    if (lru_enabled) lru.mutex.lock();
+  }
+
+  void PG::unlock() {
+    if (lru_enabled) lru.mutex.unlock();
+  }
+
+  void PG::assert_lru_is_locked_by_me() {
+    ceph_assert(!lru_enabled || ceph_mutex_is_locked_by_me(lru.mutex));
+  }
+
   OpRef PG::request(GenContextURef<OpRef &> && ctx,
     hobject_t const &oid,
     std::optional<std::map<int, extent_set>> const &to_read,
@@ -165,7 +181,7 @@ namespace ECExtentCache {
     uint64_t orig_size,
     uint64_t projected_size)
   {
-    lru.mutex.lock();
+    lock();
 
     if (!objects.contains(oid)) {
       objects.emplace(oid, Object(*this, oid));
@@ -182,28 +198,30 @@ namespace ECExtentCache {
     waiting_ops.emplace_back(op);
 
     cache_maybe_ready();
-    lru.mutex.unlock();
+    unlock();
 
     return op;
   }
 
   void PG::read_done(hobject_t const& oid, shard_extent_map_t const&& update)
   {
-    lru.mutex.lock();
+    lock();
     uint64_t size = objects.at(oid).read_done(update);
-    lru.inc_size(size);
+    if (lru_enabled)
+      lru.inc_size(size);
     cache_maybe_ready();
-    lru.mutex.unlock();
+    unlock();
   }
 
   void PG::write_done(OpRef &op, shard_extent_map_t const&& update)
   {
-    ceph_assert(ceph_mutex_is_locked_by_me(lru.mutex));
+    assert_lru_is_locked_by_me();
     ceph_assert(op == waiting_ops.front());
     waiting_ops.pop_front();
     uint64_t size_added = op->object.insert(update);
     op->object.current_size = op->projected_size;
-    lru.inc_size(size_added);
+    if (lru_enabled)
+      lru.inc_size(size_added);
   }
 
   uint64_t PG::get_projected_size(hobject_t const &oid) {
@@ -214,6 +232,28 @@ namespace ECExtentCache {
     return objects.contains(oid);
   }
 
+  void PG::complete(OpRef &op) {
+    lock();
+    op->object.unpin(op);
+    if (lru_enabled) {
+      lru.free_maybe();
+    }
+    unlock();
+  }
+
+  void PG::discard_lru() {
+    if (!lru_enabled) return;
+
+    lru.mutex.lock();
+    lru.discard();
+    lru.mutex.unlock();
+  }
+
+  bool PG::idle() const
+  {
+    return waiting_ops.empty();
+  }
+
   void LRU::inc_size(uint64_t _size) {
     ceph_assert(ceph_mutex_is_locked_by_me(mutex));
     size += _size;
@@ -222,19 +262,6 @@ namespace ECExtentCache {
   void LRU::dec_size(uint64_t _size) {
     ceph_assert(size >= _size);
     size -= _size;
-  }
-
-  void PG::complete(OpRef &op) {
-    lru.mutex.lock();
-    op->object.unpin(op);
-    lru.free_maybe();
-    lru.mutex.unlock();
-  }
-
-  void PG::discard_lru() {
-    lru.mutex.lock();
-    lru.discard();
-    lru.mutex.unlock();
   }
 
   void LRU::free_to_size(uint64_t target_size) {
@@ -252,11 +279,6 @@ namespace ECExtentCache {
 
   void LRU::discard() {
     free_to_size(0);
-  }
-
-  bool PG::idle() const
-  {
-    return waiting_ops.empty();
   }
 
   extent_set Op::get_pin_eset(uint64_t alignment) {

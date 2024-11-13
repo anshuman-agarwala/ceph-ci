@@ -700,16 +700,17 @@ void ECTransaction::generate_transactions(
       }
 
       if (!op.is_delete()) {
-	bufferlist hbuf;
-        if (plan.hinfo)
-	encode(*plan.hinfo, hbuf);
-	for (auto &&i : *transactions) {
-	  i.second.setattr(
-	    coll_t(spg_t(pgid, i.first)),
-	    ghobject_t(oid, ghobject_t::NO_GEN, i.first),
-	    ECUtil::get_hinfo_key(),
-	    hbuf);
-	}
+        bufferlist hbuf;
+        if (plan.hinfo) {
+          encode(*plan.hinfo, hbuf);
+          for (auto &&i : *transactions) {
+            i.second.setattr(
+              coll_t(spg_t(pgid, i.first)),
+              ghobject_t(oid, ghobject_t::NO_GEN, i.first),
+              ECUtil::get_hinfo_key(),
+              hbuf);
+          }
+        }
       }
     });
 }
