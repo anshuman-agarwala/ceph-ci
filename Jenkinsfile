@@ -4,11 +4,11 @@ pipeline {
     stage("build") {
       steps {
         script {
-          SHA1 = sh(
+          env.SHA1 = sh(
             script: "git rev-parse HEAD",
             returnStdout: true,
           )
-          buildName nameTemplate: "#${BUILD_NUMBER} ${BRANCH}, ${SHA1}, ${DISTROS}, ${FLAVOR}"
+          buildName nameTemplate: "#${env.BUILD_NUMBER} ${env.BRANCH}, ${env.SHA1}, ${env.DISTROS}, ${env.FLAVOR}"
           build(
             job: "ceph-dev-new-build",
             parameters: [
