@@ -596,8 +596,8 @@ pattern_type=PatternType.fnmatch))
         labels_str: List[str] = [x for x in strings if 'labels:' in x]
         if len(labels_str) > 1:
             raise SpecValidationError('"labels" parameter specified multiple times')
-        for l in labels_str:
-            strings.remove(l)
+        for lbl in labels_str:
+            strings.remove(lbl)
         labels_str = labels_str[0][7:] if labels_str else None
         if labels_str:
             labels = labels_str.strip('[').strip(']').split(',')
@@ -774,7 +774,7 @@ class ArgumentSpec:
         if isinstance(data, str):
             return cls(data, split=True, origin=cls.OriginalType.STRING)
         if 'argument' not in data:
-            raise SpecValidationError(f'ArgumentSpec must have an "argument" field')
+            raise SpecValidationError('ArgumentSpec must have an "argument" field')
         for k in data.keys():
             if k not in cls._fields:
                 raise SpecValidationError(f'ArgumentSpec got an unknown field {k!r}')

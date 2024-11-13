@@ -34,13 +34,12 @@ class CephNvmeof(ContainerDaemonForm):
 
     def __init__(
         self,
-        ctx,
-        fsid,
-        daemon_id,
-        config_json,
-        image=DefaultImages.NVMEOF.image_ref,
+        ctx: CephadmContext,
+        fsid: str,
+        daemon_id: Union[int, str],
+        config_json: Dict,
+        image: str = DefaultImages.NVMEOF.image_ref,
     ):
-        # type: (CephadmContext, str, Union[int, str], Dict, str) -> None
         self.ctx = ctx
         self.fsid = fsid
         self.daemon_id = daemon_id
@@ -53,8 +52,9 @@ class CephNvmeof(ContainerDaemonForm):
         self.validate()
 
     @classmethod
-    def init(cls, ctx, fsid, daemon_id):
-        # type: (CephadmContext, str, Union[int, str]) -> CephNvmeof
+    def init(
+        cls, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str]
+    ) -> 'CephNvmeof':
         return cls(ctx, fsid, daemon_id, fetch_configs(ctx), ctx.image)
 
     @classmethod

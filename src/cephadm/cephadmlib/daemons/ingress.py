@@ -79,8 +79,7 @@ class HAproxy(ContainerDaemonForm):
     def get_daemon_args(self) -> List[str]:
         return ['haproxy', '-f', '/var/lib/haproxy/haproxy.cfg']
 
-    def validate(self):
-        # type: () -> None
+    def validate(self) -> None:
         if not is_fsid(self.fsid):
             raise Error('not an fsid: %s' % self.fsid)
         if not self.daemon_id:
@@ -96,12 +95,10 @@ class HAproxy(ContainerDaemonForm):
                         'required file missing from config-json: %s' % fname
                     )
 
-    def get_daemon_name(self):
-        # type: () -> str
+    def get_daemon_name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
 
-    def get_container_name(self, desc=None):
-        # type: (Optional[str]) -> str
+    def get_container_name(self, desc: Optional[str] = None) -> str:
         cname = 'ceph-%s-%s' % (self.fsid, self.get_daemon_name())
         if desc:
             cname = '%s-%s' % (cname, desc)
@@ -209,8 +206,7 @@ class Keepalived(ContainerDaemonForm):
         # populate files from the config-json
         populate_files(data_dir, self.files, uid, gid)
 
-    def validate(self):
-        # type: () -> None
+    def validate(self) -> None:
         if not is_fsid(self.fsid):
             raise Error('not an fsid: %s' % self.fsid)
         if not self.daemon_id:
@@ -226,20 +222,17 @@ class Keepalived(ContainerDaemonForm):
                         'required file missing from config-json: %s' % fname
                     )
 
-    def get_daemon_name(self):
-        # type: () -> str
+    def get_daemon_name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
 
-    def get_container_name(self, desc=None):
-        # type: (Optional[str]) -> str
+    def get_container_name(self, desc: Optional[str] = None) -> str:
         cname = 'ceph-%s-%s' % (self.fsid, self.get_daemon_name())
         if desc:
             cname = '%s-%s' % (cname, desc)
         return cname
 
     @staticmethod
-    def get_container_envs():
-        # type: () -> List[str]
+    def get_container_envs() -> List[str]:
         envs = [
             'KEEPALIVED_AUTOCONF=false',
             'KEEPALIVED_CONF=/etc/keepalived/keepalived.conf',
