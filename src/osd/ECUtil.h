@@ -17,6 +17,7 @@
 
 #include <ostream>
 #include <opentelemetry/ext/http/client/http_client.h>
+#include <span>
 
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer_fwd.h"

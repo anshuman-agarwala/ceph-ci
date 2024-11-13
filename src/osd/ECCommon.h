@@ -640,6 +640,7 @@ struct ECCommon {
     void try_finish_rmw();
 
     void on_change();
+    void on_change2();
     void call_write_ordered(std::function<void(void)> &&cb);
 
     CephContext* cct;

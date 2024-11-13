@@ -59,7 +59,7 @@ namespace ECExtentCache {
     void read_done(hobject_t const& oid, ECUtil::shard_extent_map_t const&& update);
     void write_done(OpRef &op, ECUtil::shard_extent_map_t const&& update);
     void complete(OpRef &read);
-    void discard_lru();
+    void on_change();
     bool contains_object(hobject_t const &oid);
     uint64_t get_projected_size(hobject_t const &oid);
 

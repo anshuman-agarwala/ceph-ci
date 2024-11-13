@@ -974,16 +974,13 @@ void ECCommon::RMWPipeline::on_change()
   completed_to = eversion_t();
   committed_to = eversion_t();
   waiting_commit.clear();
-
-  for (auto &&[_, op]: tid_to_op_map) {
-    for (auto &&[_, cop]: op->cache_ops) {
-      extent_cache.complete(cop);
-    }
-    op->cache_ops.clear();
-  }
   tid_to_op_map.clear();
   oid_to_version.clear();
-  extent_cache.discard_lru();
+}
+
+void ECCommon::RMWPipeline::on_change2() {
+  extent_cache.on_change();
+  ceph_assert(extent_cache.idle());
 }
 
 void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {

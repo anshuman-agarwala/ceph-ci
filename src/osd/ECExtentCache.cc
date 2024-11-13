@@ -241,12 +241,16 @@ namespace ECExtentCache {
     unlock();
   }
 
-  void PG::discard_lru() {
-    if (!lru_enabled) return;
+  void PG::on_change() {
 
-    lru.mutex.lock();
-    lru.discard();
-    lru.mutex.unlock();
+    if (lru_enabled) {
+      lru.mutex.lock();
+      lru.discard();
+      lru.mutex.unlock();
+    }
+
+    waiting_ops.clear();
+    objects.clear();
   }
 
   bool PG::idle() const

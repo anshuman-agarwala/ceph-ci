@@ -1392,6 +1392,7 @@ void ECBackend::on_change()
 {
   rmw_pipeline.on_change();
   read_pipeline.on_change();
+  rmw_pipeline.on_change2();
   clear_recovery_state();
 }
 
