@@ -9,6 +9,14 @@ from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
 
 
+@CLIReadCommand('dashboard tomer-test')
+def list_nvmeof_gateways(_):
+    '''
+    List NVMe-oF gateways
+    '''
+    return 0, json.dumps(NvmeofGatewaysConfig.get_gateways_config()), ''
+
+
 @CLIReadCommand('dashboard nvmeof-gateway-list')
 def list_nvmeof_gateways(_):
     '''
