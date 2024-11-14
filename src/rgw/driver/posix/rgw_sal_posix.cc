@@ -2893,6 +2893,12 @@ int POSIXObject::copy_object(const ACLOwner& owner,
   return dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
 }
 
+bool POSIXObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
+                                    const ceph::real_time& obj_mtime)
+{
+  return false;
+}
+
 int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
   int ret = stat(dpp);
