@@ -496,6 +496,12 @@ namespace rgw::sal {
     return std::make_unique<DBLuaManager>(this);
   }
 
+  bool DBObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
+                                   const ceph::real_time& obj_mtime)
+  {
+    return false;
+  }
+
   int DBObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
   {
     RGWObjState* astate;
