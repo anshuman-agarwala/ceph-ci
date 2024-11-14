@@ -36,6 +36,15 @@ if [ ! "$EVENT_LIST" = "$NEW_EVENT_LIST" ] ; then
     exit -1
 fi
 
+rm -f $JOURNAL_FILE
+touch $JOURNAL_FILE
+$BIN journal import $JOURNAL_FILE
+if [ $? -ne 234 ] ; then
+   echo "Expected import to fail"
+   exit -1
+fi
+rm -f $JOURNAL_FILE
+
 echo "Testing 'journal' commands..."
 
 # Simplest thing: print the vital statistics of the journal
