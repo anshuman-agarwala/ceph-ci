@@ -12,7 +12,7 @@ from .nvmeof_conf import ManagedByOrchestratorException, \
 @CLIReadCommand('dashboard tomer-test')
 def list_nvmeof_gateways1(_):
     '''
-    List NVMe-oF gateways
+    List NVMe-oF gatewaysss
     '''
     return 0, json.dumps(NvmeofGatewaysConfig.get_gateways_config()), ''
 
