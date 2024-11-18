@@ -14,8 +14,8 @@ try:
     test = NVMeoFSubsystem()
 
     @CLIReadCommand('dashboard tomer-test2')
-    def test123(_, gw_group):
-        return 0, test.list(gw_group)
+    def test123(_):
+        return 0, test.list("dummygw")
 except:
     @CLIReadCommand('dashboard tomer-test-exception-caught')
     def test123(_):
