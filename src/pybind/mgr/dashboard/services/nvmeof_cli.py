@@ -8,8 +8,6 @@ from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
 
-from ..services.nvmeof_client import NVMeoFClient
-
 try:
     from ..controllers.nvmeof import NVMeoFSubsystem
 
