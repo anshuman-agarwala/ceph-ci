@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from orchestrator import OrchestratorError
 
-from mgr_module import CLIReadCommand, CLIWriteCommand
+# from mgr_module import CLIReadCommand, CLIWriteCommand
 from .. import mgr
 from ..model import nvmeof as model
 from ..security import Scope
@@ -54,7 +54,7 @@ else:
     @APIRouter("/nvmeof/subsystem", Scope.NVME_OF)
     @APIDoc("NVMe-oF Subsystem Management API", "NVMe-oF Subsystem")
     class NVMeoFSubsystem(RESTController):
-        @CLIReadCommand('nvmf subsystem list')
+        # @CLIReadCommand('nvmf subsystem list')
         @EndpointDoc("List all NVMeoF subsystems")
         @map_collection(model.Subsystem, pick="subsystems")
         @handle_nvmeof_error
