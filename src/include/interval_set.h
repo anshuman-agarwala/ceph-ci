@@ -659,6 +659,8 @@ class interval_set {
   }
 
   void subtract(const interval_set &a) {
+    if (empty() || a.empty()) return;
+
     auto start = range_start();
     auto end = range_end();
 

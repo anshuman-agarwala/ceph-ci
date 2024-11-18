@@ -220,6 +220,8 @@ namespace ECExtentCache {
   void PG::complete(OpRef &op) {
     lock();
     op->object.unpin(op);
+    ceph_assert(active_ios > 0);
+    active_ios--;
     if (lru_enabled) {
       lru.free_maybe();
     }
@@ -236,19 +238,29 @@ namespace ECExtentCache {
 
     waiting_ops.clear();
     objects.clear();
+    active_ios = 0;
   }
 
   void PG::execute(OpRef op) {
     lock();
     op->object.request(op);
+    active_ios++;
     waiting_ops.emplace_back(op);
+    counter++;
     cache_maybe_ready();
     unlock();
   };
 
   bool PG::idle() const
   {
-    return waiting_ops.empty();
+    return active_ios == 0;
+  }
+
+  int PG::get_and_reset_counter()
+  {
+    int ret = counter;
+    counter = 0;
+    return ret;
   }
 
   void LRU::inc_size(uint64_t _size) {

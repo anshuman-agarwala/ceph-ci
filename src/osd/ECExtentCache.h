@@ -35,6 +35,8 @@ namespace ECExtentCache {
     std::list<OpRef> waiting_ops;
     void cache_maybe_ready();
     bool lru_enabled;
+    int counter;
+    int active_ios;
 
     OpRef prepare(GenContextURef<OpRef &> &&ctx,
       hobject_t const &oid,
@@ -79,6 +81,7 @@ namespace ECExtentCache {
 
     void execute(OpRef op);
     bool idle() const;
+    int get_and_reset_counter();
   };
 
   class LRU {

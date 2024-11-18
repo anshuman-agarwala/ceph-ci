@@ -1290,4 +1290,57 @@ TYPED_TEST(IntervalSetTest, erase_after)
   }
 }
 
+TYPED_TEST(IntervalSetTest, subtract) {
+  typedef typename TestFixture::ISet ISet;
+
+  //Subtract from empty
+  // erase many with border
+  {
+    ISet iset1, iset2, iset3;
+    iset1.subtract(iset2);
+
+    ASSERT_EQ(iset1, iset3);
+  }
+
+  //Subtract from empty
+  // erase many with border
+  {
+    ISet iset1, iset2, iset3;
+    iset1.insert(1, 1);
+    iset1.subtract(iset2);
+
+    iset3.insert(1, 1);
+    ASSERT_EQ(iset1, iset3);
+  }
+
+  //Subtract from empty
+  // erase many with border
+  {
+    ISet iset1, iset2, iset3;
+    iset2.insert(1, 1);
+    iset1.subtract(iset2);
+
+    ASSERT_EQ(iset1, iset3);
+  }
+
+  // Subtract many span.
+  {
+    ISet iset1, iset2, iset3;
+
+    iset1.insert(1, 1);
+    iset1.insert(3, 1);
+    iset1.insert(5, 1);
+    iset1.insert(7, 1);
+    iset1.insert(9, 1);
+
+    iset2.insert(1, 4);
+    iset2.insert(7, 3);
+
+    iset1.subtract(iset2);
+
+    iset3.insert(5, 1);
+    ASSERT_EQ(iset1, iset3);
+  }
+}
+
 #include <set>;
