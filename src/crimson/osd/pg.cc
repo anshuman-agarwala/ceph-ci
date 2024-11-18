@@ -868,43 +868,15 @@ std::ostream& operator<<(std::ostream& os, const PG& pg)
   return os;
 }
 
-void PG::mutate_object(
-  ObjectContextRef& obc,
-  ceph::os::Transaction& txn,
-  osd_op_params_t& osd_op_p)
+void PG::enqueue_push_for_backfill(
+  const hobject_t &obj,
+  const eversion_t &v,
+  const std::vector<pg_shard_t> &peers)
 {
-  if (obc->obs.exists) {
-    obc->obs.oi.prior_version = obc->obs.oi.version;
-    obc->obs.oi.version = osd_op_p.at_version;
-    if (osd_op_p.user_modify)
-      obc->obs.oi.user_version = osd_op_p.at_version.version;
-    obc->obs.oi.last_reqid = osd_op_p.req_id;
-    obc->obs.oi.mtime = osd_op_p.mtime;
-    obc->obs.oi.local_mtime = ceph_clock_now();
-
-    // object_info_t
-    {
-      ceph::bufferlist osv;
-      obc->obs.oi.encode_no_oid(osv, CEPH_FEATURES_ALL);
-      // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      txn.setattr(coll_ref->get_cid(), ghobject_t{obc->obs.oi.soid}, OI_ATTR, osv);
-    }
-
-    // snapset
-    if (obc->obs.oi.soid.snap == CEPH_NOSNAP) {
-      logger().debug("final snapset {} in {}",
-        obc->ssc->snapset, obc->obs.oi.soid);
-      ceph::bufferlist bss;
-      encode(obc->ssc->snapset, bss);
-      txn.setattr(coll_ref->get_cid(), ghobject_t{obc->obs.oi.soid}, SS_ATTR, bss);
-      obc->ssc->exists = true;
-    } else {
-      logger().debug("no snapset (this is a clone)");
-    }
-  } else {
-    // reset cached ObjectState without enforcing eviction
-    obc->obs.oi = object_info_t(obc->obs.oi.soid);
-  }
+  assert(recovery_handler);
+  assert(recovery_handler->backfill_state);
+  auto backfill_state = recovery_handler->backfill_state.get();
+  backfill_state->enqueue_standalone_push(obj, v, peers);
 }
 
 PG::interruptible_future<
@@ -912,10 +884,12 @@ PG::interruptible_future<
              PG::interruptible_future<>>>
 PG::submit_transaction(
   ObjectContextRef&& obc,
+  ObjectContextRef&& new_clone,
   ceph::os::Transaction&& txn,
   osd_op_params_t&& osd_op_p,
   std::vector<pg_log_entry_t>&& log_entries)
 {
+  auto _new_clone = std::move(new_clone);
   if (__builtin_expect(stopping, false)) {
     co_return std::make_tuple(
         interruptor::make_interruptible(seastar::make_exception_future<>(
@@ -924,8 +898,9 @@ PG::submit_transaction(
   }
 
   epoch_t map_epoch = get_osdmap_epoch();
+  auto at_version = osd_op_p.at_version;
 
-  peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, osd_op_p.at_version);
+  peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, at_version);
   peering_state.update_trim_to();
 
   ceph_assert(!log_entries.empty());
@@ -936,8 +911,30 @@ PG::submit_transaction(
     projected_log.add(entry);
   }
 
+  std::vector<PGBackend::pg_shard_should_send> shards;
+  std::vector<pg_shard_t> to_push_clone;
+  const auto &pg_shards = peering_state.get_acting_recovery_backfill();
+  for (auto &pg_shard : pg_shards) {
+    if (pg_shard == pg_whoami) {
+      continue;
+    }
+    auto &hoid = obc->obs.oi.soid;
+    if (should_send_op(pg_shard, hoid)) {
+      shards.emplace_back(pg_shard, true);
+    } else {
+      shards.emplace_back(pg_shard, false);
+      if (_new_clone && is_missing_on_peer(pg_shard, hoid)) {
+        // The head is in the push queue but hasn't been pushed yet.
+        // We need to ensure that the newly created clone will be 
+        // pushed as well, otherwise we might skip it.
+        // See: https://tracker.ceph.com/issues/68808
+        to_push_clone.push_back(pg_shard);
+      }
+    }
+  }
+
   auto [submitted, all_completed] = co_await backend->submit_transaction(
-      peering_state.get_acting_recovery_backfill(),
+      shards,
       obc->obs.oi.soid,
       std::move(txn),
       std::move(osd_op_p),
@@ -948,12 +945,19 @@ PG::submit_transaction(
     std::move(submitted),
     all_completed.then_interruptible(
       [this, last_complete=peering_state.get_info().last_complete,
-      at_version=osd_op_p.at_version](auto acked) {
+      _new_clone, at_version, to_push_clone=std::move(to_push_clone)]
+      (auto acked) {
       for (const auto& peer : acked) {
         peering_state.update_peer_last_complete_ondisk(
           peer.shard, peer.last_complete_ondisk);
       }
       peering_state.complete_write(at_version, last_complete);
+      if (_new_clone && !to_push_clone.empty()) {
+        enqueue_push_for_backfill(
+          _new_clone->obs.oi.soid,
+          _new_clone->obs.oi.version,
+          to_push_clone);
+      }
       return seastar::now();
     })
   );
@@ -1143,25 +1147,24 @@ PG::submit_executer_fut PG::submit_executer(
   OpsExecuter &&ox,
   const std::vector<OSDOp>& ops) {
   LOG_PREFIX(PG::submit_executer);
-  // transaction must commit at this point
-  return std::move(
+
+  // we need to build the pg log entries and submit the transaction
+  // atomically to ensure log ordering
+  co_await interruptor::make_interruptible(submit_lock.lock());
+  auto unlocker = seastar::defer([this] {
+    submit_lock.unlock();
+  });
+
+  auto [submitted, completed] = co_await std::move(
     ox
-  ).flush_changes_n_do_ops_effects(
+  ).flush_changes_and_submit(
     ops,
     snap_mapper,
-    osdriver,
-    [FNAME, this](auto&& txn,
-		  auto&& obc,
-		  auto&& osd_op_p,
-		  auto&& log_entries) {
-      DEBUGDPP("object {} submitting txn", *this, obc->get_oid());
-      mutate_object(obc, txn, osd_op_p);
-      return submit_transaction(
-	std::move(obc),
-	std::move(txn),
-	std::move(osd_op_p),
-	std::move(log_entries));
-    });
+    osdriver
+  );
+  co_return std::make_tuple(
+    std::move(submitted).then_interruptible([unlocker=std::move(unlocker)] {}),
+    std::move(completed));
 }
 
 PG::interruptible_future<MURef<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
@@ -1224,31 +1227,6 @@ void PG::check_blocklisted_obc_watchers(
         obc->get_oid(), src.second);
     }
   }
-}
-
-PG::load_obc_iertr::future<>
-PG::with_locked_obc(const hobject_t &hobj,
-                    const OpInfo &op_info,
-                    with_obc_func_t &&f)
-{
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
-  const hobject_t oid = get_oid(hobj);
-  auto wrapper = [f=std::move(f), this](auto head, auto obc) {
-    check_blocklisted_obc_watchers(obc);
-    return f(head, obc);
-  };
-  switch (get_lock_type(op_info)) {
-  case RWState::RWREAD:
-      return obc_loader.with_obc<RWState::RWREAD>(oid, std::move(wrapper));
-  case RWState::RWWRITE:
-      return obc_loader.with_obc<RWState::RWWRITE>(oid, std::move(wrapper));
-  case RWState::RWEXCL:
-      return obc_loader.with_obc<RWState::RWEXCL>(oid, std::move(wrapper));
-  default:
-    ceph_abort();
-  };
 }
 
 void PG::update_stats(const pg_stat_t &stat) {
@@ -1629,7 +1607,7 @@ bool PG::should_send_op(
     //    missing set
     hoid <= peering_state.get_peer_info(peer).last_backfill ||
     (has_backfill_state() && hoid <= get_last_backfill_started() &&
-     !peering_state.get_peer_missing(peer).is_missing(hoid)));
+     !is_missing_on_peer(peer, hoid)));
   if (!should_send) {
     ceph_assert(is_backfill_target(peer));
     logger().debug("{} issue_repop shipping empty opt to osd."

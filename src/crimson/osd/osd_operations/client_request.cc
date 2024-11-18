@@ -43,15 +43,17 @@ void ClientRequest::Orderer::clear_and_cancel(PG &pg)
 {
   LOG_PREFIX(ClientRequest::Orderer::clear_and_cancel);
   for (auto i = list.begin(); i != list.end(); ) {
-    DEBUGDPP("{}", pg, *i);
-    i->complete_request();
-    remove_request(*(i++));
+    auto &req = *i;
+    DEBUGDPP("{}", pg, req);
+    ++i;
+    req.complete_request(pg);
   }
 }
 
-void ClientRequest::complete_request()
+void ClientRequest::complete_request(PG &pg)
 {
   track_event<CompletionEvent>();
+  pg.client_request_orderer.remove_request(*this);
   on_complete.set_value();
 }
 
@@ -143,7 +145,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
     // parts would end up in the same PG so that they could be clone_range'd into
     // the same object via librados, but that's not how multipart upload works
     // anymore and we no longer support clone_range via librados.
-    get_handle().exit();
     co_await reply_op_error(pgref, -ENOTSUP);
     co_return;
   }
@@ -153,8 +154,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 	std::ref(get_foreign_connection()), m->get_map_epoch()
       ));
     DEBUGDPP("{}: discarding {}", *pgref, *this, this_instance_id);
-    pgref->client_request_orderer.remove_request(*this);
-    complete_request();
     co_return;
   }
   DEBUGDPP("{}.{}: entering await_map stage",
@@ -239,12 +238,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{}.{}: process[_pg]_op complete, completing handle",
 	   *pgref, *this, this_instance_id);
   co_await interruptor::make_interruptible(ihref.handle.complete());
-
-  DEBUGDPP("{}.{}: process[_pg]_op complete,"
-	   "removing request from orderer",
-	   *pgref, *this, this_instance_id);
-  pgref->client_request_orderer.remove_request(*this);
-  complete_request();
 }
 
 seastar::future<> ClientRequest::with_pg_process(
@@ -261,15 +254,23 @@ seastar::future<> ClientRequest::with_pg_process(
   auto &ihref = *instance_handle;
   return interruptor::with_interruption(
     [this, pgref, this_instance_id, &ihref]() mutable {
-      return with_pg_process_interruptible(pgref, this_instance_id, ihref);
+      return with_pg_process_interruptible(
+	pgref, this_instance_id, ihref
+      ).then_interruptible([FNAME, this, this_instance_id, pgref] {
+	DEBUGDPP("{}.{}: with_pg_process_interruptible complete,"
+		 " completing request",
+		 *pgref, *this, this_instance_id);
+	complete_request(*pgref);
+      });
     }, [FNAME, this, this_instance_id, pgref](std::exception_ptr eptr) {
       DEBUGDPP("{}.{}: interrupted due to {}",
 	       *pgref, *this, this_instance_id, eptr);
     }, pgref, pgref->get_osdmap_epoch()).finally(
       [this, FNAME, opref=std::move(opref), pgref,
-       this_instance_id, instance_handle=std::move(instance_handle), &ihref] {
+       this_instance_id, instance_handle=std::move(instance_handle), &ihref]() mutable {
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
-	ihref.handle.exit();
+	return ihref.handle.complete(
+	).finally([instance_handle=std::move(instance_handle)] {});
     });
 }
 
@@ -344,7 +345,11 @@ ClientRequest::process_op(
   instance_handle_t &ihref, Ref<PG> pg, unsigned this_instance_id)
 {
   LOG_PREFIX(ClientRequest::process_op);
-  ihref.enter_stage_sync(client_pp(*pg).recover_missing, *this);
+  ihref.obc_orderer = pg->obc_loader.get_obc_orderer(m->get_hobj().get_head());
+  auto obc_manager = pg->obc_loader.get_obc_manager(m->get_hobj());
+  co_await ihref.enter_stage<interruptor>(
+    ihref.obc_orderer->obc_pp().process, *this);
+
   if (!pg->is_primary()) {
     DEBUGDPP(
       "Skipping recover_missings on non primary pg for soid {}",
@@ -364,16 +369,6 @@ ClientRequest::process_op(
     }
   }
 
-  /**
-   * The previous stage of recover_missing is a concurrent phase.
-   * Checking for already_complete requests must done exclusively.
-   * Since get_obc is also an exclusive stage, we can merge both stages into
-   * a single stage and avoid stage switching overhead.
-   */
-  DEBUGDPP("{}.{}: entering check_already_complete_get_obc",
-	   *pg, *this, this_instance_id);
-  co_await ihref.enter_stage<interruptor>(
-    client_pp(*pg).check_already_complete_get_obc, *this);
   DEBUGDPP("{}.{}: checking already_complete",
 	   *pg, *this, this_instance_id);
   auto completed = co_await pg->already_complete(m->get_reqid());
@@ -400,51 +395,29 @@ ClientRequest::process_op(
 
   DEBUGDPP("{}.{}: past scrub blocker, getting obc",
 	   *pg, *this, this_instance_id);
-  // call with_locked_obc() in order, but wait concurrently for loading.
-  ihref.enter_stage_sync(
-      client_pp(*pg).lock_obc, *this);
-  auto process = pg->with_locked_obc(
-    m->get_hobj(), op_info,
-    [FNAME, this, pg, this_instance_id, &ihref] (
-      auto head, auto obc
-    ) -> interruptible_future<> {
-      DEBUGDPP("{}.{}: got obc {}, entering process stage",
-	       *pg, *this, this_instance_id, obc->obs);
-      return ihref.enter_stage<interruptor>(
-	client_pp(*pg).process, *this
-      ).then_interruptible(
-	[FNAME, this, pg, this_instance_id, obc, &ihref]() mutable {
-	  DEBUGDPP("{}.{}: in process stage, calling do_process",
-		   *pg, *this, this_instance_id);
-	  return do_process(
-	    ihref, pg, obc, this_instance_id
-	  );
-	}
-      );
-    }).handle_error_interruptible(
-      PG::load_obc_ertr::all_same_way(
-	[FNAME, this, pg=std::move(pg), this_instance_id](
-	  const auto &code
-	) -> interruptible_future<> {
-	  DEBUGDPP("{}.{}: saw error code {}",
-		   *pg, *this, this_instance_id, code);
-	  assert(code.value() > 0);
-	  return reply_op_error(pg, -code.value());
-	})
-    );
 
-  /* The following works around gcc bug
-   * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98401.
-   * The specific symptom I observed is the pg param being
-   * destructed multiple times resulting in the refcount going
-   * rapidly to 0 destoying the PG prematurely.
-   *
-   * This bug seems to be resolved in gcc 13.2.1.
-   *
-   * Assigning the intermediate result and moving it into the co_await
-   * expression bypasses both bugs.
-   */
-  co_await std::move(process);
+  int load_err = co_await pg->obc_loader.load_and_lock(
+    obc_manager, pg->get_lock_type(op_info)
+  ).si_then([]() -> int {
+    return 0;
+  }).handle_error_interruptible(
+    PG::load_obc_ertr::all_same_way(
+      [](const auto &code) -> int {
+	return -code.value();
+      })
+  );
+  if (load_err) {
+    DEBUGDPP("{}.{}: saw error code loading obc {}",
+	     *pg, *this, this_instance_id, load_err);
+    co_await reply_op_error(pg, load_err);
+    co_return;
+  }
+
+  DEBUGDPP("{}.{}: obc {} loaded and locked, calling do_process",
+	   *pg, *this, this_instance_id, obc_manager.get_obc()->obs);
+  co_await do_process(
+    ihref, pg, obc_manager.get_obc(), this_instance_id
+  );
 }
 
 ClientRequest::interruptible_future<>
@@ -563,12 +536,14 @@ ClientRequest::do_process(
 	std::move(ox), m->ops);
       co_await std::move(submitted);
     }
-    co_await ihref.enter_stage<interruptor>(client_pp(*pg).wait_repop, *this);
+    co_await ihref.enter_stage<interruptor>(
+      ihref.obc_orderer->obc_pp().wait_repop, *this);
 
     co_await std::move(all_completed);
   }
 
-  co_await ihref.enter_stage<interruptor>(client_pp(*pg).send_reply, *this);
+  co_await ihref.enter_stage<interruptor>(
+    ihref.obc_orderer->obc_pp().send_reply, *this);
 
   if (ret) {
     int err = -ret->value();

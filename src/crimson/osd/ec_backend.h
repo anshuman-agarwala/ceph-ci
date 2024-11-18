@@ -26,7 +26,7 @@ private:
   ll_read_ierrorator::future<ceph::bufferlist>
   _read(const hobject_t& hoid, uint64_t off, uint64_t len, uint32_t flags) override;
   rep_op_fut_t
-  submit_transaction(const std::set<pg_shard_t> &pg_shards,
+  submit_transaction(const std::vector<pg_shard_should_send> &shards,
 		     const hobject_t& hoid,
 		     ceph::os::Transaction&& txn,
 		     osd_op_params_t&& req,
