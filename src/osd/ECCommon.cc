@@ -739,16 +739,19 @@ void ECCommon::RMWPipeline::start_rmw(OpRef op)
 
   op->pending_cache_ops = op->plan.plans.size();
   for (auto &&[oid, plan] : op->plan.plans) {
-    ECExtentCache::OpRef cache_op = extent_cache.request(oid,
+    ECExtentCache::OpRef cache_op = extent_cache.prepare(oid,
       plan.to_read,
       plan.will_write,
       plan.orig_size,
       plan.projected_size,
       [op](ECExtentCache::OpRef &cache_op)
       {
-        op->cache_ops.emplace(op->hoid, cache_op);
         op->cache_ready(op->hoid, cache_op->get_result());
       });
+    op->cache_ops.emplace(op->hoid, cache_op);
+  }
+  for (auto &&[_, cache_op] : op->cache_ops) {
+    extent_cache.execute(cache_op);
   }
 }
 
@@ -923,7 +926,7 @@ void ECCommon::RMWPipeline::try_finish_rmw()
         nop->pending_cache_ops = 1;
         nop->pipeline = this;
 
-        ECExtentCache::OpRef cache_op = extent_cache.request(op.hoid,
+        ECExtentCache::OpRef cache_op = extent_cache.prepare(op.hoid,
           std::nullopt,
           ECUtil::shard_extent_set_t(),
           op.plan.plans.at(op.hoid).orig_size,

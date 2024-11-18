@@ -34,7 +34,7 @@ using ceph::decode;
 using ceph::encode;
 using ceph::ErasureCodeInterfaceRef;
 
-void debug(hobject_t oid, const std::string &str, ECUtil::shard_extent_map_t &map, DoutPrefixProvider *dpp)
+void debug(const hobject_t &oid, const std::string &str, const ECUtil::shard_extent_map_t &map, DoutPrefixProvider *dpp)
 {
 #if DEBUG_EC_BUFFERS
   ldpp_dout(dpp, 20)
@@ -623,7 +623,7 @@ void ECTransaction::generate_transactions(
         clone_max = sinfo.logical_to_next_stripe_offset(clone_max);
       }
       uint64_t rollback_max = sinfo.logical_to_next_stripe_offset(clone_max);
-      clone_ranges.erase(rollback_max, 0 - rollback_max - 1);
+      clone_ranges.erase_after(rollback_max);
       for (auto &[start, len] : clone_ranges) {
         rollback_extents.emplace_back(start, len);
       }
