@@ -165,13 +165,12 @@ namespace ECExtentCache {
     ceph_assert(!lru_enabled || ceph_mutex_is_locked_by_me(lru.mutex));
   }
 
-  OpRef PG::request(GenContextURef<OpRef &> && ctx,
+  OpRef PG::prepare(GenContextURef<OpRef &> && ctx,
     hobject_t const &oid,
     std::optional<shard_extent_set_t> const &to_read,
     shard_extent_set_t const &write,
     uint64_t orig_size,
-    uint64_t projected_size)
-  {
+    uint64_t projected_size) {
     lock();
 
     if (!objects.contains(oid)) {
@@ -184,13 +183,8 @@ namespace ECExtentCache {
     op->object.projected_size = op->projected_size = projected_size;
     if (op->object.active_ios == 0)
       op->object.current_size = orig_size;
-    op->object.request(op);
 
-    waiting_ops.emplace_back(op);
-
-    cache_maybe_ready();
     unlock();
-
     return op;
   }
 
@@ -243,6 +237,14 @@ namespace ECExtentCache {
     waiting_ops.clear();
     objects.clear();
   }
+
+  void PG::execute(OpRef op) {
+    lock();
+    op->object.request(op);
+    waiting_ops.emplace_back(op);
+    cache_maybe_ready();
+    unlock();
+  };
 
   bool PG::idle() const
   {
