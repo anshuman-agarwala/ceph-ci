@@ -35,8 +35,8 @@ namespace ECExtentCache {
     std::list<OpRef> waiting_ops;
     void cache_maybe_ready();
     bool lru_enabled;
-    int counter;
-    int active_ios;
+    int counter = 0;
+    int active_ios = 0;
 
     OpRef prepare(GenContextURef<OpRef &> &&ctx,
       hobject_t const &oid,

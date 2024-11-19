@@ -918,7 +918,6 @@ void ECCommon::RMWPipeline::try_finish_rmw()
     op.cache_ops.clear();
 
     if (get_osdmap()->require_osd_release >= ceph_release_t::kraken && extent_cache.idle()) {
-      // FIXME: This needs to be implemented as a flushing write.
       if (op.version > get_parent()->get_log().get_can_rollback_to()) {
         int transactions_since_last_idle = extent_cache.get_and_reset_counter();
         //FIXME  - what level of debug do we want?
