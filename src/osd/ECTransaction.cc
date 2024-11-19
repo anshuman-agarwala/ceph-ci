@@ -186,16 +186,11 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
     }
   } else {
     ECUtil::shard_extent_set_t &small_set = inner?*inner:will_write;
-    ECUtil::shard_extent_set_t partial_stripe;
     ECUtil::shard_extent_set_t zero;
-    ECUtil::shard_extent_set_t orig;
-
-    sinfo.ro_range_to_shard_extent_set(projected_size,
-      sinfo.logical_to_next_stripe_offset(projected_size), partial_stripe);
+    ECUtil::shard_extent_set_t read_mask;
 
     uint64_t aligned_orig_size = ECUtil::align_page_next(orig_size);
-
-    sinfo.ro_range_to_shard_extent_set(0,orig_size, orig);
+    sinfo.ro_size_to_read_mask(orig_size, read_mask);
 
     /* The zero stripe is any area that gets zeroed if not written to. It is used
      * by appends (old size -> new size) and truncates if truncate.second >
@@ -220,11 +215,10 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
           will_write[shard].insert(zero.at(shard));
         }
 
-        if (!orig.contains(shard))
+        if (!read_mask.contains(shard))
           continue;
 
-        _to_read.intersection_of(outter_extent_superset, orig.at((shard)));
-        _to_read.align(CEPH_PAGE_SIZE);
+        _to_read.intersection_of(outter_extent_superset, read_mask.at((shard)));
 
         if (small_set.contains(shard)) {
           _to_read.subtract(small_set.at(shard));
