@@ -21,6 +21,23 @@ from .nvmeof_conf import ManagedByOrchestratorException, \
 #     def test123(_):
 #         return 0, json.dumps({'a':1})
 
+
+try:
+    from ..services.nvmeof_client import NVMeoFClient
+
+    @CLIReadCommand('dashboard tomer-test-x')
+    def list_nvmeof_gateways2(_):
+        '''
+        List NVMe-oF gateways
+        '''
+        return 0, json.dumps(NVMeoFClient(gw_group=gw_group).stub.list_subsystems(
+                    NVMeoFClient.pb2.list_subsystems_req()
+                )), ''
+except Exception as e:
+    @CLIReadCommand('dashboard tomer-test-exception-caught')
+    def test123(_):
+        return 0, json.dumps({'a':str(e)})
+
 @CLIReadCommand('dashboard tomer-test')
 def list_nvmeof_gateways1(_):
     '''
