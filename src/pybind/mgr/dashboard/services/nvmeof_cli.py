@@ -8,18 +8,18 @@ from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
 
-try:
-    from ..controllers.nvmeof import NVMeoFSubsystem
+# try:
+#     from ..controllers.nvmeof import NVMeoFSubsystem
 
-    test = NVMeoFSubsystem()
+#     test = NVMeoFSubsystem()
 
-    @CLIReadCommand('dashboard tomer-test2')
-    def test123(_):
-        return 0, test.list("dummygw")
-except:
-    @CLIReadCommand('dashboard tomer-test-exception-caught')
-    def test123(_):
-        return 0, json.dumps({'a':1})
+#     @CLIReadCommand('dashboard tomer-test2')
+#     def test123(_):
+#         return 0, test.list("dummygw")
+# except:
+#     @CLIReadCommand('dashboard tomer-test-exception-caught')
+#     def test123(_):
+#         return 0, json.dumps({'a':1})
 
 @CLIReadCommand('dashboard tomer-test')
 def list_nvmeof_gateways1(_):
