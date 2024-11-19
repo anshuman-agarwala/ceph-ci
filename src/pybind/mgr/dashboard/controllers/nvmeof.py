@@ -30,8 +30,8 @@ else:
     import json
     @CLIReadCommand('dashboard internal-tomer-test')
     def test():
-        print('123!')
-        return 0, json.dumps({'a':2})
+        logger.error('tomer 123')
+        return 0, json.dumps({"gateways": {}}), ''
     
     @APIRouter("/nvmeof/gateway", Scope.NVME_OF)
     @APIDoc("NVMe-oF Gateway Management API", "NVMe-oF Gateway")
