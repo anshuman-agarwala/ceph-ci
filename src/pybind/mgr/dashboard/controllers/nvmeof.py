@@ -56,7 +56,7 @@ else:
     @APIRouter("/nvmeof/subsystem", Scope.NVME_OF)
     @APIDoc("NVMe-oF Subsystem Management API", "NVMe-oF Subsystem")
     class NVMeoFSubsystem(RESTController):
-        @CLIReadCommand('dashboard nvmf subsystem list')
+        @CLIReadCommand('dashboard nvmf_subsystem_list')
         @EndpointDoc("List all NVMeoF subsystems")
         @map_collection(model.Subsystem, pick="subsystems")
         @handle_nvmeof_error
