@@ -659,18 +659,24 @@ class interval_set {
   }
 
   void subtract(const interval_set &a) {
-    if (empty() || a.empty()) return;
-
-    auto start = range_start();
-    auto end = range_end();
-
-    /* Only loop over the overlapping range of a */
-    for (auto ap = a.find_inc(start);
-         ap != a.m.end() && (ap->first + ap->second) <= end;
-        ++ap) {
-      erase(ap->first, ap->second);
+    for (const auto& [start, len] : a.m) {
+      erase(start, len);
     }
   }
+
+  // void subtract(const interval_set &a) {
+  //   if (empty() || a.empty()) return;
+  //
+  //   auto start = range_start();
+  //   auto end = range_end();
+  //
+  //   /* Only loop over the overlapping range of a */
+  //   for (auto ap = a.find_inc(start);
+  //        ap != a.m.end() && (ap->first + ap->second) <= end;
+  //       ++ap) {
+  //     erase(ap->first, ap->second);
+  //       }
+  // }
 
   void insert(const interval_set &a) {
     for (const auto& [start, len] : a.m) {
