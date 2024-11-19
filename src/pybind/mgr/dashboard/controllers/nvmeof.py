@@ -21,12 +21,16 @@ NVME_SCHEMA = {
     "message": (str, "Descriptions")
 }
 
+logger.error('XXXXXXXX')
+
 try:
+    
     from ..services.nvmeof_client import NVMeoFClient, empty_response, \
         handle_nvmeof_error, map_collection, map_model
 except ImportError as e:
     logger.error("Failed to import NVMeoFClient and related components: %s", e)
 else:
+    logger.error('YYYYYYYYYYY')
     import json
     @CLIReadCommand('dashboard internal-tomer-test')
     def test():
