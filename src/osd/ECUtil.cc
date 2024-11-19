@@ -712,7 +712,7 @@ namespace ECUtil {
 
   void shard_extent_set_t::subtract(const shard_extent_set_t &other) {
     for (auto && [shard, eset] : other) {
-      if (!contains(shard))
+      if (!contains(shard) || !other.contains(shard))
         continue;
 
       at(shard).subtract(other.at(shard));
