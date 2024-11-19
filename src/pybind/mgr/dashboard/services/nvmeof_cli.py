@@ -34,9 +34,10 @@ try:
                     NVMeoFClient.pb2.list_subsystems_req()
                 )), ''
 except Exception as e:
+    s12 = str(e)
     @CLIReadCommand('dashboard tomer-test-exception-caught')
     def test123(_):
-        return 0, json.dumps({'a':str(e)})
+        return 0, json.dumps({'a':str(s12)})
 
 @CLIReadCommand('dashboard tomer-test')
 def list_nvmeof_gateways1(_):
