@@ -124,17 +124,24 @@ void NVMeofGwMon::tick()
     }
   }
   BeaconSubsystems empty_subsystems;
-  for (auto &[group_key, gws_states]: pending_map.created_gws) {
-    BeaconSubsystems *subsystems = &empty_subsystems;
-    for (auto& gw_state : gws_states) { // loop for GWs inside nqn group
-      subsystems = &gw_state.second.subsystems;
-      if (subsystems->size()) { // Set subsystems to the valid value
-        break;
-      }
-    }
-    pending_map.track_deleting_gws(group_key, *subsystems, propose);
-    _propose_pending |= propose;
-  }
+   for (auto &[group_key, gws_states]: pending_map.created_gws) {
+     BeaconSubsystems *subsystems = &empty_subsystems;
+     bool subsystem_valid = false;
+     for (auto& gw_state : gws_states) { // loop for GWs inside nqn group
+       subsystems = &gw_state.second.subsystems;
+       if (gw_state.second.availability != gw_availability_t::GW_DELETED) {
+         // Ignore subsystems of gws in DELETING state - they ere erased
+         subsystem_valid = true;
+         if (subsystems->size()) { // Set subsystems to the valid value
+            break;
+         }
+       }
+     }
+     if (subsystem_valid) {
+       pending_map.track_deleting_gws(group_key, *subsystems, propose);
+       _propose_pending |= propose;
+     }
+   }
   // Periodic: take care of not handled ANA groups
   pending_map.handle_abandoned_ana_groups(propose);
   _propose_pending |= propose;
