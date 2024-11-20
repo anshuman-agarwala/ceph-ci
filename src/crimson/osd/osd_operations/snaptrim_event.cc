@@ -388,6 +388,9 @@ SnapTrimObjSubEvent::remove_or_update(
 SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t
 SnapTrimObjSubEvent::start()
 {
+  obc_orderer = pg->obc_loader.get_obc_orderer(
+    coid.get_head());
+
   ceph_assert(pg->is_active_clean());
 
   auto exit_handle = seastar::defer([this] {
@@ -396,7 +399,7 @@ SnapTrimObjSubEvent::start()
   });
 
   co_await enter_stage<interruptor>(
-    client_pp().check_already_complete_get_obc);
+    obc_orderer->obc_pp().process);
 
   logger().debug("{}: getting obc for {}", *this, coid);
 
@@ -411,43 +414,41 @@ SnapTrimObjSubEvent::start()
     crimson::ct_error::assert_all{"unexpected error in SnapTrimObjSubEvent"}
   );
 
-  co_await process_and_submit(
-    obc_manager.get_head_obc(), obc_manager.get_obc()
-  ).handle_error_interruptible(
-    remove_or_update_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error in SnapTrimObjSubEvent"}
-  );
+  logger().debug("{}: got obc={}", *this, obc_manager.get_obc()->get_oid());
 
-  logger().debug("{}: completed", *this);
-  co_await interruptor::make_interruptible(handle.complete());
-}
+  auto submitted = interruptor::now();
+  auto all_completed = interruptor::now();
+  {
+    // as with PG::submit_executer, we need to build the pg log entries
+    // and submit the transaction atomically
+    co_await interruptor::make_interruptible(pg->submit_lock.lock());
+    auto unlocker = seastar::defer([this] {
+      pg->submit_lock.unlock();
+    });
 
-ObjectContextLoader::load_obc_iertr::future<>
-SnapTrimObjSubEvent::process_and_submit(ObjectContextRef head_obc,
-                                        ObjectContextRef clone_obc) {
-  logger().debug("{}: got clone_obc={}", *this, clone_obc->get_oid());
+    logger().debug("{}: calling remove_or_update obc={}",
+		   *this, obc_manager.get_obc()->get_oid());
 
-  co_await enter_stage<interruptor>(client_pp().process);
+    auto txn = co_await remove_or_update(
+      obc_manager.get_obc(), obc_manager.get_head_obc());
 
-  logger().debug("{}: processing clone_obc={}", *this, clone_obc->get_oid());
-
-  auto txn = co_await remove_or_update(clone_obc, head_obc);
-
-  auto [submitted, all_completed] = co_await pg->submit_transaction(
-	  std::move(clone_obc),
-	  nullptr,
-	  std::move(txn),
-	  std::move(osd_op_p),
-	  std::move(log_entries)
-  );
+    std::tie(submitted, all_completed) = co_await pg->submit_transaction(
+      ObjectContextRef(obc_manager.get_obc()),
+      nullptr,
+      std::move(txn),
+      std::move(osd_op_p),
+      std::move(log_entries)
+    );
+  }
 
   co_await std::move(submitted);
 
-  co_await enter_stage<interruptor>(client_pp().wait_repop);
+  co_await enter_stage<interruptor>(obc_orderer->obc_pp().wait_repop);
 
   co_await std::move(all_completed);
 
-  co_return;
+  logger().debug("{}: completed", *this);
+  co_await interruptor::make_interruptible(handle.complete());
 }
 
 void SnapTrimObjSubEvent::print(std::ostream &lhs) const

@@ -663,6 +663,7 @@ private:
     const OpInfo &op_info,
     std::vector<OSDOp>& ops);
 
+  seastar::shared_mutex submit_lock;
   using submit_executer_ret = std::tuple<
     interruptible_future<>,
     interruptible_future<>>;
@@ -675,6 +676,8 @@ private:
   struct do_osd_ops_params_t;
 
   interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
+
+public:
   interruptible_future<
     std::tuple<interruptible_future<>, interruptible_future<>>>
   submit_transaction(
@@ -683,6 +686,8 @@ private:
     ceph::os::Transaction&& txn,
     osd_op_params_t&& oop,
     std::vector<pg_log_entry_t>&& log_entries);
+
+private:
   interruptible_future<> repair_object(
     const hobject_t& oid,
     eversion_t& v);
@@ -891,10 +896,6 @@ private:
     const hobject_t &obj,
     const eversion_t &v,
     const std::vector<pg_shard_t> &peers);
-  void mutate_object(
-    ObjectContextRef& obc,
-    ceph::os::Transaction& txn,
-    osd_op_params_t& osd_op_p);
   bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;
   void context_registry_on_change();

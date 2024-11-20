@@ -32,17 +32,12 @@ struct LttngBackend
     ClientRequest::PGPipeline::WaitForActive::BlockingEvent::Backend,
     PGActivationBlocker::BlockingEvent::Backend,
     scrub::PGScrubber::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::RecoverMissing::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::RecoverMissing::
-      BlockingEvent::ExitBarrierEvent::Backend,
-    ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::LockOBC::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::LockOBC::BlockingEvent::ExitBarrierEvent::Backend,
-    ClientRequest::PGPipeline::Process::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::WaitRepop::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent::Backend,
-    ClientRequest::PGPipeline::SendReply::BlockingEvent::Backend,
-    ClientRequest::CompletionEvent::Backend
+    ClientRequest::PGPipeline::WaitPGReady::BlockingEvent::Backend,
+    ClientRequest::CompletionEvent::Backend,
+    CommonOBCPipeline::Process::BlockingEvent::Backend,
+    CommonOBCPipeline::WaitRepop::BlockingEvent::Backend,
+    CommonOBCPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent::Backend,
+    CommonOBCPipeline::SendReply::BlockingEvent::Backend
 {
   void handle(ClientRequest::StartEvent&,
               const Operation&) override {}
@@ -102,51 +97,35 @@ struct LttngBackend
               const scrub::PGScrubber& blocker) override {
   }
 
-  void handle(ClientRequest::PGPipeline::RecoverMissing::BlockingEvent& ev,
+  void handle(ClientRequest::PGPipeline::WaitPGReady::BlockingEvent& ev,
               const Operation& op,
-              const ClientRequest::PGPipeline::RecoverMissing& blocker) override {
+              const ClientRequest::PGPipeline::WaitPGReady& blocker) override {
   }
 
-  void handle(ClientRequest::PGPipeline::RecoverMissing::BlockingEvent::ExitBarrierEvent& ev,
-	      const Operation& op) override {
-  }
 
-  void handle(ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent& ev,
+  void handle(CommonOBCPipeline::Process::BlockingEvent& ev,
               const Operation& op,
-              const ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc& blocker) override {
+              const CommonOBCPipeline::Process& blocker) override {
   }
 
-
-  void handle(ClientRequest::PGPipeline::LockOBC::BlockingEvent& ev,
+  void handle(CommonOBCPipeline::WaitRepop::BlockingEvent& ev,
               const Operation& op,
-              const ClientRequest::PGPipeline::LockOBC& blocker) override {
+              const CommonOBCPipeline::WaitRepop& blocker) override {
   }
 
-  void handle(ClientRequest::PGPipeline::LockOBC::BlockingEvent::ExitBarrierEvent& ev,
+  void handle(CommonOBCPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent& ev,
               const Operation& op) override {
   }
 
-  void handle(ClientRequest::PGPipeline::Process::BlockingEvent& ev,
+  void handle(CommonOBCPipeline::SendReply::BlockingEvent& ev,
               const Operation& op,
-              const ClientRequest::PGPipeline::Process& blocker) override {
+              const CommonOBCPipeline::SendReply& blocker) override {
   }
 
-  void handle(ClientRequest::PGPipeline::WaitRepop::BlockingEvent& ev,
-              const Operation& op,
-              const ClientRequest::PGPipeline::WaitRepop& blocker) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent& ev,
-              const Operation& op) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::SendReply::BlockingEvent& ev,
-              const Operation& op,
-              const ClientRequest::PGPipeline::SendReply& blocker) override {
-  }
 
   void handle(ClientRequest::CompletionEvent&,
               const Operation&) override {}
+
 };
 
 struct HistoricBackend
@@ -162,17 +141,12 @@ struct HistoricBackend
     ClientRequest::PGPipeline::WaitForActive::BlockingEvent::Backend,
     PGActivationBlocker::BlockingEvent::Backend,
     scrub::PGScrubber::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::RecoverMissing::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::RecoverMissing::
-      BlockingEvent::ExitBarrierEvent::Backend,
-    ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::LockOBC::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::LockOBC::BlockingEvent::ExitBarrierEvent::Backend,
-    ClientRequest::PGPipeline::Process::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::WaitRepop::BlockingEvent::Backend,
-    ClientRequest::PGPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent::Backend,
-    ClientRequest::PGPipeline::SendReply::BlockingEvent::Backend,
-    ClientRequest::CompletionEvent::Backend
+    ClientRequest::PGPipeline::WaitPGReady::BlockingEvent::Backend,
+    ClientRequest::CompletionEvent::Backend,
+    CommonOBCPipeline::Process::BlockingEvent::Backend,
+    CommonOBCPipeline::WaitRepop::BlockingEvent::Backend,
+    CommonOBCPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent::Backend,
+    CommonOBCPipeline::SendReply::BlockingEvent::Backend
 {
   void handle(ClientRequest::StartEvent&,
               const Operation&) override {}
@@ -232,46 +206,9 @@ struct HistoricBackend
               const scrub::PGScrubber& blocker) override {
   }
 
-  void handle(ClientRequest::PGPipeline::RecoverMissing::BlockingEvent& ev,
+  void handle(ClientRequest::PGPipeline::WaitPGReady::BlockingEvent& ev,
               const Operation& op,
-              const ClientRequest::PGPipeline::RecoverMissing& blocker) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::RecoverMissing::BlockingEvent::ExitBarrierEvent& ev,
-              const Operation& op) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc::BlockingEvent& ev,
-              const Operation& op,
-              const ClientRequest::PGPipeline::CheckAlreadyCompleteGetObc& blocker) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::LockOBC::BlockingEvent& ev,
-              const Operation& op,
-              const ClientRequest::PGPipeline::LockOBC& blocker) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::LockOBC::BlockingEvent::ExitBarrierEvent& ev,
-              const Operation& op) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::Process::BlockingEvent& ev,
-              const Operation& op,
-              const ClientRequest::PGPipeline::Process& blocker) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::WaitRepop::BlockingEvent& ev,
-              const Operation& op,
-              const ClientRequest::PGPipeline::WaitRepop& blocker) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent& ev,
-              const Operation& op) override {
-  }
-
-  void handle(ClientRequest::PGPipeline::SendReply::BlockingEvent& ev,
-              const Operation& op,
-              const ClientRequest::PGPipeline::SendReply& blocker) override {
+              const ClientRequest::PGPipeline::WaitPGReady& blocker) override {
   }
 
   static const ClientRequest& to_client_request(const Operation& op) {
@@ -280,6 +217,25 @@ struct HistoricBackend
 #else
     return dynamic_cast<const ClientRequest&>(op);
 #endif
+  }
+
+  void handle(CommonOBCPipeline::Process::BlockingEvent& ev,
+              const Operation& op,
+              const CommonOBCPipeline::Process& blocker) override {
+  }
+
+  void handle(CommonOBCPipeline::WaitRepop::BlockingEvent& ev,
+              const Operation& op,
+              const CommonOBCPipeline::WaitRepop& blocker) override {
+  }
+
+  void handle(CommonOBCPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent& ev,
+              const Operation& op) override {
+  }
+
+  void handle(CommonOBCPipeline::SendReply::BlockingEvent& ev,
+              const Operation& op,
+              const CommonOBCPipeline::SendReply& blocker) override {
   }
 
   void handle(ClientRequest::CompletionEvent&, const Operation& op) override {
