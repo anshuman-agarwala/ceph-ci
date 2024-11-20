@@ -913,7 +913,8 @@ void ECCommon::RMWPipeline::finish_rmw(Op &op)
   if (get_osdmap()->require_osd_release >= ceph_release_t::kraken && extent_cache.idle()) {
     if (op.version > get_parent()->get_log().get_can_rollback_to()) {
       int transactions_since_last_idle = extent_cache.get_and_reset_counter();
-      dout(20) << __func__ << " version=" << op.version << " ec_counter=" << transactions_since_last_idle << dendl;
+      //FIXME...
+      dout(0) << __func__ << " ALEX: version=" << op.version << " ec_counter=" << transactions_since_last_idle << dendl;
       // submit a dummy, transaction-empty op to kick the rollforward
       auto tid = get_parent()->get_tid();
       auto nop = std::make_shared<ECDummyOp>();
