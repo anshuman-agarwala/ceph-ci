@@ -174,27 +174,189 @@ public:
   }
 };
 
-class AuxConnections {
+
+class MonAuxSession
+  {
 public:
-  AuxConnections(std::shared_ptr<MonConnection> conn_)
-    : conn(std::move(conn_))
-      
-  { sub.want("quorum_change", 0, 0);}
-
-  std::shared_ptr<MonConnection> get_con() {
-    return conn;
+  // Constructor that accepts MonConnection
+  explicit MonAuxSession(std::shared_ptr<MonConnection> mon_session_)
+    : mon_session(std::move(mon_session_)) {
+    sub.want("quorum_change", 0, 0);
   }
 
-  void start_conn(epoch_t epoch, const EntityName& entity_name) {
-    sub.got("quorum", 0);
-    conn->start(epoch, entity_name);
+  MonAuxSession() = default;
+  MonAuxSession(CephContext* cct_) : cct(cct_) {}
+  MonAuxSession(const MonAuxSession&) = default;
+  MonAuxSession(MonAuxSession&&) noexcept = default; // Move constructor
+  MonAuxSession& operator=(const MonAuxSession&) = default;
+  MonAuxSession& operator=(MonAuxSession&&) noexcept = default;
+  void set_cct(CephContext* cct_) {
+    cct = cct_;
+  }
+  // Accessor for the MonConnection
+  std::shared_ptr<MonConnection> get_mon_session() const {
+    return mon_session;
+  }
+  void auth_aux_session();
+  ConnectionRef get_con() const {
+    if (mon_session) {
+      return mon_session->get_con();
+    }
+    return nullptr;
   }
 
-  void send_subscribe();
+  // Cleanup the connection
+  void cleanup() { mon_session.reset(); }
+  void set_con(std::shared_ptr<MonConnection> mon_session_) {
+    mon_session = std::move(mon_session_);
+  }
+  void set_pending(bool p) { pending = p; }
+  bool is_pending() const { return pending; }
+
+  void erase() { erased = true; }
+  bool should_erase() const { return erased; }
+
+  // Delegate handle_auth to MonConnection
+  int handle_auth(MAuthReply* m, const EntityName& entity_name, uint32_t want_keys, RotatingKeyRing* keyring) {
+    if (mon_session) {
+      return mon_session->handle_auth(m, entity_name, want_keys, keyring);
+    }
+    return -EINVAL;
+  }
+
+  // Start the session
+  void start(epoch_t epoch, const EntityName& entity_name, CephContext* cct);
+  MonSub& get_sub() { return sub; }
+  void got(const std::string type, version_t have = 0) {
+    sub.got(type, have);
+  }
 
 private:
-  std::shared_ptr<MonConnection> conn;
+  CephContext* cct = nullptr;
+  std::shared_ptr<MonConnection> mon_session; // Renamed to `mon_session`
   MonSub sub;
+  bool pending = false;
+  bool erased = false;
+};
+
+class MonAuxSessions {
+public:
+  MonAuxSessions() = default;
+  explicit MonAuxSessions(CephContext* cct_) : cct(cct_) {}
+  ~MonAuxSessions() = default;
+
+  // Add a new session
+  void add_session(const entity_addrvec_t& peer, std::unique_ptr<MonAuxSession> session) {
+    std::lock_guard l{lock};
+    sessions[peer] = std::move(session);
+  }
+
+  // Erase a session by peer
+  void reset_session(const entity_addrvec_t& peer) {
+    std::lock_guard l{lock};
+    sessions.erase(peer);
+  }
+
+  void reset_session(std::map<entity_addrvec_t, std::unique_ptr<MonAuxSession>>::iterator it) {
+    std::lock_guard l{lock};
+    sessions.erase(it);
+  }
+
+  // Get all active connections
+  std::map<entity_addrvec_t, std::shared_ptr<MonConnection>> get_sessions() const {
+    std::lock_guard l{lock};
+    std::map<entity_addrvec_t, std::shared_ptr<MonConnection>> result;
+
+    for (const auto& [addr, aux] : sessions) {
+      if (aux && aux->get_mon_session() && !aux->should_erase() && addr != active_session) {
+        result.emplace(addr, aux->get_mon_session());
+      }
+    }
+    return result;
+  }
+
+  // Get a specific connection by peer
+  std::shared_ptr<MonConnection> get_session(const entity_addrvec_t& peer) const {
+    std::lock_guard l{lock};
+    auto it = sessions.find(peer);
+    if (it == sessions.end() || !it->second) {
+      return nullptr;
+    }
+    return it->second->get_mon_session();
+  }
+
+  // Set the active session
+  void set_active_session(const entity_addrvec_t& peer);
+
+  // Get the active session
+  std::shared_ptr<MonConnection> get_active() const;
+
+  // Clear the active session
+  void clear_active_session();
+  void erase_all();
+
+  // Clear all sessions
+  void clear() {
+    std::lock_guard l{lock};
+    sessions.clear();
+  }
+
+  // Get the number of sessions
+  size_t size() const {
+    std::lock_guard l{lock};
+    return sessions.size();
+  }
+
+  // Check if all sessions are marked for erasure
+  bool empty() const;
+
+  // Cleanup all sessions
+  void cleanup() {
+    std::lock_guard l{lock};
+    for (auto& [_, session] : sessions) {
+      session->cleanup();
+    }
+  }
+
+  // Count a specific peer
+  size_t count(const entity_addrvec_t& key) const {
+    std::lock_guard l{lock};
+    return sessions.count(key);
+  }
+
+  // Mark all sessions for erasure
+  void reset_all_sessions() {
+    std::lock_guard l{lock};
+    for (auto& [_, session] : sessions) {
+      session->erase();
+    }
+  }
+  void got(const std::string type, const entity_addrvec_t mon_addr, version_t have = 0) {
+    std::lock_guard l{lock};
+    if (auto it = sessions.find(mon_addr); it != sessions.end()) {
+      it->second->got(type, have);
+    }
+  }
+
+  // Access a specific session by peer
+  MonAuxSession& operator[](const entity_addrvec_t& key) {
+    return *sessions[key];
+  }
+
+  // Iterator support
+  auto begin() { return sessions.begin(); }
+  auto end() { return sessions.end(); }
+  auto begin() const { return sessions.begin(); }
+  auto end() const { return sessions.end(); }
+  entity_addrvec_t get_active_peer() const {
+    std::lock_guard l{lock};
+    return active_session.value_or(entity_addrvec_t{});
+  }
+private:
+  CephContext* cct = nullptr;
+  mutable ceph::mutex lock = ceph::make_mutex("MonAuxSessions::lock");
+  std::map<entity_addrvec_t, std::unique_ptr<MonAuxSession>> sessions;
+  std::optional<entity_addrvec_t> active_session;
 };
 
 struct MonClientPinger : public Dispatcher,
@@ -340,7 +502,8 @@ public:
   using CommandSig = void(boost::system::error_code, std::string,
 			  ceph::buffer::list);
   using CommandCompletion = ceph::async::Completion<CommandSig>;
-
+  using AuxSessionsIter = std::map<entity_addrvec_t,
+          std::unique_ptr<MonAuxSession>>::iterator;
   MonMap monmap;
   
   std::map<std::string,std::string> config_mgr;
@@ -349,9 +512,9 @@ private:
   MonClientQuorum quorum;
   Messenger *messenger;
 
-  std::unique_ptr<MonConnection> active_con;
-  std::map<entity_addrvec_t, MonConnection> pending_cons;
-  std::map<entity_addrvec_t, AuxConnections> aux_conns;
+  //std::unique_ptr<MonConnection> active_con;
+  //std::map<entity_addrvec_t, MonConnection> pending_cons;
+  MonAuxSessions aux_sessions;
   std::set<unsigned> tried;
 
   EntityName entity_name;
@@ -423,21 +586,22 @@ private:
   void _start_hunting();
   void _finish_hunting(int auth_err);
   void _finish_auth(int auth_err);
+  void _finish_auth_aux(int auth_err, MonAuxSession *mon_session);
   void _reopen_session(int rank = -1);
   void _add_conn(unsigned rank);
   void _add_conns();
   void _un_backoff();
   void _send_mon_message(MessageRef m);
 
-  std::map<entity_addrvec_t, MonConnection>::iterator _find_pending_con(
-    const ConnectionRef& con) {
-    for (auto i = pending_cons.begin(); i != pending_cons.end(); ++i) {
-      if (i->second.get_con() == con) {
-	return i;
-      }
-    }
-    return pending_cons.end();
+  AuxSessionsIter _find_pending_con(const ConnectionRef& con)
+  {
+    return std::find_if(aux_sessions.begin(), aux_sessions.end(),
+                [&con](const auto& entry) {
+                    return entry.second && entry.second->get_con() &&
+                          entry.second->get_con().get() == con.get();
+                });
   }
+
 
 public:
   // AuthClient
@@ -475,19 +639,19 @@ public:
     uint32_t auth_method,
     const ceph::buffer::list& bl,
     ceph::buffer::list *reply) override;
-
   void set_entity_name(EntityName name) { entity_name = name; }
   void set_handle_authentication_dispatcher(Dispatcher *d) {
     handle_authentication_dispatcher = d;
   }
   int _check_auth_tickets();
+  int _check_auth_tickets_aux(MonAuxSession *mon_session);
   int _check_auth_rotating();
   int wait_auth_rotating(double timeout);
 
   int authenticate(double timeout=0.0);
   bool is_authenticated() const {return authenticated;}
 
-  bool is_connected() const { return active_con != nullptr; }
+  bool is_connected() const { return aux_sessions.get_active() != nullptr; }
 
   /**
    * Try to flush as many log messages as we can in a single

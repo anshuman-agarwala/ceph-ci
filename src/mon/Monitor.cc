@@ -2398,15 +2398,16 @@ void Monitor::collect_metadata(Metadata *m)
 void Monitor::check_quorum_subs()
 {
   dout(10) << __func__ << dendl;
-  const string quorum_type = "quorum_change";
-  with_session_map([this, &quorum_type]
-    (const MonSessionMap& session_map) {
+  
+  with_session_map([this]
+    (MonSessionMap& session_map) {
       for (auto sub : session_map.subs) {
         dout(10) << __func__ << " debugging have sub " << sub.first << dendl;
         for (auto s : *sub.second) {
           dout(10) << __func__ << "    debugging have session " << s->session->name << dendl;
         }
       }
+      const string quorum_type = "quorum_change";
       auto subs = session_map.subs.find(quorum_type);
       if (subs == session_map.subs.end())
         return;
@@ -2414,6 +2415,7 @@ void Monitor::check_quorum_subs()
       for (auto sub : *subs->second) {
         dout(10) << __func__ << " sending quorum change to " << sub->session->name << dendl;
         send_quorum_changed(sub);
+        dout(10) << __func__ << " done sending quorum change to " << sub->next << dendl;
       }
     });
 }
@@ -4583,6 +4585,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 {
   op->mark_event("mon:dispatch_op");
 
+  dout(20) << __func__ << " nitzan " << op << " " << *op->get_req() << " from " << op->get_req()->get_source().num() << dendl;
   MonSession *s = op->get_session();
   ceph_assert(s);
   if (s->closed) {
@@ -5308,7 +5311,7 @@ void Monitor::handle_timecheck(MonOpRequestRef op)
 void Monitor::handle_subscribe(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonSubscribe>();
-  dout(10) << "handle_subscribe " << *m << dendl;
+  dout(10) << __func__ << " " << *m << dendl;
   
   bool reply = false;
 
@@ -5322,7 +5325,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        ++p) {
-    dout(10) << "subscribing to " << p->first << dendl;
+    dout(10) << __func__ << " subscribing to " << p->first << " op conn: " << op->get_req()->get_connection() << dendl;
     if (p->first == "monmap" || p->first == "config" || p->first == "quorum_change") {
       // these require no caps
     } else if (!s->is_capable("mon", MON_CAP_R)) {
@@ -5342,8 +5345,10 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 	   it != s->sub_map.end(); ) {
 	if (it->first != p->first && logmon()->sub_name_to_id(it->first) >= 0) {
 	  std::lock_guard l(session_map_lock);
+    ldout(cct, 10) << __func__ << " removing conflicting subscription to " << it->first << dendl;
 	  session_map.remove_sub((it++)->second);
 	} else {
+    ldout(cct, 10) << __func__ << " keeping subscription to " << it->first << dendl;
 	  ++it;
 	}
       }
@@ -5500,14 +5505,15 @@ void Monitor::send_latest_monmap(Connection *con)
 void Monitor::send_quorum_changed(Subscription *sub)
 {
   auto conn = sub->session->con.get();
+  auto addr = monmap->get_addrs(name);
   if (!conn) {
     dout(10) << __func__ << " no connection for sub " << sub << dendl;
     return;
   }
-  dout(20) << __func__ << " sending quorum: " << get_quorum() << " to " << sub->session->name <<  dendl;
-  if (sub->next <= get_epoch() && get_quorum().size()) {
-    conn->send_message(new MMonQuorum(conn->get_peer_addrs(), get_epoch(), get_quorum()));
 
+  if (sub->next <= get_epoch() && get_quorum().size()) {
+    dout(20) << __func__ << " sending quorum: " << get_quorum() << " to " << sub->session->name << " conn:" << conn->get_peer_addrs() << " next:" << sub->next << " epoch:" << get_epoch() << dendl;
+    conn->send_message(new MMonQuorum(addr, get_epoch(), get_quorum()));
     if (sub->onetime) {
       with_session_map([sub](MonSessionMap& session_map) {
         session_map.remove_sub(sub);

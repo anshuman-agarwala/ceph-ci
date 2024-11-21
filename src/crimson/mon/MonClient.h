@@ -135,7 +135,7 @@ private:
 			  ceph::bufferlist *reply) final;
 
   crimson::common::CephContext cct; // for auth_registry
-  AuthRegistry auth_registry;
+  //AuthRegistry auth_registry;
   crimson::common::AuthHandler& auth_handler;
 
   // AuthClient methods
