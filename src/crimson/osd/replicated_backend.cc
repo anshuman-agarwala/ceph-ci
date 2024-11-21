@@ -53,8 +53,6 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
   const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
     pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
-  bufferlist encoded_txn;
-  encode(txn, encoded_txn);
 
   for (auto &le : log_entries) {
     le.mark_unrollbackable();
@@ -72,15 +70,8 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
 	map_epoch,
 	min_epoch,
 	tid,
-	osd_op_p.at_version);
-      if (pg.should_send_op(pg_shard, hoid)) {
-	m->set_data(encoded_txn);
-      } else {
-	ceph::os::Transaction t;
-	bufferlist bl;
-	encode(t, bl);
-	m->set_data(bl);
-      }
+	osd_op_p.at_version,
+        txn);
       pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
       encode(log_entries, m->logbl);
       m->pg_trim_to = osd_op_p.pg_trim_to;
