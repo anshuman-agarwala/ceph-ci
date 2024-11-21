@@ -939,6 +939,8 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef &op)
 
       tid_to_op_map[tid] = std::move(nop);
     }
+
+    tid_to_op_map.erase(op->tid);
   }
 }
 
