@@ -284,7 +284,7 @@ class TestISCSIService:
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
-    @patch("cephadm.services.iscsi.IscsiService.get_trusted_ips")
+    @patch("cephadm.services.iscsi.get_trusted_ips")
     def test_iscsi_config(self, _get_trusted_ips, _get_name, _run_cephadm, cephadm_module: CephadmOrchestrator):
 
         iscsi_daemon_id = 'testpool.test.qwert'
@@ -2017,6 +2017,7 @@ spec:
                             "deploy_arguments": [],
                             "params": {
                                 'tcp_ports': [4200, 9094],
+                                "reconfig": True,
                             },
                             "meta": {
                                 'service_name': 'alertmanager',
@@ -2031,7 +2032,7 @@ spec:
                             "config_blobs": {},
                         }),
                         error_ok=True,
-                        use_current_daemon_image=False,
+                        use_current_daemon_image=True,
                     )
 
 
