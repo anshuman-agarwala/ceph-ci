@@ -2,13 +2,16 @@ import ipaddress
 import logging
 import random
 import string
-from typing import List, Dict, Any, Tuple, cast, Optional
+from typing import List, Dict, Any, Tuple, cast, Optional, TYPE_CHECKING
 
 from ceph.deployment.service_spec import ServiceSpec, IngressSpec
 from mgr_util import build_url
 from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +77,18 @@ class IngressService(CephService):
         daemon_spec.final_config, daemon_spec.deps = self.haproxy_generate_config(daemon_spec)
 
         return daemon_spec
+
+    @staticmethod
+    def get_haproxy_dependencies(mgr: "CephadmOrchestrator", spec: Optional[ServiceSpec]) -> List[str]:
+        # because cephadm creates new daemon instances whenever
+        # port or ip changes, identifying daemons by name is
+        # sufficient to detect changes.
+        if not spec:
+            return []
+        ingress_spec = cast(IngressSpec, spec)
+        assert ingress_spec.backend_service
+        daemons = mgr.cache.get_daemons_by_service(ingress_spec.backend_service)
+        return [d.name() for d in daemons]
 
     def haproxy_generate_config(
             self,
@@ -220,6 +235,16 @@ class IngressService(CephService):
 
         return daemon_spec
 
+    @staticmethod
+    def get_keepalived_dependencies(mgr: "CephadmOrchestrator", spec: Optional[ServiceSpec]) -> List[str]:
+        # because cephadm creates new daemon instances whenever
+        # port or ip changes, identifying daemons by name is
+        # sufficient to detect changes.
+        if not spec:
+            return []
+        daemons = mgr.cache.get_daemons_by_service(spec.service_name())
+        return sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
+
     def keepalived_generate_config(
             self,
             daemon_spec: CephadmDaemonDeploySpec,
@@ -251,8 +276,6 @@ class IngressService(CephService):
         if not daemons and not spec.keepalive_only:
             raise OrchestratorError(
                 f'Failed to generate keepalived.conf: No daemons deployed for {spec.service_name()}')
-
-        deps = sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
 
         host = daemon_spec.host
         hosts = sorted(list(set([host] + [str(d.hostname) for d in daemons])))
@@ -394,4 +417,4 @@ class IngressService(CephService):
             }
         }
 
-        return config_file, deps
+        return config_file, self.get_keepalived_dependencies(self.mgr, spec)

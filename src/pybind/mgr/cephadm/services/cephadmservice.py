@@ -1293,6 +1293,10 @@ class CephExporterService(CephService):
     TYPE = 'ceph-exporter'
     DEFAULT_SERVICE_PORT = 9926
 
+    @staticmethod
+    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+        return sorted(utils.get_daemon_names(mgr, ['mgmt-gateway']))
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         spec = cast(CephExporterSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
@@ -1370,6 +1374,18 @@ class CephfsMirrorService(CephService):
 
 class CephadmAgent(CephService):
     TYPE = 'agent'
+
+    @staticmethod
+    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+        agent = mgr.http_server.agent
+        return sorted(
+            [
+                str(mgr.get_mgr_ip()),
+                str(agent.server_port),
+                mgr.cert_mgr.get_root_ca(),
+                str(mgr.get_module_option("device_enhanced_scan")),
+            ]
+        )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
