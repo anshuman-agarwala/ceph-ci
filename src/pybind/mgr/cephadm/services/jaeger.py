@@ -1,6 +1,6 @@
-from typing import List, cast, TYPE_CHECKING
+from typing import List, cast, Optional, TYPE_CHECKING
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
-from ceph.deployment.service_spec import TracingSpec
+from ceph.deployment.service_spec import TracingSpec, ServiceSpec
 from mgr_util import build_url
 
 if TYPE_CHECKING:
@@ -21,7 +21,9 @@ class JaegerAgentService(CephadmService):
     DEFAULT_SERVICE_PORT = 6799
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
         deps = []  # type: List[str]
         for dd in mgr.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
             # scrape jaeger-collector nodes
@@ -29,7 +31,7 @@ class JaegerAgentService(CephadmService):
             port = dd.ports[0] if dd.ports else JaegerCollectorService.DEFAULT_SERVICE_PORT
             url = build_url(host=dd.hostname, port=port).lstrip('/')
             deps.append(url)
-        return deps
+        return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -41,7 +43,7 @@ class JaegerAgentService(CephadmService):
             url = build_url(host=dd.hostname, port=port).lstrip('/')
             collectors.append(url)
         daemon_spec.final_config = {'collector_nodes': ",".join(collectors)}
-        daemon_spec.deps = sorted(self.get_dependencies(self.mgr))
+        daemon_spec.deps = self.get_dependencies(self.mgr)
         return daemon_spec
 
 

@@ -38,7 +38,9 @@ class IscsiService(CephService):
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator", spec: Optional[ServiceSpec]) -> List[str]:
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
         if spec:
             iscsi_spec = cast(IscsiServiceSpec, spec)
             return [get_trusted_ips(mgr, iscsi_spec)]

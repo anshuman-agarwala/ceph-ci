@@ -41,6 +41,7 @@ from ceph.deployment.service_spec import \
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.services_map import ServiceMap
 from cephadm.http_server import CephadmHttpServer
 from cephadm.agent import CephadmAgentHelpers
 
@@ -3019,43 +3020,8 @@ Then run the following:
                           spec: Optional[ServiceSpec],
                           daemon_type: str,
                           daemon_id: str) -> List[str]:
-
-        def get_daemon_names(daemons: List[str]) -> List[str]:
-            daemon_names = []
-            for daemon_type in daemons:
-                for dd in self.cache.get_daemons_by_type(daemon_type):
-                    daemon_names.append(dd.name())
-            return daemon_names
-
-        deps = []
-        if daemon_type == 'haproxy':
-            deps = IngressService.get_haproxy_dependencies(self, spec)
-        elif daemon_type == 'keepalived':
-            deps = IngressService.get_keepalived_dependencies(self, spec)
-        elif daemon_type == 'agent':
-            deps = CephadmAgent.get_dependencies(self)
-        elif daemon_type == 'node-proxy':
-            deps = NodeProxy.get_dependencies(self)
-        elif daemon_type == 'iscsi':
-            deps = IscsiService.get_dependencies(self, spec)
-        elif daemon_type == 'prometheus':
-            deps = PrometheusService.get_dependencies(self)
-        elif daemon_type == 'grafana':
-            deps = GrafanaService.get_dependencies(self)
-        elif daemon_type == 'alertmanager':
-            deps = AlertmanagerService.get_dependencies(self)
-        elif daemon_type == 'promtail':
-            deps = get_daemon_names(['loki'])
-        elif daemon_type in ['ceph-exporter', 'node-exporter']:
-            deps = get_daemon_names(['mgmt-gateway'])
-        elif daemon_type == JaegerAgentService.TYPE:
-            deps = JaegerAgentService.get_dependencies(self)
-        elif daemon_type == 'mgmt-gateway':
-            deps = MgmtGatewayService.get_dependencies(self)
-        else:
-            # this daemon type doesn't need deps mgmt
-            pass
-
+        svc_cls = ServiceMap.get(daemon_type, None)
+        deps = svc_cls.get_dependencies(self, spec, daemon_type) if svc_cls else []
         return sorted(deps)
 
     @forall_hosts
