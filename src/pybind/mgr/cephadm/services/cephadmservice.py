@@ -265,6 +265,12 @@ class CephadmService(metaclass=ABCMeta):
     def TYPE(self) -> str:
         pass
 
+    @staticmethod
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        return []
+
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
 
@@ -576,6 +582,7 @@ class CephadmService(metaclass=ABCMeta):
 
 
 class CephService(CephadmService):
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         # Ceph.daemons (mon, mgr, mds, osd, etc)
         cephadm_config = self.get_config_and_keyring(
@@ -1294,8 +1301,13 @@ class CephExporterService(CephService):
     DEFAULT_SERVICE_PORT = 9926
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
-        return sorted(utils.get_daemon_names(mgr, ['mgmt-gateway']))
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+
+        deps = [f'secure_monitoring_stack:{mgr.secure_monitoring_stack}']
+        deps += utils.get_daemon_names(mgr, ['mgmt-gateway'])
+        return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -1326,11 +1338,7 @@ class CephExporterService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
-
-        deps = []
-        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('mgmt-gateway')]
-        deps += [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
-        daemon_spec.deps = deps
+        daemon_spec.deps = self.get_dependencies(self.mgr)
 
         return daemon_spec
 
@@ -1376,7 +1384,9 @@ class CephadmAgent(CephService):
     TYPE = 'agent'
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
         agent = mgr.http_server.agent
         return sorted(
             [

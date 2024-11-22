@@ -33,7 +33,9 @@ class NodeProxy(CephService):
         return daemon_spec
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
         root_cert = ''
         server_port = ''
         try:

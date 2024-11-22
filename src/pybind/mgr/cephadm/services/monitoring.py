@@ -86,7 +86,9 @@ class GrafanaService(CephadmService):
         })
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
 
         deps = []  # type: List[str]
         security_enabled, mgmt_gw_enabled, _ = mgr._get_security_config()
@@ -135,7 +137,6 @@ class GrafanaService(CephadmService):
         assert self.TYPE == daemon_spec.daemon_type
 
         cert, pkey = self.prepare_certificates(daemon_spec)
-        deps = self.get_dependencies(self.mgr)
         security_enabled, mgmt_gw_enabled, oauth2_enabled = self.mgr._get_security_config()
         grafana_ini = self.generate_grafana_ini(daemon_spec, mgmt_gw_enabled, oauth2_enabled)
         grafana_data_sources = self.generate_data_sources(security_enabled, mgmt_gw_enabled, cert, pkey)
@@ -168,7 +169,7 @@ class GrafanaService(CephadmService):
                     dashboard = f.read()
                     config_file['files'][f'/etc/grafana/provisioning/dashboards/{file_name}'] = dashboard
 
-        return config_file, deps
+        return config_file, self.get_dependencies(self.mgr)
 
     def prepare_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
         cert = self.mgr.cert_key_store.get_cert('grafana_cert', host=daemon_spec.host)
@@ -300,27 +301,26 @@ class AlertmanagerService(CephadmService):
         return cert, key
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
         deps = []
         deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
+        deps = deps + utils.get_daemon_names(mgr, ['alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy'])
         security_enabled, mgmt_gw_enabled, _ = mgr._get_security_config()
-        alertmgr_cred_hash = None
         if security_enabled:
             alertmanager_user, alertmanager_password = mgr._get_alertmanager_credentials()
             if alertmanager_user and alertmanager_password:
                 alertmgr_cred_hash = f'{utils.md5_hash(alertmanager_user + alertmanager_password)}'
+                deps.append(alertmgr_cred_hash)
 
-        deps = utils.get_daemon_names(mgr, ['alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy'])
         if not mgmt_gw_enabled:
             deps += utils.get_daemon_names(mgr, ['mgr'])
-        if alertmgr_cred_hash is not None:
-            deps.append(alertmgr_cred_hash)
 
         return sorted(deps)
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        deps: List[str] = []
         default_webhook_urls: List[str] = []
 
         spec = cast(AlertManagerSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
@@ -333,7 +333,6 @@ class AlertmanagerService(CephadmService):
                 user_data['default_webhook_urls'], list):
             default_webhook_urls.extend(user_data['default_webhook_urls'])
 
-        deps = self.get_dependencies(self.mgr)
         security_enabled, mgmt_gw_enabled, oauth2_enabled = self.mgr._get_security_config()
         if mgmt_gw_enabled:
             dashboard_urls = [f'{self.mgr.get_mgmt_gw_internal_endpoint()}/dashboard']
@@ -364,6 +363,7 @@ class AlertmanagerService(CephadmService):
             addr = self.mgr.get_fqdn(dd.hostname)
             peers.append(build_url(host=addr, port=port).lstrip('/'))
 
+        deps = self.get_dependencies(self.mgr)
         if security_enabled:
             alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
             cert, key = self.get_alertmanager_certificates(daemon_spec)
@@ -630,7 +630,9 @@ class PrometheusService(CephadmService):
         return r, self.get_dependencies(self.mgr)
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
         deps = []  # type: List[str]
         port = cast(int, mgr.get_module_option_ex('prometheus', 'server_port', PrometheusService.DEFAULT_MGR_PROMETHEUS_PORT))
         deps.append(str(port))
@@ -663,7 +665,8 @@ class PrometheusService(CephadmService):
         deps += [s for s in ['node-exporter', 'alertmanager'] if mgr.cache.get_daemons_by_service(s)]
         if len(mgr.cache.get_daemons_by_type('ingress')) > 0:
             deps.append('ingress')
-        return deps
+
+        return sorted(deps)
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # TODO: if there are multiple daemons, who is the active one?
@@ -722,8 +725,13 @@ class NodeExporterService(CephadmService):
     DEFAULT_SERVICE_PORT = 9100
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
-        return sorted(utils.get_daemon_names(mgr, ['mgmt-gateway']))
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        deps = []
+        deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
+        deps = deps + utils.get_daemon_names(mgr, ['mgmt-gateway'])
+        return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -773,10 +781,6 @@ class LokiService(CephadmService):
     TYPE = 'loki'
     DEFAULT_SERVICE_PORT = 3100
 
-    @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
-        return []
-
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
@@ -799,7 +803,9 @@ class PromtailService(CephadmService):
     DEFAULT_SERVICE_PORT = 9080
 
     @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
         return sorted(utils.get_daemon_names(mgr, ['loki']))
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:

@@ -20,6 +20,16 @@ class IngressService(CephService):
     TYPE = 'ingress'
     MAX_KEEPALIVED_PASS_LEN = 8
 
+    @staticmethod
+    def get_dependencies(mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        if daemon_type == 'haproxy':
+            return IngressService.get_haproxy_dependencies(mgr, spec)
+        elif daemon_type == 'keepalived':
+            return IngressService.get_keepalived_dependencies(mgr, spec)
+        return []
+
     def primary_daemon_type(self, spec: Optional[ServiceSpec] = None) -> str:
         if spec:
             ispec = cast(IngressSpec, spec)
@@ -88,7 +98,7 @@ class IngressService(CephService):
         ingress_spec = cast(IngressSpec, spec)
         assert ingress_spec.backend_service
         daemons = mgr.cache.get_daemons_by_service(ingress_spec.backend_service)
-        return [d.name() for d in daemons]
+        return sorted([d.name() for d in daemons])
 
     def haproxy_generate_config(
             self,
