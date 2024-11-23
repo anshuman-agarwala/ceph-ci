@@ -1645,25 +1645,25 @@ class NvmeofServiceSpec(ServiceSpec):
         if (self.max_namespaces_with_netmask and self.max_namespaces_with_netmask < 0):
             raise SpecValidationError("Max namespaces with netmask can't be negative")
 
-        if type(self.max_subsystems) != int:
+        if not isinstance(self.max_subsystems, int):
             raise SpecValidationError("Max subsystems must be an integer")
 
         if self.max_subsystems <= 0:
             raise SpecValidationError("Max subsystems must be greater than zero")
 
-        if type(self.max_namespaces) != int:
+        if not isinstance(self.max_namespaces, int):
             raise SpecValidationError("Max namespaces must be an integer")
 
         if self.max_namespaces <= 0:
             raise SpecValidationError("Max namespaces must be greater than zero")
 
-        if type(self.max_namespaces_per_subsystem) != int:
+        if not isinstance(self.max_namespaces_per_subsystem, int):
             raise SpecValidationError("Max namespaces per subsystem must be an integer")
 
         if self.max_namespaces_per_subsystem <= 0:
             raise SpecValidationError("Max namespaces per subsystem must be greater than zero")
 
-        if type(self.max_hosts_per_subsystem) != int:
+        if not isinstance(self.max_hosts_per_subsystem, int):
             raise SpecValidationError("Max hosts per subsystem must be an integer")
 
         if self.max_hosts_per_subsystem <= 0:
