@@ -393,9 +393,9 @@ SnapTrimObjSubEvent::start()
 
   ceph_assert(pg->is_active_clean());
 
-  auto exit_handle = seastar::defer([this] {
-    logger().debug("{}: exit", *this);
-    handle.exit();
+  auto exit_handle = seastar::defer([this, opref = IRef(this)] {
+    logger().debug("{}: exit", *opref);
+    std::ignore = handle.complete().then([opref = std::move(opref)] {});
   });
 
   co_await enter_stage<interruptor>(
@@ -447,7 +447,6 @@ SnapTrimObjSubEvent::start()
   co_await std::move(all_completed);
 
   logger().debug("{}: completed", *this);
-  co_await interruptor::make_interruptible(handle.complete());
 }
 
 void SnapTrimObjSubEvent::print(std::ostream &lhs) const
