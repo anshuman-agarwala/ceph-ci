@@ -74,7 +74,7 @@ public:
   void encode_full(MonitorDBStore::TransactionRef t) override {}
 
   bool preprocess_beacon(MonOpRequestRef op);
-  bool prepare_beacon(MonOpRequestRef op);
+  bool prepare_beacon(MonOpRequestRef op, const entity_addr_t& peer);
 
   void tick() override;
   void print_summary(ceph::Formatter *f, std::ostream *ss) const;
@@ -86,6 +86,11 @@ private:
   // used for calculate pool & group GW responsible for rebalance
   uint32_t global_rebalance_index = 1;
   uint8_t  tick_ratio = 0;
+  // track peer gateway group and id
+  std::map<entity_addr_t, std::pair<NvmeGroupKey, NvmeGwId>> peer_group_key_id;
+  std::map<std::pair<NvmeGroupKey, NvmeGwId>, entity_addr_t> group_key_id_peer;
+  void update_peer_map(const entity_addr_t& peer, const NvmeGroupKey& group_key, const NvmeGwId& gw_id);
+  void remove_peer_map(const NvmeGroupKey& group_key, const NvmeGwId& gw_id);
   void synchronize_last_beacon();
   void process_gw_down(const NvmeGwId &gw_id,
      const NvmeGroupKey& group_key, bool &propose_pending,

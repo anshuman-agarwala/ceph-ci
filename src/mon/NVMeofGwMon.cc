@@ -215,9 +215,27 @@ void NVMeofGwMon::check_sub(Subscription *sub)
 	   << " " << map.epoch << dendl;
   if (sub->next <= map.epoch)
   {
+    const auto& peer = sub->session->con->get_peer_addr();
+    NVMeofGwMap ack_map;
+    auto it = peer_group_key_id.find(peer);
+    if (it != peer_group_key_id.end()) {
+      // respond with a map slice correspondent to the same GW
+      const auto& group_key_id = it->second;
+      const auto& group_key = group_key_id.first;
+      const auto& gw_id = group_key_id.second;
+      dout(10) << "Sending a map slice of group key " << group_key
+	       << " gw id " << gw_id << " to subscriber "
+	       << sub->session->con << " " << peer << dendl;
+      ack_map.created_gws[group_key][gw_id] = map.created_gws[group_key][gw_id];
+      ack_map.epoch = map.epoch;
+    } else {
+      dout(10) << "Sending a full map to subscriber " << sub->session->con
+	       << " " << peer << dendl;
+      ack_map = map;
+    }
     dout(10) << "Sending map to subscriber " << sub->session->con
-	     << " " << sub->session->con->get_peer_addr() << dendl;
-    sub->session->con->send_message2(make_message<MNVMeofGwMap>(map));
+	     << " " << peer << dendl;
+    sub->session->con->send_message2(make_message<MNVMeofGwMap>(ack_map));
 
     if (sub->onetime) {
       mon.session_map.remove_sub(sub);
@@ -271,7 +289,7 @@ bool NVMeofGwMon::prepare_update(MonOpRequestRef op)
   auto m = op->get_req<PaxosServiceMessage>();
   switch (m->get_type()) {
   case MSG_MNVMEOF_GW_BEACON:
-    return prepare_beacon(op);
+    return prepare_beacon(op, m->get_connection()->get_peer_addr());
 
   case MSG_MON_COMMAND:
     try {
@@ -454,6 +472,7 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
 	sstrm.str("");
       }
     } else {
+      remove_peer_map(group_key, id);
       rc = pending_map.cfg_delete_gw(id, group_key);
       if (rc == 0) {
         bool propose = false;
@@ -517,12 +536,43 @@ bool NVMeofGwMon::preprocess_beacon(MonOpRequestRef op)
   return false;
 }
 
+void NVMeofGwMon::update_peer_map(const entity_addr_t& peer, const NvmeGroupKey& group_key, const NvmeGwId& gw_id)
+{
+  std::pair<NvmeGroupKey, NvmeGwId> fkey = { group_key, gw_id };
+  auto it = group_key_id_peer.find(fkey);
+  if (it != group_key_id_peer.end()) {
+    // verify the peer
+    if (it->second != peer) {
+      dout(10) << "Update peer old "<< it->second << " new " << peer <<" group key "<< group_key << " gw_id " << gw_id << dendl;
+      peer_group_key_id.erase(it->second);
+      peer_group_key_id[peer] = fkey;
+    }
+    // known peer - nothing to do
+  } else {
+    dout(10) << "Add peer " << peer <<" group key "<< group_key << " gw_id " << gw_id << dendl;
+    group_key_id_peer[fkey] = peer;
+    peer_group_key_id[peer] = fkey;
+  }
+}
+void NVMeofGwMon::remove_peer_map(const NvmeGroupKey& group_key, const NvmeGwId& gw_id)
+{
+  std::pair<NvmeGroupKey, NvmeGwId> fkey = { group_key, gw_id };
+  auto it = group_key_id_peer.find(fkey);
+  if (it != group_key_id_peer.end()) {
+    dout(10) << "Remove peer " << it->second << " group key " << group_key << " gw_id " << gw_id << dendl;
+    peer_group_key_id.erase(it->second);
+    group_key_id_peer.erase(fkey);
+  } else {
+    dout(10) << "Remove peer, failed to find for group key " << group_key << " gw_id " << gw_id << dendl;
+  }
+}
 
-bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
+bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op, const entity_addr_t& peer)
 {
   auto m = op->get_req<MNVMeofGwBeacon>();
 
-  dout(20) << "availability " <<  m->get_availability()
+  dout(20) << "peer " << peer
+           << " availability " <<  m->get_availability()
 	   << " GW : " << m->get_gw_id()
 	   << " osdmap_epoch " << m->get_last_osd_epoch()
 	   << " subsystems " << m->get_subsystems() << dendl;
@@ -541,10 +591,11 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   auto now = ceph::coarse_mono_clock::now();
 
   if (avail == gw_availability_t::GW_CREATED) {
+    update_peer_map(peer, group_key, gw_id);
     if (gw == group_gws.end()) {
       gw_created = false;
       dout(10) << "Warning: GW " << gw_id << " group_key " << group_key
-	       << " was not found in the  map.Created_gws "
+	       << " peer " << peer << " was not found in the  map.Created_gws "
 	       << map.created_gws << dendl;
       goto set_propose;
     } else {
