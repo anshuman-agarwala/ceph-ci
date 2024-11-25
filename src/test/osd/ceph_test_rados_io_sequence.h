@@ -199,7 +199,8 @@ class SelectECPool
   SelectECPool(ceph::util::random_number_generator<int>& rng,
                po::variables_map vm, librados::Rados& rados, bool dry_run,
                bool allow_pool_autoscaling, bool allow_pool_balancer,
-               bool allow_pool_deep_scrubbing, bool allow_pool_scrubbing);
+               bool allow_pool_deep_scrubbing, bool allow_pool_scrubbing,
+               bool test_recovery);
   const std::string choose() override;
 
   bool get_allow_pool_autoscaling() { return allow_pool_autoscaling; }
@@ -221,6 +222,7 @@ class SelectECPool
   bool allow_pool_balancer;
   bool allow_pool_deep_scrubbing;
   bool allow_pool_scrubbing;
+  bool test_recovery;
   int k;
   int m;
 
