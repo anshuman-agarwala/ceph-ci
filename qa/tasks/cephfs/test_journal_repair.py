@@ -409,7 +409,9 @@ class TestJournalRepair(CephFSTestCase):
         That the 'journal import' recognizes empty file read and errors out.
         """
         self.fs.fail()
-        with tempfile.NamedTemporaryFile() as temp:
-            output = self.fs.journal_tool(["journal", "import", temp.name], 0)
-            if f'Error reading {temp}' not in output:
-                raise RuntimeError(f"Unexpected journal-tool result: '{output}'")
+        temp = tempfile.NamedTemporaryFile()
+        #with tempfile.NamedTemporaryFile() as temp:
+        output = self.fs.journal_tool(["journal", "import", temp.name], 0)
+        if f'Error reading {temp}' not in output:
+            raise RuntimeError(f"Unexpected journal-tool result: '{output}'")
+        temp.close()
