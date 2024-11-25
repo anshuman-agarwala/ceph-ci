@@ -7,7 +7,7 @@ import json
 import logging
 from textwrap import dedent
 import time
-import tempfile
+#import tempfile
 
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
 from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
@@ -415,7 +415,7 @@ class TestJournalRepair(CephFSTestCase):
         self.mount_a.run_shell(["sudo", "touch", tmpfile])
         self.fs.fail()
         #output = self.mount_a.run_shell(["cephfs-journal-tool", "--rank", "cephfs:0", "journal", "import", tmpfile])
-        output = self.fs.journal_tool(["journal", "import", tempfile], 0)
+        output = self.fs.journal_tool(["journal", "import", tmpfile], 0)
         #output = output.stdout.getvalue().strip()
         if f'Error reading {tmpfile}' not in output:
             raise RuntimeError(f"Unexpected journal-tool result: '{output}'")
