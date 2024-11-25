@@ -412,9 +412,10 @@ class TestJournalRepair(CephFSTestCase):
         #temp = tempfile.NamedTemporaryFile()
         #with tempfile.NamedTemporaryFile() as temp:
         #output = self.fs.journal_tool(["journal", "import", temp.name], 0)
-        self.mount_a.run_shell(["touch", "tmpfile"])
-        output = self.mount_a.run_shell(["cephfs-journal-tool", "--rank", "cephfs:0", "journal", "import", "tmpfile"])
+        tmpfile = "/tmp/journal-tool.tmp"
+        self.mount_a.run_shell(["sudo", "touch", tmpfile])
+        output = self.mount_a.run_shell(["cephfs-journal-tool", "--rank", "cephfs:0", "journal", "import", tmpfile])
         output = output.stdout.getvalue().strip()
-        if f'Error reading tmpfile' not in output:
+        if f'Error reading {tmpfile}' not in output:
             raise RuntimeError(f"Unexpected journal-tool result: '{output}'")
         #temp.close()
