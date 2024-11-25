@@ -408,15 +408,11 @@ class TestJournalRepair(CephFSTestCase):
         """
         That the 'journal import' recognizes empty file read and errors out.
         """
-        #temp = tempfile.NamedTemporaryFile()
-        #with tempfile.NamedTemporaryFile() as temp:
-        #output = self.fs.journal_tool(["journal", "import", temp.name], 0)
         tmpfile = "/tmp/journal-tool.tmp"
         self.mount_a.run_shell(["sudo", "touch", tmpfile])
         self.fs.fail()
-        #output = self.mount_a.run_shell(["cephfs-journal-tool", "--rank", "cephfs:0", "journal", "import", tmpfile])
         output = self.fs.journal_tool(["journal", "import", tmpfile], 0)
-        #output = output.stdout.getvalue().strip()
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
         if f'Error reading {tmpfile}' not in output:
             raise RuntimeError(f"Unexpected journal-tool result: '{output}'")
-        #temp.close()
