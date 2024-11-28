@@ -224,13 +224,20 @@ void NVMeofGwMon::check_sub(Subscription *sub)
         dout(10) << "found gw-vect " << gw_created_pair.second.addr_vect  << " GW " << gw_id << " group-key " << group_key <<  dendl;
         dout(10) << "sub->next(epoch) " << sub->next << " map.Gw_epoch " << map.Gw_epoch[group_key].epoch << dendl;
         if (sub->next <= map.Gw_epoch[group_key].epoch){
-          dout(4) << "Send unicast map to GW "<< gw_id << dendl;
-          NVMeofGwMap unicast_map;
-          unicast_map.created_gws[group_key][gw_id] = map.created_gws[group_key][gw_id];
+           dout(4) << "Send full map to GW "<< gw_id << dendl;
+          //NVMeofGwMap unicast_map;
+          //unicast_map.created_gws[group_key][gw_id] = map.created_gws[group_key][gw_id];
           // respond with a map slice correspondent to the same GW
-          unicast_map.epoch =  map.Gw_epoch[group_key].epoch;//map.epoch;
-          sub->session->con->send_message2(make_message<MNVMeofGwMap>(unicast_map));
-          sub->next = map.Gw_epoch[group_key].epoch + 1;
+          //unicast_map.epoch =  map.Gw_epoch[group_key].epoch;//map.epoch;
+          epoch_t epoch = map.epoch;
+          map.epoch = map.Gw_epoch[group_key].epoch;
+          sub->session->con->send_message2(make_message<MNVMeofGwMap>(map));
+          map.epoch = epoch;
+          if (sub->onetime) {
+                 mon.session_map.remove_sub(sub);
+          } else {
+             sub->next = map.Gw_epoch[group_key].epoch + 1;
+          }
         }
       }
     }
@@ -703,7 +710,7 @@ set_propose:
       ack_map.epoch = (it == map.Gw_epoch.end())? 0 : map.Gw_epoch[group_key].epoch;
       dout(10) << "gw not created, ack map " << ack_map << " epoch " << ack_map.epoch << dendl;
     }
-    dout(10) << "ack_map " << ack_map <<dendl;
+    dout(20) << "ack_map " << ack_map <<dendl;
     auto msg = make_message<MNVMeofGwMap>(ack_map);
     mon.send_reply(op, msg.detach());
   } else {
