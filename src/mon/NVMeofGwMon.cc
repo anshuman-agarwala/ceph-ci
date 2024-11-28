@@ -230,7 +230,11 @@ void NVMeofGwMon::check_sub(Subscription *sub)
           // respond with a map slice correspondent to the same GW
           unicast_map.epoch =  map.Gw_epoch[group_key].epoch;//map.epoch;
           sub->session->con->send_message2(make_message<MNVMeofGwMap>(unicast_map));
-          sub->next = map.Gw_epoch[group_key].epoch + 1;
+          if (sub->onetime) {
+            mon.session_map.remove_sub(sub);
+          } else {
+            sub->next = map.Gw_epoch[group_key].epoch + 1;
+          }
         }
       }
     }
@@ -693,7 +697,8 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   propose |= nonce_propose;
 
 set_propose:
-  if (!propose) {
+  if ((!propose) || nonce_propose) { // send ack to beacon in case no propose
+                        //or if changed something not relevant to gw-epoch
     if (gw_created) {
       // respond with a map slice correspondent to the same GW
       ack_map.created_gws[group_key][gw_id] = map.created_gws[group_key][gw_id];
@@ -703,7 +708,7 @@ set_propose:
       ack_map.epoch = (it == map.Gw_epoch.end())? 0 : map.Gw_epoch[group_key].epoch;
       dout(10) << "gw not created, ack map " << ack_map << " epoch " << ack_map.epoch << dendl;
     }
-    dout(10) << "ack_map " << ack_map <<dendl;
+    dout(20) << "ack_map " << ack_map <<dendl;
     auto msg = make_message<MNVMeofGwMap>(ack_map);
     mon.send_reply(op, msg.detach());
   } else {
