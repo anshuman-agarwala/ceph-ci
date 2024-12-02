@@ -130,12 +130,13 @@ struct NvmeGwMonState {
   BlocklistData blocklist_data;
   //ceph entity address allocated for the GW-client that represents this GW-id
   entity_addrvec_t addr_vect;
-
+  uint16_t beacon_index;
   NvmeGwMonState(): ana_grp_id(REDUNDANT_GW_ANA_GROUP_ID) {}
 
   NvmeGwMonState(NvmeAnaGrpId id)
     : ana_grp_id(id), availability(gw_availability_t::GW_CREATED),
-      last_gw_map_epoch_valid(false), performed_full_startup(false) {}
+      last_gw_map_epoch_valid(false), performed_full_startup(false),
+      beacon_index(0){}
   void set_unavailable_state() {
     if (availability != gw_availability_t::GW_DELETING) {
       //for not to override Deleting

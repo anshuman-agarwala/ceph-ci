@@ -495,6 +495,7 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
     }
     encode(gw.second.nonce_map, bl, features);
     gw.second.addr_vect.encode(bl, CEPH_FEATURES_ALL);
+    encode(gw.second.beacon_index, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -577,6 +578,7 @@ inline void decode(
     }
     decode(gw_created.nonce_map, bl);
     gw_created.addr_vect.decode(bl);
+    decode(gw_created.beacon_index, bl);
     gws[gw_name] = gw_created;
   }
   if (struct_v == 1) {  //Fix allocations of states and blocklist_data

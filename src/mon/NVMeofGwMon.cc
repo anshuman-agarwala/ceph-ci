@@ -21,7 +21,7 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix *_dout << "nvmeofgw " << __PRETTY_FUNCTION__ << " "
-
+#define BEACONS_TILL_ACK 15
 using std::string;
 
 void NVMeofGwMon::init()
@@ -44,17 +44,19 @@ void NVMeofGwMon::synchronize_last_beacon()
 	   << " active " << is_active()  << dendl;
   // Initialize last_beacon to identify transitions of available
   // GWs to unavailable state
-  for (const auto& created_map_pair: map.created_gws) {
+  for ( auto& created_map_pair: map.created_gws) {
     const auto& group_key = created_map_pair.first;
-    const NvmeGwMonStates& gw_created_map = created_map_pair.second;
-    for (const auto& gw_created_pair: gw_created_map) {
-      const auto& gw_id = gw_created_pair.first;
+    NvmeGwMonStates& gw_created_map = created_map_pair.second;
+    for ( auto& gw_created_pair: gw_created_map) {
+      auto& gw_id = gw_created_pair.first;
       if (gw_created_pair.second.availability ==
 	  gw_availability_t::GW_AVAILABLE) {
 	dout(10) << "synchronize last_beacon for  GW :" << gw_id << dendl;
 	LastBeacon lb = {gw_id, group_key};
 	last_beacon[lb] = last_tick;
       }
+      // force send ack after nearest beacon after leader re-election
+      gw_created_pair.second.beacon_index = BEACONS_TILL_ACK -1;
     }
   }
 }
@@ -555,6 +557,8 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   auto gw = group_gws.find(gw_id);
   const BeaconSubsystems& sub = m->get_subsystems();
   auto now = ceph::coarse_mono_clock::now();
+  bool apply_ack_logic = false;
+  bool send_ack =  false;
 
   if (avail == gw_availability_t::GW_CREATED) {
     if (gw == group_gws.end()) {
@@ -631,6 +635,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     mon.no_reply(op);
     goto false_return; // not sending ack to this beacon
   }
+  // apply_ack_logic = true;
   // deep copy the whole nonce map of this GW
   if (m->get_nonce_map().size()) {
     if (pending_map.created_gws[group_key][gw_id].nonce_map !=
@@ -695,9 +700,19 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   pending_map.update_active_timers(timer_propose);
   propose |= timer_propose;
   propose |= nonce_propose;
-
 set_propose:
-  if ((!propose) || nonce_propose) { // send ack to beacon in case no propose
+  apply_ack_logic = (avail == gw_availability_t::GW_AVAILABLE) ? true : false;
+  if ( (apply_ack_logic &&
+      ((pending_map.created_gws[group_key][gw_id].beacon_index++
+          % BEACONS_TILL_ACK) == 0))|| (!apply_ack_logic) ) {
+    send_ack = true;
+    dout(20) << "ack logic " << apply_ack_logic <<  ", send_ack " << send_ack << dendl;
+    if (apply_ack_logic)
+      dout(10) << "ack sent: beacon index "
+       << pending_map.created_gws[group_key][gw_id].beacon_index
+       << " gw " << gw_id <<dendl;
+  }
+  if (send_ack && ((!propose) || nonce_propose)) { // send ack to beacon in case no propose
                         //or if changed something not relevant to gw-epoch
     if (gw_created) {
       // respond with a map slice correspondent to the same GW
