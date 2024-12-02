@@ -90,6 +90,8 @@ private:
   void process_gw_down(const NvmeGwId &gw_id,
      const NvmeGroupKey& group_key, bool &propose_pending,
      gw_availability_t avail);
+  bool get_gw_by_addr(const  entity_addr_t &sub_addr,
+       NvmeGwId &gw_id, NvmeGroupKey& group_key);
 };
 
 #endif /* MON_NVMEGWMONITOR_H_ */

@@ -21,7 +21,6 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix *_dout << "nvmeofgw " << __PRETTY_FUNCTION__ << " "
-
 using std::string;
 
 void NVMeofGwMon::init()
@@ -44,17 +43,20 @@ void NVMeofGwMon::synchronize_last_beacon()
 	   << " active " << is_active()  << dendl;
   // Initialize last_beacon to identify transitions of available
   // GWs to unavailable state
-  for (const auto& created_map_pair: map.created_gws) {
+  for ( auto& created_map_pair: map.created_gws) {
     const auto& group_key = created_map_pair.first;
-    const NvmeGwMonStates& gw_created_map = created_map_pair.second;
-    for (const auto& gw_created_pair: gw_created_map) {
-      const auto& gw_id = gw_created_pair.first;
+    NvmeGwMonStates& gw_created_map = created_map_pair.second;
+    for ( auto& gw_created_pair: gw_created_map) {
+      auto& gw_id = gw_created_pair.first;
       if (gw_created_pair.second.availability ==
 	  gw_availability_t::GW_AVAILABLE) {
 	dout(10) << "synchronize last_beacon for  GW :" << gw_id << dendl;
 	LastBeacon lb = {gw_id, group_key};
 	last_beacon[lb] = last_tick;
       }
+      // force send ack after nearest beacon after leader re-election
+      gw_created_pair.second.beacon_index =
+          g_conf().get_val<uint64_t>("mon_nvmeofgw_beacons_till_ack");
     }
   }
 }
@@ -209,33 +211,47 @@ void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
   }
 }
 
+bool NVMeofGwMon::get_gw_by_addr(const entity_addr_t &sub_addr,
+     NvmeGwId &gw_id, NvmeGroupKey& group_key)
+{
+  for (auto& created_map_pair: map.created_gws) {
+     group_key = created_map_pair.first;
+     NvmeGwMonStates& gw_created_map = created_map_pair.second;
+     for (auto& gw_created_pair: gw_created_map) {
+       gw_id = gw_created_pair.first;
+       if ( (gw_created_pair.second.availability !=
+          gw_availability_t::GW_CREATED ) &&
+          (gw_created_pair.second.addr_vect == entity_addrvec_t(sub_addr))) {
+         dout(10) << "found gw-vect " << gw_created_pair.second.addr_vect
+               << " GW " << gw_id << " group-key " << group_key <<  dendl;
+         return true;
+       }
+     }
+  }
+  return false;
+}
+
 void NVMeofGwMon::check_sub(Subscription *sub)
 {
 //  dout(10) << "sub->next , map-epoch " << sub->next   << " " << map.epoch << dendl;
-  for (const auto& created_map_pair: map.created_gws) {
-    const auto& group_key = created_map_pair.first;
-    const NvmeGwMonStates& gw_created_map = created_map_pair.second;
-    for (const auto& gw_created_pair: gw_created_map) {
-      const auto& gw_id = gw_created_pair.first;
-      if ( //(gw_created_pair.second.availability == GW_AVAILABILITY_E::GW_AVAILABLE) &&
-           (gw_created_pair.second.addr_vect == entity_addrvec_t(sub->session->con->get_peer_addr() ) )
-         )
-      {
-        dout(10) << "found gw-vect " << gw_created_pair.second.addr_vect  << " GW " << gw_id << " group-key " << group_key <<  dendl;
-        dout(10) << "sub->next(epoch) " << sub->next << " map.Gw_epoch " << map.Gw_epoch[group_key].epoch << dendl;
-        if (sub->next <= map.Gw_epoch[group_key].epoch){
-          dout(4) << "Send unicast map to GW "<< gw_id << dendl;
-          NVMeofGwMap unicast_map;
-          unicast_map.created_gws[group_key][gw_id] = map.created_gws[group_key][gw_id];
-          // respond with a map slice correspondent to the same GW
-          unicast_map.epoch =  map.Gw_epoch[group_key].epoch;//map.epoch;
-          sub->session->con->send_message2(make_message<MNVMeofGwMap>(unicast_map));
-          if (sub->onetime) {
-            mon.session_map.remove_sub(sub);
-          } else {
-            sub->next = map.Gw_epoch[group_key].epoch + 1;
-          }
-        }
+  NvmeGwId gw_id;
+  NvmeGroupKey group_key;
+  if(get_gw_by_addr(sub->session->con->get_peer_addr(),
+      gw_id, group_key)) {
+    dout(10) << "sub->next(epoch) " << sub->next << " map.gw_epoch "
+       << map.gw_epoch[group_key] << dendl;
+    if (sub->next <= map.gw_epoch[group_key]) {
+      dout(4) << "Send unicast map to GW "<< gw_id << dendl;
+      NVMeofGwMap unicast_map;
+      unicast_map.created_gws[group_key][gw_id]
+          = map.created_gws[group_key][gw_id];
+      // respond with a map slice correspondent to the same GW
+      unicast_map.epoch =  map.gw_epoch[group_key];//map.epoch;
+      sub->session->con->send_message2(make_message<MNVMeofGwMap>(unicast_map));
+      if (sub->onetime) {
+        mon.session_map.remove_sub(sub);
+      } else {
+        sub->next = map.gw_epoch[group_key] + 1;
       }
     }
   }
@@ -250,7 +266,8 @@ void NVMeofGwMon::check_subs(bool t)
     return;
   }
   for (auto sub : *(mon.session_map.subs[type])) {
-    dout(10) << " dump subscriber peer_addr : " << sub->session->con->get_peer_addr() <<  dendl;
+    dout(10) << " dump subscriber peer_addr : "
+       << sub->session->con->get_peer_addr() <<  dendl;
     check_sub(sub);
   }
 }
@@ -350,7 +367,7 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
       }
     }
     f->dump_unsigned("num gws", map.created_gws[group_key].size());
-    f->dump_unsigned("GW-epoch", map.Gw_epoch[group_key].epoch);
+    f->dump_unsigned("GW-epoch", map.gw_epoch[group_key]);
     if (map.created_gws[group_key].size() == 0) {
       f->close_section();
       f->flush(rdata);
@@ -549,23 +566,28 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   bool propose = false;
   bool nonce_propose = false;
   bool timer_propose = false;
+  bool gw_propose    = false;
   bool gw_created = true;
   NVMeofGwMap ack_map;
   auto& group_gws = map.created_gws[group_key];
   auto gw = group_gws.find(gw_id);
   const BeaconSubsystems& sub = m->get_subsystems();
   auto now = ceph::coarse_mono_clock::now();
+  int beacons_till_ack =
+        g_conf().get_val<uint64_t>("mon_nvmeofgw_beacons_till_ack");
+  bool apply_ack_logic = true;
+  bool send_ack =  false;
 
   if (avail == gw_availability_t::GW_CREATED) {
     if (gw == group_gws.end()) {
       gw_created = false;
       dout(10) << "Warning: GW " << gw_id << " group_key " << group_key
-	       << " was not found in the  map.Created_gws "
+	       << " was not found in the  map.created_gws "
 	       << map.created_gws << dendl;
       goto set_propose;
     } else {
-      dout(10) << "GW  prepares the full startup " << gw_id
-	       << " GW availability: "
+      dout(10) << "GW beacon: Created state - full startup done " << gw_id
+	       << " GW state in monitor data-base : "
 	       << pending_map.created_gws[group_key][gw_id].availability
 	       << dendl;
       if (pending_map.created_gws[group_key][gw_id].availability ==
@@ -573,23 +595,22 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	dout(4) << " Warning :GW marked as Available in the NVmeofGwMon "
 		<< "database, performed full startup - Apply GW!"
 		<< gw_id << dendl;
-	 pending_map.handle_gw_performing_fast_reboot(gw_id, group_key, propose);
+	 pending_map.handle_gw_performing_fast_reboot(gw_id, group_key, gw_propose);
 	 LastBeacon lb = {gw_id, group_key};
 	 last_beacon[lb] = now; //Update last beacon
-
       } else if (
 	pending_map.created_gws[group_key][gw_id].performed_full_startup ==
 	false) {
 	pending_map.created_gws[group_key][gw_id].performed_full_startup = true;
+	pending_map.gw_performed_startup(gw_id, group_key, gw_propose);
+	pending_map.created_gws[group_key][gw_id].addr_vect =
+	    entity_addrvec_t(con->get_peer_addr());
       }
-      pending_map.gw_performed_startup(gw_id, group_key, propose);
-      pending_map.created_gws[group_key][gw_id].addr_vect =
-              entity_addrvec_t(con->get_peer_addr());
       goto set_propose;
     }
   // gw already created
-  } else {
-    // if GW reports Available but in monitor's database it is Unavailable
+  } else { // first GW beacon should come with avail = Created
+    // if GW reports Avail/Unavail but in monitor's database it is Unavailable
     if (gw != group_gws.end()) {
       // it means it did not perform "exit" after failover was set by
       // NVMeofGWMon
@@ -597,27 +618,20 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	   gw_availability_t::GW_UNAVAILABLE) &&
 	  (pending_map.created_gws[group_key][gw_id].performed_full_startup ==
 	   false) &&
-	  avail == gw_availability_t::GW_AVAILABLE) {
+	  (avail == gw_availability_t::GW_AVAILABLE ||
+	   avail == gw_availability_t::GW_UNAVAILABLE )) {
 	ack_map.created_gws[group_key][gw_id] =
 	  pending_map.created_gws[group_key][gw_id];
-	ack_map.epoch = map.Gw_epoch[group_key].epoch;//map.epoch;
-	dout(4) << " Force gw to exit: Sending ack_map to GW: "
-		<< gw_id << dendl;
+	ack_map.epoch = map.gw_epoch[group_key];
+	dout(4) << " Force gw to exit: first beacon in state " << avail
+		<< " GW " << gw_id << dendl;
 	auto msg = make_message<MNVMeofGwMap>(ack_map);
 	mon.send_reply(op, msg.detach());
 	goto false_return;
       }
     }
   }
-  if ( pending_map.created_gws[group_key][gw_id].addr_vect !=
-               entity_addrvec_t(con->get_peer_addr()) )
-  {
-     dout(4) << "Warning entity addr changed for GW client" << gw_id
-         << " was " <<  pending_map.created_gws[group_key][gw_id].addr_vect
-         << " now " << entity_addrvec_t(con->get_peer_addr()) << dendl;
-     //TODO  set new address and propose = true
-  }
-  // At this stage the gw has to be in the Created_gws
+  // Beacon from GW in !Created state but it does not appear in the map
   if (gw == group_gws.end()) {
     dout(4) << "GW that does not appear in the map sends beacon, ignore "
        << gw_id << dendl;
@@ -626,10 +640,19 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   }
   if (pending_map.created_gws[group_key][gw_id].availability ==
     gw_availability_t::GW_DELETING) {
-    dout(4) << "GW sends beacon in DELETING state, ignore "
+    dout(4) << "GW sends beacon in DELETING state, ignore it"
        << gw_id << dendl;
     mon.no_reply(op);
     goto false_return; // not sending ack to this beacon
+  }
+  if ( pending_map.created_gws[group_key][gw_id].addr_vect !=
+      entity_addrvec_t(con->get_peer_addr()) ) {
+    dout(4) << "Warning: entity addr need to set for GW client " << gw_id
+      << " was " <<  pending_map.created_gws[group_key][gw_id].addr_vect
+      << " now " << entity_addrvec_t(con->get_peer_addr()) << dendl;
+    pending_map.created_gws[group_key][gw_id].addr_vect =
+      entity_addrvec_t(con->get_peer_addr());
+    gw_propose = true;
   }
   // deep copy the whole nonce map of this GW
   if (m->get_nonce_map().size()) {
@@ -644,7 +667,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     }
   } else {
     dout(10) << "Warning: received empty nonce map in the beacon of GW "
-	     << gw_id << " " << dendl;
+	     << gw_id << " avail " << (int)avail << dendl;
   }
 
   if (sub.size() == 0) {
@@ -671,11 +694,11 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     nonce_propose = true;
   }
   pending_map.created_gws[group_key][gw_id].last_gw_map_epoch_valid =
-    ( map.Gw_epoch[group_key].epoch  == m->get_last_gwmap_epoch());// was map.epoch
+    ( map.gw_epoch[group_key] == m->get_last_gwmap_epoch());
   if (pending_map.created_gws[group_key][gw_id].last_gw_map_epoch_valid ==
       false) {
     dout(20) <<  "map epoch of gw is not up-to-date " << gw_id
-	     << " epoch " << map.Gw_epoch[group_key].epoch
+	     << " epoch " << map.gw_epoch[group_key]
 	     << " beacon_epoch " << m->get_last_gwmap_epoch() <<  dendl;
   }
   if (avail == gw_availability_t::GW_AVAILABLE) {
@@ -685,28 +708,40 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     LastBeacon lb = {gw_id, group_key};
     last_beacon[lb] = now;
     epoch_t last_osd_epoch = m->get_last_osd_epoch();
-    pending_map.process_gw_map_ka(gw_id, group_key, last_osd_epoch, propose);
+    pending_map.process_gw_map_ka(gw_id, group_key, last_osd_epoch, gw_propose);
   // state set by GW client application
   } else if (avail == gw_availability_t::GW_UNAVAILABLE ||
       avail == gw_availability_t::GW_CREATED) {
-      process_gw_down(gw_id, group_key, propose, avail);
+      process_gw_down(gw_id, group_key, gw_propose, avail);
   }
   // Periodic: check active FSM timers
   pending_map.update_active_timers(timer_propose);
-  propose |= timer_propose;
-  propose |= nonce_propose;
 
-set_propose:
-  if ((!propose) || nonce_propose) { // send ack to beacon in case no propose
-                        //or if changed something not relevant to gw-epoch
+ set_propose:
+  propose |= (timer_propose | gw_propose | nonce_propose);
+  apply_ack_logic = (avail == gw_availability_t::GW_AVAILABLE) ? true : false;
+  if ( (apply_ack_logic &&
+      ((pending_map.created_gws[group_key][gw_id].beacon_index++
+          % beacons_till_ack) == 0))|| (!apply_ack_logic) ) {
+    send_ack = true;
+    if (apply_ack_logic) {
+      dout(10) << "ack sent: beacon index "
+       << pending_map.created_gws[group_key][gw_id].beacon_index
+       << " gw " << gw_id <<dendl;
+    }
+  }
+  if (send_ack && !gw_propose) {
+          // send ack to beacon in case no propose
+          //or if changed something not relevant to gw-epoch
     if (gw_created) {
       // respond with a map slice correspondent to the same GW
       ack_map.created_gws[group_key][gw_id] = map.created_gws[group_key][gw_id];
-      ack_map.epoch = map.Gw_epoch[group_key].epoch;//map.epoch;
+      ack_map.epoch = map.gw_epoch[group_key];//map.epoch;
     } else {
-      auto  it = map.Gw_epoch.find(group_key);
-      ack_map.epoch = (it == map.Gw_epoch.end())? 0 : map.Gw_epoch[group_key].epoch;
-      dout(10) << "gw not created, ack map " << ack_map << " epoch " << ack_map.epoch << dendl;
+      auto  it = map.gw_epoch.find(group_key);
+      ack_map.epoch = (it == map.gw_epoch.end())? 0 : map.gw_epoch[group_key];
+      dout(10) << "gw not created, ack map "
+               << ack_map << " epoch " << ack_map.epoch << dendl;
     }
     dout(20) << "ack_map " << ack_map <<dendl;
     auto msg = make_message<MNVMeofGwMap>(ack_map);
