@@ -227,10 +227,12 @@ inline std::ostream& operator<<(std::ostream& os, const NVMeofGwMap value) {
   os <<  "\n" <<  MODULE_PREFFIX << "== NVMeofGwMap [ Created_gws: epoch "
      << value.epoch;
   for (auto& group_gws: value.Gw_epoch) {
-    os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first << " } -> GW epoch: " << group_gws.second.epoch << " }";
+    os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
+       << " } -> GW epoch: " << group_gws.second.epoch << " }";
   }
   for (auto& group_gws: value.created_gws) {
-   os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first << " } -> { " << group_gws.second << " }";
+   os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
+      << " } -> { " << group_gws.second << " }";
   }
   return os;
 }
@@ -495,6 +497,7 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
     }
     encode(gw.second.nonce_map, bl, features);
     gw.second.addr_vect.encode(bl, CEPH_FEATURES_ALL);
+    encode(gw.second.beacon_index, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -577,6 +580,7 @@ inline void decode(
     }
     decode(gw_created.nonce_map, bl);
     gw_created.addr_vect.decode(bl);
+    decode(gw_created.beacon_index, bl);
     gws[gw_name] = gw_created;
   }
   if (struct_v == 1) {  //Fix allocations of states and blocklist_data
@@ -599,7 +603,8 @@ inline void encode( const Gw_Epoch& gw_epoch,  ceph::bufferlist &bl)
   encode(gw_epoch.epoch, bl);
 }
 
-inline void encode(const std::map<NvmeGroupKey, GwEpoch>& gw_epoch,  ceph::bufferlist &bl) {
+inline void encode(const std::map<NvmeGroupKey, GwEpoch>& gw_epoch,
+                   ceph::bufferlist &bl) {
   ENCODE_START(1, 1, bl);
   encode ((uint32_t)gw_epoch.size(), bl); // number of groups
   for (auto& group_epoch: gw_epoch) {
@@ -616,7 +621,8 @@ inline void decode(Gw_Epoch& gw_epoch,  ceph::buffer::list::const_iterator &bl)
   decode(gw_epoch.epoch, bl);
 }
 
-inline void decode(std::map<NvmeGroupKey, GwEpoch>& gw_epoch, ceph::buffer::list::const_iterator &bl) {
+inline void decode(std::map<NvmeGroupKey, GwEpoch>& gw_epoch,
+                   ceph::buffer::list::const_iterator &bl) {
   gw_epoch.clear();
   uint32_t ngroups;
   DECODE_START(1, bl);

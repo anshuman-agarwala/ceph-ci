@@ -72,7 +72,7 @@ public:
     NvmeAnaGrpId anagrpid, uint8_t value);
   void handle_gw_performing_fast_reboot(const NvmeGwId &gw_id,
        const NvmeGroupKey& group_key, bool &map_modified);
-  void  gw_performed_startup (const NvmeGwId &gw_id,
+  void  gw_performed_startup(const NvmeGwId &gw_id,
        const NvmeGroupKey& group_key, bool &propose_pending);
 private:
   int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
@@ -122,7 +122,7 @@ private:
     NvmeAnaGrpId anagrpid);
   void validate_gw_map(
     const NvmeGroupKey& group_key);
-  void increment_gw_epoch (const NvmeGroupKey& group_key);
+  void increment_gw_epoch(const NvmeGroupKey& group_key);
 
 public:
   int blocklist_gw(
