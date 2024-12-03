@@ -557,7 +557,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   auto gw = group_gws.find(gw_id);
   const BeaconSubsystems& sub = m->get_subsystems();
   auto now = ceph::coarse_mono_clock::now();
-  bool apply_ack_logic = false;
+  //bool apply_ack_logic = true;
   bool send_ack =  false;
 
   if (avail == gw_availability_t::GW_CREATED) {
@@ -701,14 +701,14 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   propose |= timer_propose;
   propose |= nonce_propose;
 set_propose:
-  apply_ack_logic = (avail == gw_availability_t::GW_AVAILABLE) ? true : false;
-  if ( (apply_ack_logic &&
+  //apply_ack_logic = (avail == gw_availability_t::GW_AVAILABLE) ? true : false;
+  if ( (gw_created &&
       ((pending_map.created_gws[group_key][gw_id].beacon_index++
-          % BEACONS_TILL_ACK) == 0))|| (!apply_ack_logic) ) {
+          % BEACONS_TILL_ACK) == 0))/*|| (!apply_ack_logic)*/ ) {
     send_ack = true;
-    dout(20) << "ack logic " << apply_ack_logic <<  ", send_ack " << send_ack << dendl;
-    if (apply_ack_logic)
-      dout(10) << "ack sent: beacon index "
+    //dout(20) << "ack logic " << apply_ack_logic <<  ", send_ack " << send_ack << dendl;
+    //if (apply_ack_logic)
+    dout(10) << "ack sent: beacon index "
        << pending_map.created_gws[group_key][gw_id].beacon_index
        << " gw " << gw_id <<dendl;
   }
