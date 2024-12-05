@@ -49,15 +49,15 @@ ObjectContextLoader::load_and_lock_clone(Manager &manager, RWState::State lock_t
   if (manager.head_state.is_empty()) {
     auto [obc, _] = obc_registry.get_cached_obc(manager.target.get_head());
     manager.set_state_obc(manager.head_state, obc);
+  }
 
-    if (manager.head_state.obc->loading) {
-      co_await manager.head_state.lock_to(RWState::RWREAD);
-    } else {
-      manager.head_state.lock_excl_sync();
-      manager.head_state.obc->loading = true;
-      co_await load_obc(manager.head_state.obc);
-      manager.head_state.demote_excl_to(RWState::RWREAD);
-    }
+  if (manager.head_state.obc->loading) {
+    co_await manager.head_state.lock_to(RWState::RWREAD);
+  } else {
+    manager.head_state.lock_excl_sync();
+    manager.head_state.obc->loading = true;
+    co_await load_obc(manager.head_state.obc);
+    manager.head_state.demote_excl_to(RWState::RWREAD);
   }
 
   if (manager.options.resolve_clone) {
