@@ -37,7 +37,8 @@ ObjectContextLoader::load_and_lock_head(Manager &manager, RWState::State lock_ty
 }
 
 ObjectContextLoader::load_and_lock_fut
-ObjectContextLoader::load_and_lock_clone(Manager &manager, RWState::State lock_type)
+ObjectContextLoader::load_and_lock_clone(
+  Manager &manager, RWState::State lock_type, bool lock_head)
 {
   LOG_PREFIX(ObjectContextLoader::load_and_lock_clone);
   DEBUGDPP("{} {}", dpp, manager.target, lock_type);
@@ -51,13 +52,16 @@ ObjectContextLoader::load_and_lock_clone(Manager &manager, RWState::State lock_t
     manager.set_state_obc(manager.head_state, obc);
   }
 
-  if (manager.head_state.obc->loading) {
-    co_await manager.head_state.lock_to(RWState::RWREAD);
-  } else {
+  if (!manager.head_state.obc->loading) {
+    // caller is responsible for pre-populating a loaded obc if lock_head is
+    // false
+    ceph_assert(lock_head);
     manager.head_state.lock_excl_sync();
     manager.head_state.obc->loading = true;
     co_await load_obc(manager.head_state.obc);
     manager.head_state.demote_excl_to(RWState::RWREAD);
+  } else if (lock_head) {
+    co_await manager.head_state.lock_to(RWState::RWREAD);
   }
 
   if (manager.options.resolve_clone) {

@@ -231,7 +231,7 @@ public:
   using load_and_lock_fut = load_and_lock_iertr::future<>;
 private:
   load_and_lock_fut load_and_lock_head(Manager &, RWState::State);
-  load_and_lock_fut load_and_lock_clone(Manager &, RWState::State);
+  load_and_lock_fut load_and_lock_clone(Manager &, RWState::State, bool lock_head=true);
 public:
   load_and_lock_fut load_and_lock(Manager &, RWState::State);
 
@@ -275,7 +275,7 @@ public:
     // locks on head as part of this call.
     manager.head_state.obc = head;
     manager.head_state.obc->append_to(obc_set_accessing);
-    co_await load_and_lock(manager, State);
+    co_await load_and_lock_clone(manager, State, false);
     co_await std::invoke(func, head, manager.get_obc());
   }
 
