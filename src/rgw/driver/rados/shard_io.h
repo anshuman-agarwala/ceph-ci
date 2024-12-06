@@ -532,6 +532,8 @@ struct ReadHandler {
   void operator()(error_code ec, version_t = {}, bufferlist = {}) {
     outstanding.erase(outstanding.iterator_to(shard));
 
+    bool need_cancel = false;
+
     const auto result = reader.on_complete(shard.id(), ec);
     switch (result) {
       case Result::Retry:
@@ -547,19 +549,22 @@ struct ReadHandler {
             << "' failed: " << ec.message() << dendl;
         if (!failure) {
           failure = ec;
-
-          // cancel outstanding requests
-          auto i = outstanding.begin();
-          while (i != outstanding.end()) {
-            // emit() may recurse and remove i
-            auto& s = *i++;
-            s.signal.emit(boost::asio::cancellation_type::terminal);
-          }
+          need_cancel = !outstanding.empty();
         }
         break;
     }
 
     maybe_complete(waiter, sending, outstanding, terminal);
+
+    if (need_cancel) {
+      // cancel outstanding requests
+      auto i = outstanding.begin();
+      while (i != outstanding.end()) {
+        // emit() may recurse and remove i
+        auto& s = *i++;
+        s.signal.emit(boost::asio::cancellation_type::terminal);
+      }
+    }
   }
 }; // struct ReadHandler
 
