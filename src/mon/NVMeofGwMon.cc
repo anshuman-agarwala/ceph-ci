@@ -211,6 +211,26 @@ void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
   }
 }
 
+
+void NVMeofGwMon::check_sub(Subscription *sub)
+{
+  dout(10) << "sub->next , map-epoch " << sub->next
+       << " " << map.epoch << dendl;
+  if (sub->next <= map.epoch)
+  {
+    dout(10) << "Sending map to subscriber " << sub->session->con
+         << " " << sub->session->con->get_peer_addr() << dendl;
+    sub->session->con->send_message2(make_message<MNVMeofGwMap>(map));
+
+    if (sub->onetime) {
+      mon.session_map.remove_sub(sub);
+    } else {
+      sub->next = map.epoch + 1;
+    }
+  }
+}
+
+/*
 void NVMeofGwMon::check_sub(Subscription *sub)
 {
 //  dout(10) << "sub->next , map-epoch " << sub->next   << " " << map.epoch << dendl;
@@ -244,7 +264,7 @@ void NVMeofGwMon::check_sub(Subscription *sub)
     }
   }
 }
-
+*/
 void NVMeofGwMon::check_subs(bool t)
 {
   const std::string type = "NVMeofGw";
@@ -609,6 +629,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	ack_map.epoch = map.Gw_epoch[group_key].epoch;
 	dout(4) << " Force gw to exit: Sending ack_map to GW: "
 		<< gw_id << dendl;
+	ack_map.epoch = map.epoch;
 	auto msg = make_message<MNVMeofGwMap>(ack_map);
 	mon.send_reply(op, msg.detach());
 	goto false_return;
@@ -727,6 +748,7 @@ set_propose:
                << ack_map << " epoch " << ack_map.epoch << dendl;
     }
     dout(20) << "ack_map " << ack_map <<dendl;
+    ack_map.epoch = map.epoch;
     auto msg = make_message<MNVMeofGwMap>(ack_map);
     mon.send_reply(op, msg.detach());
   } else {
