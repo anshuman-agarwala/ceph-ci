@@ -211,6 +211,26 @@ void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
   }
 }
 
+
+void NVMeofGwMon::check_sub(Subscription *sub)
+{
+  dout(10) << "sub->next , map-epoch " << sub->next
+       << " " << map.epoch << dendl;
+  if (sub->next <= map.epoch)
+  {
+    dout(10) << "Sending map to subscriber " << sub->session->con
+         << " " << sub->session->con->get_peer_addr() << dendl;
+    sub->session->con->send_message2(make_message<MNVMeofGwMap>(map));
+
+    if (sub->onetime) {
+      mon.session_map.remove_sub(sub);
+    } else {
+      sub->next = map.epoch + 1;
+    }
+  }
+}
+
+/*
 void NVMeofGwMon::check_sub(Subscription *sub)
 {
 //  dout(10) << "sub->next , map-epoch " << sub->next   << " " << map.epoch << dendl;
@@ -244,7 +264,7 @@ void NVMeofGwMon::check_sub(Subscription *sub)
     }
   }
 }
-
+*/
 void NVMeofGwMon::check_subs(bool t)
 {
   const std::string type = "NVMeofGw";
