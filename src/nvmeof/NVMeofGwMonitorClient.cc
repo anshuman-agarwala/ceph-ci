@@ -204,17 +204,21 @@ int NVMeofGwMonitorClient::init()
 
 static bool get_gw_state(const char* desc, const std::map<NvmeGroupKey, NvmeGwMonClientStates>& m, const NvmeGroupKey& group_key, const NvmeGwId& gw_id, NvmeGwClientState& out)
 {
+  dout(1) << "enter get_gw_state" << dendl;
   auto gw_group = m.find(group_key);
   if (gw_group == m.end()) {
     dout(1) << "can not find group (" << group_key.first << "," << group_key.second << ") "  << desc << " map: " << m << dendl;
+    dout(1) << "exit1 get_gw_state" << dendl;
     return false;
   }
   auto gw_state = gw_group->second.find(gw_id);
   if (gw_state == gw_group->second.end()) {
     dout(1) << "can not find gw id: " << gw_id << " in " << desc << "group: " << gw_group->second  << dendl;
+    dout(1) << "exit2 get_gw_state" << dendl;
     return false;
   }
   out = gw_state->second;
+  dout(1) << "exit3 get_gw_state" << dendl;
   return true;
 }
 
