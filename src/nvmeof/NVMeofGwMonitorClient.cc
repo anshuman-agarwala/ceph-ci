@@ -204,17 +204,21 @@ int NVMeofGwMonitorClient::init()
 
 static bool get_gw_state(const char* desc, const std::map<NvmeGroupKey, NvmeGwMonClientStates>& m, const NvmeGroupKey& group_key, const NvmeGwId& gw_id, NvmeGwClientState& out)
 {
+  dout(1) << "enter get_gw_state" << dendl;
   auto gw_group = m.find(group_key);
   if (gw_group == m.end()) {
     dout(1) << "can not find group (" << group_key.first << "," << group_key.second << ") "  << desc << " map: " << m << dendl;
+    dout(1) << "exit1 get_gw_state" << dendl;
     return false;
   }
   auto gw_state = gw_group->second.find(gw_id);
   if (gw_state == gw_group->second.end()) {
     dout(1) << "can not find gw id: " << gw_id << " in " << desc << "group: " << gw_group->second  << dendl;
+    dout(1) << "exit2 get_gw_state" << dendl;
     return false;
   }
   out = gw_state->second;
+  dout(1) << "exit3 get_gw_state" << dendl;
   return true;
 }
 
@@ -223,29 +227,35 @@ void NVMeofGwMonitorClient::send_beacon()
   ceph_assert(ceph_mutex_is_locked_by_me(beacon_lock));
   gw_availability_t gw_availability = gw_availability_t::GW_CREATED;
   BeaconSubsystems subs;
+  dout(1) << "send_beacon 1" << dendl;
   NVMeofGwClient gw_client(
      grpc::CreateChannel(gateway_address, gw_creds()));
   subsystems_info gw_subsystems;
   bool ok = gw_client.get_subsystems(gw_subsystems);
+  dout(1) << "send_beacon 2" << dendl;
   if (ok) {
+    dout(1) << "send_beacon 3" << dendl;
     for (int i = 0; i < gw_subsystems.subsystems_size(); i++) {
       const subsystem& sub = gw_subsystems.subsystems(i);
       BeaconSubsystem bsub;
       bsub.nqn = sub.nqn();
+      dout(1) << "send_beacon 4" << dendl;
       for (int j = 0; j < sub.namespaces_size(); j++) {
         const auto& ns = sub.namespaces(j);
         BeaconNamespace bns = {ns.anagrpid(), ns.nonce()};
         bsub.namespaces.push_back(bns);
       }
+      dout(1) << "send_beacon 5" << dendl;
       for (int k = 0; k < sub.listen_addresses_size(); k++) {
         const auto& ls = sub.listen_addresses(k);
         BeaconListener bls = { ls.adrfam(), ls.traddr(), ls.trsvcid() };
+        dout(1) << "send_beacon 6" << dendl;
         bsub.listeners.push_back(bls);
       }
       subs.push_back(bsub);
     }
   }
-
+  dout(1) << "send_beacon 7" << dendl;
   auto group_key = std::make_pair(pool, group);
   NvmeGwClientState old_gw_state;
   // if already got gateway state in the map
@@ -262,6 +272,7 @@ void NVMeofGwMonitorClient::send_beacon()
       osdmap_epoch,
       gwmap_epoch);
   monc.send_mon_message(std::move(m));
+  dout(1) << "send_beacon exit" << dendl;
 }
 
 void NVMeofGwMonitorClient::disconnect_panic()
@@ -278,8 +289,9 @@ void NVMeofGwMonitorClient::disconnect_panic()
 void NVMeofGwMonitorClient::tick()
 {
   dout(1) << dendl;
-
+  dout(1) << "tick 1" << dendl;
   disconnect_panic();
+  dout(1) << "tick 2" << dendl;
   send_beacon();
 
   timer.add_event_after(
