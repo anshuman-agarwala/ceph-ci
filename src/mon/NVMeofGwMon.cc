@@ -241,7 +241,7 @@ bool NVMeofGwMon::prepare_update(MonOpRequestRef op) {
           return false; /* nothing to propose! */
       }
 }
-
+  
 bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
 {
     dout(10) << dendl;
