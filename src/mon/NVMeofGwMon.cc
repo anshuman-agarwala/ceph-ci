@@ -214,13 +214,16 @@ void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
 void NVMeofGwMon::check_sub(Subscription *sub)
 {
 //  dout(10) << "sub->next , map-epoch " << sub->next   << " " << map.epoch << dendl;
-  for (const auto& created_map_pair: map.created_gws) {
-    const auto& group_key = created_map_pair.first;
-    const NvmeGwMonStates& gw_created_map = created_map_pair.second;
-    for (const auto& gw_created_pair: gw_created_map) {
-      const auto& gw_id = gw_created_pair.first;
-      if (gw_created_pair.second.addr_vect ==
-         entity_addrvec_t(sub->session->con->get_peer_addr() ))
+  for (auto& created_map_pair: map.created_gws) {
+    auto& group_key = created_map_pair.first;
+    NvmeGwMonStates& gw_created_map = created_map_pair.second;
+    for (auto& gw_created_pair: gw_created_map) {
+      auto& gw_id = gw_created_pair.first;
+      if ( (gw_created_pair.second.availability ==
+          gw_availability_t::GW_AVAILABLE) &&
+         (gw_created_pair.second.addr_vect ==
+          entity_addrvec_t(sub->session->con->get_peer_addr() ))
+         )
       {
         dout(10) << "found gw-vect " << gw_created_pair.second.addr_vect
           << " GW " << gw_id << " group-key " << group_key <<  dendl;
@@ -234,6 +237,10 @@ void NVMeofGwMon::check_sub(Subscription *sub)
           // respond with a map slice correspondent to the same GW
           unicast_map.epoch =  map.Gw_epoch[group_key].epoch;//map.epoch;
           sub->session->con->send_message2(make_message<MNVMeofGwMap>(unicast_map));
+          //if (gw_created_pair.second.availability == gw_availability_t::GW_UNAVAILABLE){
+          //  gw_created_pair.second.addr_vect = entity_addrvec_t(entity_addr_t());
+            // reset addr_vect after sending map to unavaliable gw
+          //}
           if (sub->onetime) {
             mon.session_map.remove_sub(sub);
           } else {
@@ -588,9 +595,6 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	false) {
 	pending_map.created_gws[group_key][gw_id].performed_full_startup = true;
       }
-      pending_map.gw_performed_startup(gw_id, group_key, propose);
-      pending_map.created_gws[group_key][gw_id].addr_vect =
-              entity_addrvec_t(con->get_peer_addr());
       goto set_propose;
     }
   // gw already created
@@ -615,14 +619,6 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
       }
     }
   }
-  if ( pending_map.created_gws[group_key][gw_id].addr_vect !=
-               entity_addrvec_t(con->get_peer_addr()) )
-  {
-     dout(4) << "Warning entity addr changed for GW client" << gw_id
-         << " was " <<  pending_map.created_gws[group_key][gw_id].addr_vect
-         << " now " << entity_addrvec_t(con->get_peer_addr()) << dendl;
-     //TODO  set new address and propose = true
-  }
   // At this stage the gw has to be in the Created_gws
   if (gw == group_gws.end()) {
     dout(4) << "GW that does not appear in the map sends beacon, ignore "
@@ -637,6 +633,16 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     mon.no_reply(op);
     goto false_return; // not sending ack to this beacon
   }
+  if ( pending_map.created_gws[group_key][gw_id].addr_vect !=
+                 entity_addrvec_t(con->get_peer_addr()) )
+    {
+       dout(4) << "entity addr need to set for GW client" << gw_id
+           << " was " <<  pending_map.created_gws[group_key][gw_id].addr_vect
+           << " now " << entity_addrvec_t(con->get_peer_addr()) << dendl;
+       pending_map.gw_performed_startup(gw_id, group_key, propose);//TODO change name
+       pending_map.created_gws[group_key][gw_id].addr_vect =
+                    entity_addrvec_t(con->get_peer_addr());
+    }
   // deep copy the whole nonce map of this GW
   if (m->get_nonce_map().size()) {
     if (pending_map.created_gws[group_key][gw_id].nonce_map !=
@@ -650,7 +656,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     }
   } else {
     dout(10) << "Warning: received empty nonce map in the beacon of GW "
-	     << gw_id << " " << dendl;
+	     << gw_id << " avail " << (int)avail << dendl;
   }
 
   if (sub.size() == 0) {
