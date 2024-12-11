@@ -3,8 +3,7 @@ from io import StringIO
 
 import json
 
-from .conn import get_gateway_connection, get_gateway_iam_connection, get_gateway_secure_connection,
-get_gateway_s3_client
+from .conn import get_gateway_connection, get_gateway_iam_connection, get_gateway_secure_connection, get_gateway_s3_client
 
 class Cluster:
     """ interface to run commands against a distinct ceph cluster """
