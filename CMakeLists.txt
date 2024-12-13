@@ -734,6 +734,7 @@ set(Boost_USE_MULTITHREADED ON)
 CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
   "NOT WITH_SYSTEM_BOOST" OFF)
 # require minimally the bundled version
+set(WITH_SYSTEM_BOOST OFF)
 if(WITH_SYSTEM_BOOST)
   if(ENABLE_SHARED)
     set(Boost_USE_STATIC_LIBS OFF)
