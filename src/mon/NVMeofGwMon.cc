@@ -219,10 +219,8 @@ void NVMeofGwMon::check_sub(Subscription *sub)
     NvmeGwMonStates& gw_created_map = created_map_pair.second;
     for (auto& gw_created_pair: gw_created_map) {
       auto& gw_id = gw_created_pair.first;
-      if ( (gw_created_pair.second.availability ==
-          gw_availability_t::GW_AVAILABLE ||
-          gw_created_pair.second.availability ==
-          gw_availability_t::GW_DELETING)  &&
+      if ( (gw_created_pair.second.availability !=
+          gw_availability_t::GW_CREATED ) &&
          (gw_created_pair.second.addr_vect ==
           entity_addrvec_t(sub->session->con->get_peer_addr() ))
          )
@@ -600,8 +598,8 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
       goto set_propose;
     }
   // gw already created
-  } else {
-    // if GW reports Available but in monitor's database it is Unavailable
+  } else { // first GW beacon should come with avail = Created
+    // if GW reports Avail/Unavail but in monitor's database it is Unavailable
     if (gw != group_gws.end()) {
       // it means it did not perform "exit" after failover was set by
       // NVMeofGWMon
@@ -609,12 +607,13 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	   gw_availability_t::GW_UNAVAILABLE) &&
 	  (pending_map.created_gws[group_key][gw_id].performed_full_startup ==
 	   false) &&
-	  avail == gw_availability_t::GW_AVAILABLE) {
+	  (avail == gw_availability_t::GW_AVAILABLE ||
+	   avail == gw_availability_t::GW_UNAVAILABLE )) {
 	ack_map.created_gws[group_key][gw_id] =
 	  pending_map.created_gws[group_key][gw_id];
 	ack_map.epoch = map.Gw_epoch[group_key].epoch;
-	dout(4) << " Force gw to exit: Sending ack_map to GW: "
-		<< gw_id << dendl;
+	dout(4) << " Force gw to exit: first beacon in state " << avail
+		<< " GW " << gw_id << dendl;
 	auto msg = make_message<MNVMeofGwMap>(ack_map);
 	mon.send_reply(op, msg.detach());
 	goto false_return;
