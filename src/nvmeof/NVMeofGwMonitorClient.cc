@@ -176,7 +176,7 @@ int NVMeofGwMonitorClient::init()
     return r;
   }
   dout(1) << "nvmeof Registered monc callback" << dendl;
-  client.init();
+  //client.init();
   r = monc.authenticate();
   if (r < 0) {
     derr << "Authentication failed, did you specify an ID with a valid keyring?" << dendl;
@@ -194,7 +194,7 @@ int NVMeofGwMonitorClient::init()
   objecter.init();
   objecter.enable_blocklist_events();
   objecter.start();
-  //client.init();
+  client.init();
   timer.init();
 
   {
