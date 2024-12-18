@@ -1665,6 +1665,16 @@ Some of the gateways are in the GW_UNAVAILABLE state. If a NVMeoF daemon has
 crashed, the daemon log file (found at ``/var/log/ceph/``) may contain
 troubleshooting information.
 
+NVMEOF_GATEWAY_DELETING
+_______________________
+
+Some of the gateways are in the GW_DELETING state. They will stay in this
+state until all the namespaces under the gateway's ANA group id are moved to
+another load balancing group. This can be done using NVMeoF CLI command 
+'namespace change_load_balancing_group'. 
+
+Alternatively, deploying new gateways on the same hosts would also resolve 
+this warning.
 
 Miscellaneous
 -------------
