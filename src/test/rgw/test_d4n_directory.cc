@@ -34,7 +34,7 @@ class Environment : public ::testing::Environment {
       cct = common_preinit(iparams, CODE_ENVIRONMENT_UTILITY, {}); 
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
       
-      redisHost = cct->_conf->rgw_d4n_host + ":" + std::to_string(cct->_conf->rgw_d4n_port); 
+      redisHost = cct->_conf->rgw_filter_address; 
     }
     
     void TearDown() override {
@@ -63,12 +63,13 @@ class ObjectDirectoryFixture: public ::testing::Test {
       ASSERT_NE(dir, nullptr);
       ASSERT_NE(conn, nullptr);
 
-      dir->init(env->cct);
+      dir->init(env->cct, env->dpp);
 
       /* Run fixture's connection */
       config cfg;
-      cfg.addr.host = env->cct->_conf->rgw_d4n_host;
-      cfg.addr.port = std::to_string(env->cct->_conf->rgw_d4n_port);
+      std::string address = env->cct->_conf->rgw_filter_address;
+      cfg.addr.host = address.substr(0, address.find(":"));
+      cfg.addr.port = address.substr(address.find(":") + 1, address.length());
 
       conn->async_run(cfg, {}, net::detached);
     } 
@@ -111,12 +112,13 @@ class BlockDirectoryFixture: public ::testing::Test {
       ASSERT_NE(dir, nullptr);
       ASSERT_NE(conn, nullptr);
 
-      dir->init(env->cct);
+      dir->init(env->cct, env->dpp);
 
       /* Run fixture's connection */
       config cfg;
-      cfg.addr.host = env->cct->_conf->rgw_d4n_host;
-      cfg.addr.port = std::to_string(env->cct->_conf->rgw_d4n_port);
+      std::string address = env->cct->_conf->rgw_filter_address;
+      cfg.addr.host = address.substr(0, address.find(":"));
+      cfg.addr.port = address.substr(address.find(":") + 1, address.length());
 
       conn->async_run(cfg, {}, net::detached);
     } 
@@ -295,7 +297,7 @@ TEST_F(ObjectDirectoryFixture, UpdateFieldYield)
 TEST_F(BlockDirectoryFixture, SetYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{io, yield}));
 
     boost::system::error_code ec;
     request req;
@@ -318,7 +320,7 @@ TEST_F(BlockDirectoryFixture, SetYield)
 TEST_F(BlockDirectoryFixture, GetYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{io, yield}));
 
     {
       boost::system::error_code ec;
@@ -353,7 +355,7 @@ TEST_F(BlockDirectoryFixture, GetYield)
 TEST_F(BlockDirectoryFixture, CopyYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->copy(block, "copyTestName", "copyBucketName", optional_yield{io, yield}));
 
     boost::system::error_code ec;
@@ -384,7 +386,7 @@ TEST_F(BlockDirectoryFixture, CopyYield)
 TEST_F(BlockDirectoryFixture, DelYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{io, yield}));
 
     {
       boost::system::error_code ec;
@@ -422,7 +424,7 @@ TEST_F(BlockDirectoryFixture, DelYield)
 TEST_F(BlockDirectoryFixture, UpdateFieldYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->update_field(block, "objName", "newTestName", optional_yield{io, yield}));
     ASSERT_EQ(0, dir->update_field(block, "blockHosts", "127.0.0.1:5000", optional_yield{io, yield}));
 
@@ -449,7 +451,7 @@ TEST_F(BlockDirectoryFixture, RemoveHostYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
     block->hostsList.push_back("127.0.0.1:6000");
-    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->remove_host(block, "127.0.0.1:6379", optional_yield{io, yield}));
 
     {

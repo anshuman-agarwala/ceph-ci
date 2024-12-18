@@ -36,7 +36,7 @@ class Environment : public ::testing::Environment {
       cct = common_preinit(iparams, CODE_ENVIRONMENT_UTILITY, {}); 
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
       
-      redisHost = cct->_conf->rgw_d4n_host + ":" + std::to_string(cct->_conf->rgw_d4n_port); 
+      redisHost = cct->_conf->rgw_filter_address; 
     }
 
     std::string redisHost;
@@ -72,7 +72,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
       ASSERT_NE(policyDriver, nullptr);
       ASSERT_NE(conn, nullptr);
 
-      dir->init(env->cct);
+      dir->init(env->cct, env->dpp);
       env->cct->_conf->rgw_local_cache_address = "127.0.0.1:6379";
       cacheDriver->initialize(env->dpp);
 
@@ -83,8 +83,9 @@ class LFUDAPolicyFixture : public ::testing::Test {
 
       /* Run fixture's connection */
       config cfg;
-      cfg.addr.host = env->cct->_conf->rgw_d4n_host;
-      cfg.addr.port = std::to_string(env->cct->_conf->rgw_d4n_port);
+      std::string address = env->cct->_conf->rgw_filter_address;
+      cfg.addr.host = address.substr(0, address.find(":"));
+      cfg.addr.port = address.substr(address.find(":") + 1, address.length());
 
       conn->async_run(cfg, {}, net::detached);
     } 
@@ -132,7 +133,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	  }
 	} else if (!exists) { /* No remote copy */
 	  block->hostsList.push_back(dir->cct->_conf->rgw_local_cache_address);
-	  if (dir->set(block, y) < 0)
+	  if (dir->set(env->dpp, block, y) < 0)
 	    return -1;
 
 	  this->policyDriver->get_cache_policy()->update(dpp, oid, 0, bl.length(), "", false, time(NULL), user, y);
@@ -213,7 +214,7 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     attrVal.append("testBucket");
     attrs.insert({"bucket_name", attrVal});
 
-    ASSERT_EQ(0, dir->set(&victim, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, &victim, optional_yield{io, yield}));
     std::string victimKey = victim.cacheObj.bucketName + "_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(victim.size);
     ASSERT_EQ(0, cacheDriver->put(env->dpp, victimKey, bl, bl.length(), attrs, optional_yield{io, yield}));
     policyDriver->get_cache_policy()->update(env->dpp, victimKey, 0, bl.length(), "", false, time(NULL), user, optional_yield{io, yield});
@@ -225,7 +226,7 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     block->hostsList.push_back("127.0.0.1:6000");
     block->cacheObj.hostsList.push_back("127.0.0.1:6000");
 
-    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{io, yield}));
 
     ASSERT_GE(lfuda(env->dpp, block, cacheDriver, optional_yield{io, yield}), 0);
 
