@@ -1424,8 +1424,11 @@ record_t Cache::prepare_record(
 	std::move(bl)
       },
       modify_time);
-    if (i->is_valid() &&
-	is_backref_mapped_type(i->get_type())) {
+
+    if (!i->is_valid()) {
+      continue;
+    }
+    if (is_backref_mapped_type(i->get_type())) {
       laddr_t alloc_laddr;
       if (i->is_logical()) {
 	alloc_laddr = i->cast<LogicalCachedExtent>()->get_laddr();
@@ -1781,9 +1784,10 @@ void Cache::complete_commit(
     epm.mark_space_free(extent->get_paddr(), extent->get_length());
   }
   for (auto &i: t.existing_block_list) {
-    if (i->is_valid()) {
-      epm.mark_space_used(i->get_paddr(), i->get_length());
+    if (!i->is_valid()) {
+      continue;
     }
+    epm.mark_space_used(i->get_paddr(), i->get_length());
   }
 
   for (auto &i: t.mutated_block_list) {
@@ -1807,31 +1811,32 @@ void Cache::complete_commit(
 	 existing_stats.clean_num,
 	 existing_stats.mutated_num);
   for (auto &i: t.existing_block_list) {
-    if (i->is_valid()) {
-      if (i->is_exist_clean()) {
-	i->state = CachedExtent::extent_state_t::CLEAN;
-      } else {
-	assert(i->state == CachedExtent::extent_state_t::DIRTY);
-      }
-      add_extent(i);
+    if (!i->is_valid()) {
+      continue;
+    }
+    if (i->is_exist_clean()) {
+      i->state = CachedExtent::extent_state_t::CLEAN;
+    } else {
+      assert(i->state == CachedExtent::extent_state_t::DIRTY);
+    }
+    add_extent(i);
 
-      // Note: commit extents and backref allocations in the same place
-      DEBUGT("backref_entry alloc existing {} len 0x{:x}",
-	     t,
-	     i->get_paddr(),
-	     i->get_length());
-      backref_entries.emplace_back(
-	backref_entry_t::create_alloc(
-	  i->get_paddr(),
-	  i->cast<LogicalCachedExtent>()->get_laddr(),
-	  i->get_length(),
-	  i->get_type()));
-      const auto t_src = t.get_src();
-      if (i->is_dirty()) {
-        add_to_dirty(i, &t_src);
-      } else {
-        touch_extent(*i, &t_src);
-      }
+    // Note: commit extents and backref allocations in the same place
+    DEBUGT("backref_entry alloc existing {} len 0x{:x}",
+	   t,
+	   i->get_paddr(),
+	   i->get_length());
+    backref_entries.emplace_back(
+      backref_entry_t::create_alloc(
+	i->get_paddr(),
+	i->cast<LogicalCachedExtent>()->get_laddr(),
+	i->get_length(),
+	i->get_type()));
+    const auto t_src = t.get_src();
+    if (i->is_dirty()) {
+      add_to_dirty(i, &t_src);
+    } else {
+      touch_extent(*i, &t_src);
     }
   }
 
