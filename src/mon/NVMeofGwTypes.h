@@ -125,6 +125,8 @@ struct NvmeGwMonState {
   BeaconSubsystems subsystems;
   NvmeAnaNonceMap nonce_map;
 
+  utime_t delete_gateway_time;
+
   // state machine states per ANA group
   SmState sm_state;
   BlocklistData blocklist_data;

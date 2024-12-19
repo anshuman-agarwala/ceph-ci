@@ -91,6 +91,14 @@ options:
   default: 1000
   services:
   - mon
+- name: mon_nvmeofgw_delete_grace
+  type: secs
+  level: advanced
+  desc: Period in seconds after NVMeoF gateway is in deleting state to raising health
+    check warning 
+  default: 20_min
+  services:
+  - mon
 - name: mon_mgr_inactive_grace
   type: int
   level: advanced
