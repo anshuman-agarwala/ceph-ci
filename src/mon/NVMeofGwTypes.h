@@ -229,13 +229,6 @@ struct NvmeGwTimerState {
   NvmeGwTimerState() {};
 };
 
-typedef struct Gw_Epoch {
-    epoch_t epoch;
-    Gw_Epoch(epoch_t epoch) : epoch(epoch){
-    };
-    Gw_Epoch():Gw_Epoch(0) {};
-}GwEpoch;
-
 using NvmeGwMonClientStates = std::map<NvmeGwId, NvmeGwClientState>;
 using NvmeGwTimers = std::map<NvmeGwId, NvmeGwTimerState>;
 using NvmeGwMonStates = std::map<NvmeGwId, NvmeGwMonState>;

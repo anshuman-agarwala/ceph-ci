@@ -226,9 +226,9 @@ inline std::ostream& operator<<(std::ostream& os, const NvmeGwMonStates value) {
 inline std::ostream& operator<<(std::ostream& os, const NVMeofGwMap value) {
   os <<  "\n" <<  MODULE_PREFFIX << "== NVMeofGwMap [ Created_gws: epoch "
      << value.epoch;
-  for (auto& group_gws: value.Gw_epoch) {
+  for (auto& group_gws: value.gw_epoch) {
     os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
-       << " } -> GW epoch: " << group_gws.second.epoch << " }";
+       << " } -> GW epoch: " << group_gws.second << " }";
   }
   for (auto& group_gws: value.created_gws) {
    os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
@@ -598,12 +598,7 @@ inline void decode(
   DECODE_FINISH(bl);
 }
 
-inline void encode( const Gw_Epoch& gw_epoch,  ceph::bufferlist &bl)
-{
-  encode(gw_epoch.epoch, bl);
-}
-
-inline void encode(const std::map<NvmeGroupKey, GwEpoch>& gw_epoch,
+inline void encode(const std::map<NvmeGroupKey, epoch_t>& gw_epoch,
                    ceph::bufferlist &bl) {
   ENCODE_START(1, 1, bl);
   encode ((uint32_t)gw_epoch.size(), bl); // number of groups
@@ -616,12 +611,7 @@ inline void encode(const std::map<NvmeGroupKey, GwEpoch>& gw_epoch,
   ENCODE_FINISH(bl);
 }
 
-inline void decode(Gw_Epoch& gw_epoch,  ceph::buffer::list::const_iterator &bl)
-{
-  decode(gw_epoch.epoch, bl);
-}
-
-inline void decode(std::map<NvmeGroupKey, GwEpoch>& gw_epoch,
+inline void decode(std::map<NvmeGroupKey, epoch_t>& gw_epoch,
                    ceph::buffer::list::const_iterator &bl) {
   gw_epoch.clear();
   uint32_t ngroups;
@@ -631,7 +621,7 @@ inline void decode(std::map<NvmeGroupKey, GwEpoch>& gw_epoch,
     std::string pool, group;
     decode(pool, bl);
     decode(group, bl);
-    GwEpoch gepoch;
+    epoch_t gepoch;
     decode(gepoch, bl);
     gw_epoch[std::make_pair(pool, group)] = gepoch;
 }

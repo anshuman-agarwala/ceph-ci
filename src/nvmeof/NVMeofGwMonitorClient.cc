@@ -81,8 +81,7 @@ std::shared_ptr<grpc::ChannelCredentials> NVMeofGwMonitorClient::gw_creds()
   // use insecure channel if no keys/certs defined
   if (server_cert.empty() && client_key.empty() && client_cert.empty()){
     return grpc::InsecureChannelCredentials();
-  }
-  else{
+  } else {
     return grpc::SslCredentials(gw_ssl_opts);
   }
 }
@@ -135,7 +134,6 @@ int NVMeofGwMonitorClient::init()
   // Initialize Messenger
   client_messenger->add_dispatcher_tail(this);
   client_messenger->add_dispatcher_head(&objecter);
-  //client_messenger->add_dispatcher_tail(&client);
   client_messenger->start();
 
   poolctx.start(2);
@@ -301,7 +299,6 @@ void NVMeofGwMonitorClient::shutdown()
     timer.shutdown();
   }
   // client uses monc and objecter
-  //client.shutdown();
   // Stop asio threads, so leftover events won't call into shut down
   // monclient/objecter.
   poolctx.finish();

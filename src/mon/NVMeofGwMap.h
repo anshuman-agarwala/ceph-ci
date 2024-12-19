@@ -45,7 +45,21 @@ public:
 
   // map that handles timers started by all Gateway FSMs
   std::map<NvmeGroupKey, NvmeGwTimers> fsm_timers;
-  std::map<NvmeGroupKey, GwEpoch>      Gw_epoch;   
+  /**
+   * gw_epoch
+   *
+   * Mapping from NvmeGroupKey -> epoch_t e such that e is the most recent
+   * map epoch which affects NvmeGroupKey.
+   *
+   * The purpose of this map is to allow us to determine whether a particular
+   * gw needs to be sent the current map.  If a gw with NvmeGroupKey key already
+   * has map epoch e, we only need to send a new map if gw_epoch[key] > e.  See
+   * check_sub for this logic.
+   *
+   * Map mutators generally need to invoke increment_gw_epoch(group_key) when
+   * updating the map with a change affeecting gws in group_key.
+   */
+  std::map<NvmeGroupKey, epoch_t>      gw_epoch;
   // epoch for synchronization of GWs belong to the same  Group & Pool
 
   void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
@@ -136,7 +150,7 @@ public:
 
     encode(created_gws, bl, features); //Encode created GWs
     encode(fsm_timers, bl, features);
-    encode(Gw_epoch, bl);
+    encode(gw_epoch, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -147,7 +161,7 @@ public:
 
     decode(created_gws, bl);
     decode(fsm_timers, bl);
-    decode(Gw_epoch, bl);
+    decode(gw_epoch, bl);
     DECODE_FINISH(bl);
   }
 
