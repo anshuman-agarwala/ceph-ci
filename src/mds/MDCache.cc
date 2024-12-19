@@ -1667,15 +1667,17 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	  CDir *dir = dn->dir;
           // TODO: What does this mean for referent inode ?? Passing 0 for now.
 	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), in->ino(), 0, in->d_type(), dn->alternate_name, oldfirst, dir_follows);
-	  dout(10) << " olddn " << *olddn << dendl;
+	  dout(10) << "journal_cow_dentry olddn " << *olddn << dendl;
 	  ceph_assert(dir->is_projected());
 	  olddn->set_projected_version(dir->get_projected_version());
 	  metablob->add_remote_dentry(olddn, true);
 	  mut->add_cow_dentry(olddn);
 	  // FIXME: adjust link count here?  hmm.
 
-	  if (dir_follows+1 > in->first)
+	  if (dir_follows+1 > in->first) {
+	    dout(10) << "journal_cow_dentry HRK Calling cow_old_inode in=" << *in << " dir_follows=" << dir_follows << " in->first=" << in->first << " cow_head=" << cow_head << dendl;
 	    in->cow_old_inode(dir_follows, cow_head);
+	  }
 	}
       }
 
@@ -1704,6 +1706,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       return;
     }
 
+    dout(10) << "journal_cow_dentry HRK Calling cow_old_inode in=" << *in << " follows=" << follows << " in->first=" << in->first << " cow_head=" << cow_head << dendl;
     in->cow_old_inode(follows, cow_head);
 
   } else {
@@ -1765,11 +1768,14 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 
 void MDCache::journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
+  dout(10) << "journal_dirty_inode HRK inode=" << *in << " follows=" << follows << " first=" << in->first << " last=" << in->last << dendl; 
   if (in->is_base()) {
     metablob->add_root(true, in);
   } else {
-    if (follows == CEPH_NOSNAP && in->last != CEPH_NOSNAP)
+    if (follows == CEPH_NOSNAP && in->last != CEPH_NOSNAP) {
+      dout(10) << "journal_dirty_inode HRK Setting follows to in->first--  in=" << *in << " follows=" << follows << " first=" << in->first << dendl; 
       follows = in->first - 1;
+    }
     CDentry *dn = in->get_projected_parent_dn();
     if (!dn->get_projected_linkage()->is_null())  // no need to cow a null dentry
       journal_cow_dentry(mut, metablob, dn, follows);
@@ -6573,7 +6579,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
     snapc = &nullsnap;
     ceph_assert(in->last == CEPH_NOSNAP);
   }
-  dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in
+  dout(10) << "_truncate_inode  snapc " << *snapc << " on " << *in
            << " fscrypt_last_block length is " << pi->fscrypt_last_block.size()
            << dendl;
   auto layout = pi->layout;
@@ -6625,6 +6631,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
     ceph_assert(length);
 
     dout(10) << "_truncate_inode truncate on inode " << *in << dendl;
+    dout(10) << "_truncate_inode args for filer.truncate ino=" << in->ino() << " ---layout=" << layout << " ---snapc=" << *snapc << " ---truncate_size=" << pi->truncate_size << " ---length=" << length << " ---truncate_seq=" << pi->truncate_seq << dendl;
     filer.truncate(in->ino(), &layout, *snapc, pi->truncate_size, length,
                    pi->truncate_seq, ceph::real_clock::zero(), 0,
                    new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in, ls),
