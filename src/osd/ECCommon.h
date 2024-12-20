@@ -563,9 +563,6 @@ struct ECCommon {
       /// Ancillary also provided from submit_transaction caller
       std::map<hobject_t, ObjectContextRef> obc_map;
 
-      /// see call_write_ordered
-      std::list<std::function<void(void)> > on_write;
-
       /// Generated internally
       std::set<hobject_t> temp_added;
       std::set<hobject_t> temp_cleared;
