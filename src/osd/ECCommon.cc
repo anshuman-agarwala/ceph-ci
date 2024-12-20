@@ -877,14 +877,6 @@ void ECCommon::RMWPipeline::cache_ready(Op &op)
     }
   }
 
-  for (auto &&[oid, cop]: op.cache_ops) {
-    if (written.contains(oid)) {
-      extent_cache.write_done(cop, std::move(written.at(oid)));
-    } else {
-      extent_cache.write_done(cop, ECUtil::shard_extent_map_t(&sinfo));
-    }
-  }
-
   if (!messages.empty()) {
     get_parent()->send_message_osd_cluster(messages, get_osdmap_epoch());
   }
@@ -897,10 +889,14 @@ void ECCommon::RMWPipeline::cache_ready(Op &op)
       op.trace);
   }
 
-  for (auto i = op.on_write.begin();
-       i != op.on_write.end();
-       op.on_write.erase(i++)) {
-    (*i)();
+
+  for (auto &cop : op.cache_ops) {
+    hobject_t &oid = cop->get_hoid();
+    if (written.contains(oid)) {
+      extent_cache.write_done(cop, std::move(written.at(oid)));
+    } else {
+      extent_cache.write_done(cop, ECUtil::shard_extent_map_t(&sinfo));
+    }
   }
 }
 
@@ -988,11 +984,7 @@ void ECCommon::RMWPipeline::on_change2() {
 }
 
 void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
-  // FIXME: The original function waits for all pipeline writes to complete.
-  //        I think what we want to do here is to flush the cache and queue a
-  //        a write behind it.  I have no idea how critical ordered writes are.
-  ceph_abort("Ordered writes not implemented");
-  cb();
+  extent_cache.add_on_write(std::move(cb));
 }
 
 ECUtil::HashInfoRef ECCommon::UnstableHashInfoRegistry::maybe_put_hash_info(

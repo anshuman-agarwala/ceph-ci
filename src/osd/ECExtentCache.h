@@ -92,6 +92,9 @@ public:
     GenContextURef<ECUtil::shard_extent_map_t &> cache_ready_cb;
     std::list<LineRef> lines;
 
+    // List of callbacks to be executed on write completion (not commit)
+    std::list<std::function<void(void)>> on_write;
+
     [[nodiscard]] extent_set get_pin_eset(uint64_t alignment) const;
 
   public:
@@ -107,6 +110,12 @@ public:
     void cancel() { delete cache_ready_cb.release(); }
     ECUtil::shard_extent_set_t get_writes() { return writes; }
     [[nodiscard]] Object &get_object() const { return object; }
+    [[nodiscard]] hobject_t &get_hoid() { return object.oid; }
+    [[nodiscard]] ECUtil::shard_extent_map_t &get_result() { return result; }
+    void add_on_write(std::function<void(void)> &&cb)
+    {
+      on_write.emplace_back(std::move(cb));
+    }
 
     bool complete_if_reads_cached()
     {
@@ -120,6 +129,7 @@ public:
     void write_done(ECUtil::shard_extent_map_t const&& update) const
     {
       object.write_done(update, projected_size);
+      for (auto &cb : on_write) cb();
     }
   };
 
