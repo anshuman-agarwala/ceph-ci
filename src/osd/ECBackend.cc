@@ -1586,14 +1586,8 @@ void ECBackend::submit_transaction(
 
     hobject_t source;
     if (inner_op.has_source(&source)) {
-      // typically clone or mv
-      plans.invalidates_cache = true;
       shinfo = get_hinfo_from_disk(source);
       soi = get_object_info_from_obc(obc_map.at(source));
-    }
-
-    if (inner_op.is_delete()) {
-      plans.invalidates_cache = true;
     }
 
     uint64_t old_object_size = 0;
@@ -1610,11 +1604,11 @@ void ECBackend::submit_transaction(
       }
     }
 
-    ECTransaction::WritePlanObj plan(inner_op,
+    ECTransaction::WritePlanObj plan(oid, inner_op,
       sinfo, old_object_size, oi, soi, std::move(hinfo), std::move(shinfo));
 
     if (plan.to_read) plans.want_read = true;
-    plans.plans.emplace(oid, std::move(plan));
+    plans.plans.emplace_back(std::move(plan));
   });
   ldpp_dout(get_parent()->get_dpp(), 20) << __func__
              << " plans=" << plans

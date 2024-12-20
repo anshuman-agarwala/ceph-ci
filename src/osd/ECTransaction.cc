@@ -121,6 +121,12 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
     projected_size = soi->size;
   }
 
+  hobject_t source;
+  if (op.has_source(&source) || op.is_delete()) {
+    // Note: truncate invaltations are handled by the cache itself.
+    invalidates_cache = true;
+  }
+
   /* If we are truncating, then we need to over-write the new end to
    * the end of that page with zeros. Everything after that will get
    * truncated to the shard objects. */
