@@ -949,19 +949,11 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef &op)
 
       tid_to_op_map[tid] = nop;
 
-      ECExtentCache::OpRef cache_op = extent_cache.prepare(op->hoid,
-        std::nullopt,
-        ECUtil::shard_extent_set_t(),
-        op->plan.plans.at(op->hoid).projected_size, // This op does not change any sizes.
-        op->plan.plans.at(op->hoid).projected_size,
-        false,
-        [nop](ECUtil::shard_extent_map_t &result)
-        {
-          nop->cache_ready(nop->hoid, result);
-        });
-
-      nop->cache_ops.emplace(nop->hoid, std::move(cache_op));
-      extent_cache.execute(nop->cache_ops[nop->hoid]);
+      /* This does not need to go through the extent cache at all. The cache
+       * is idle (we checked above) and this IO never blocks for the kernel,
+       * so its just a waste of effort.
+       */
+      nop->cache_ready(nop->hoid, ECUtil::shard_extent_map_t(&sinfo));
     }
   }
 
