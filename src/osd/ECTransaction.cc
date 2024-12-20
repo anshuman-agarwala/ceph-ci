@@ -740,7 +740,7 @@ void ECTransaction::generate_transactions(
 	ldpp_dout(dpp, 20) << "generate_transactions: marking append "
 			   << plan.orig_size
 			   << dendl;
-	entry->mod_desc.append(plan.orig_size);
+	entry->mod_desc.append(ECUtil::align_page_next(plan.orig_size));
       }
 
       // Update shard_versions in object_info to record which shards are being
