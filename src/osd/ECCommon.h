@@ -569,7 +569,6 @@ struct ECCommon {
 
       ECTransaction::WritePlan plan;
       bool requires_rmw() const { return !plan.want_read; }
-      bool invalidates_cache() const { return plan.invalidates_cache; }
 
       // must be true if requires_rmw(), must be false if invalidates_cache()
       bool using_cache = true;
@@ -589,7 +588,7 @@ struct ECCommon {
       OpRequestRef client_op;
 
       /// pin for cache
-      std::map<hobject_t, ECExtentCache::OpRef> cache_ops;
+      std::list<ECExtentCache::OpRef> cache_ops;
       RMWPipeline *pipeline;
 
       Op() : tid() {}

@@ -84,12 +84,13 @@ public:
     Object &object;
     std::optional<ECUtil::shard_extent_set_t> const reads;
     ECUtil::shard_extent_set_t const writes;
+    ECUtil::shard_extent_map_t result;
     bool complete = false;
     bool invalidates_cache = false;
     bool reading = false;
     bool read_done = false;
     uint64_t projected_size = 0;
-    GenContextURef<ECUtil::shard_extent_map_t &> cache_ready_cb;
+    GenContextURef<OpRef &> cache_ready_cb;
     std::list<LineRef> lines;
 
     // List of callbacks to be executed on write completion (not commit)
@@ -99,7 +100,7 @@ public:
 
   public:
     explicit Op(
-      GenContextURef<ECUtil::shard_extent_map_t &> &&cache_ready_cb,
+      GenContextURef<OpRef &> &&cache_ready_cb,
       Object &object,
       std::optional<ECUtil::shard_extent_set_t> const &to_read,
       ECUtil::shard_extent_set_t const &write,
@@ -117,12 +118,12 @@ public:
       on_write.emplace_back(std::move(cb));
     }
 
-    bool complete_if_reads_cached()
+    bool complete_if_reads_cached(OpRef &op_ref)
     {
       if (!read_done) return false;
-      auto result = object.get_cache(reads);
+      result = object.get_cache(reads);
       complete = true;
-      cache_ready_cb.release()->complete(result);
+      cache_ready_cb.release()->complete(op_ref);
       return true;
     }
 
@@ -156,6 +157,8 @@ private:
     uint64_t line_size = 0;
     bool reading = false;
     bool cache_invalidated = false;
+    bool cache_invalidate_expected = false;
+
     CephContext *cct;
 
     void request(OpRef &op);
@@ -231,12 +234,12 @@ private:
   LRU &lru;
   const ECUtil::stripe_info_t &sinfo;
   std::list<OpRef> waiting_ops;
-  void cache_maybe_ready() const;
+  void cache_maybe_ready();
   int counter = 0;
   int active_ios = 0;
   CephContext* cct;
 
-  OpRef prepare(GenContextURef<ECUtil::shard_extent_map_t &> &&ctx,
+  OpRef prepare(GenContextURef<OpRef &> &&ctx,
     hobject_t const &oid,
     std::optional<ECUtil::shard_extent_set_t> const &to_read,
     ECUtil::shard_extent_set_t const &write,
@@ -278,16 +281,25 @@ public:
     bool invalidates_cache,
     CacheReadyCb &&ready_cb) {
 
-    GenContextURef<ECUtil::shard_extent_map_t &> ctx =
-      make_gen_lambda_context<ECUtil::shard_extent_map_t &, CacheReadyCb>(
+    GenContextURef<OpRef &> ctx =
+      make_gen_lambda_context<OpRef &, CacheReadyCb>(
           std::forward<CacheReadyCb>(ready_cb));
 
     return prepare(std::move(ctx), oid, to_read, write, orig_size, projected_size, invalidates_cache);
   }
 
-  void execute(OpRef &op);
+  void execute(std::list<OpRef> &op_list);
   [[nodiscard]] bool idle() const;
   int get_and_reset_counter();
+
+  void add_on_write(std::function<void(void)> &&cb)
+  {
+    if (waiting_ops.empty()) {
+      cb();
+    } else {
+      waiting_ops.back()->add_on_write(std::move(cb));
+    }
+  }
 
 }; // ECExtentCaches
 

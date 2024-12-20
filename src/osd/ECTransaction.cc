@@ -102,6 +102,7 @@ static void encode_and_write(
 }
 
 ECTransaction::WritePlanObj::WritePlanObj(
+  const hobject_t &hoid,
   const PGTransaction::ObjectOperation &op,
   const ECUtil::stripe_info_t &sinfo,
   uint64_t orig_size,
@@ -109,6 +110,7 @@ ECTransaction::WritePlanObj::WritePlanObj(
   const std::optional<object_info_t> &soi,
   const ECUtil::HashInfoRef &&hinfo,
   const ECUtil::HashInfoRef &&shinfo) :
+hoid(hoid),
 hinfo(hinfo),
 shinfo(shinfo),
 orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
@@ -317,7 +319,13 @@ void ECTransaction::generate_transactions(
         ceph_assert(oid.is_temp());
       }
 
-      WritePlanObj &plan = plans.plans.at(oid);
+      /* Transactions must be submitted in the same order that they were
+       * planned in.
+       */
+      ceph_assert(!plans.plans.empty());
+      WritePlanObj &plan = plans.plans.front();
+      ceph_assert(plan.hoid == oid);
+
 
       if (oid.is_temp()) {
         if (op.is_fresh_object()) {
@@ -860,13 +868,14 @@ void ECTransaction::generate_transactions(
 	  }
 	}
       }
+
+      plans.plans.pop_front();
     });
 }
 
 std::ostream& ECTransaction::operator<<(std::ostream& lhs, const ECTransaction::WritePlan& rhs)
 {
-  return lhs << " { invalidate_caches : " << rhs.invalidates_cache
-      << ", plans : " << rhs.plans
+  return lhs << " { plans : " << rhs.plans
       << "}";
 }
 
@@ -878,5 +887,6 @@ std::ostream& ECTransaction::operator<<(std::ostream& lhs, const ECTransaction::
     << " hinfo: " << obj.hinfo
     << " shinfo: " << obj.shinfo
     << " orig_size: " << obj.orig_size
-    << " projected_size: " << obj.projected_size;
+    << " projected_size: " << obj.projected_size
+    << " invalidates_cache: " << obj.invalidates_cache;
 }

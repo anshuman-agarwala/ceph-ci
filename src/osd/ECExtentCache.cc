@@ -14,6 +14,18 @@ using namespace ECUtil;
 
 void ECExtentCache::Object::request(OpRef &op)
 {
+  /* After a cache invalidation, we allow through a single cache-invalidating
+   * IO.
+   */
+  if (op->invalidates_cache) {
+    if (cache_invalidated) {
+      op->invalidates_cache = false;
+    } else {
+      cache_invalidate_expected = true;
+    }
+  }
+  cache_invalidated = false;
+
   extent_set eset = op->get_pin_eset(line_size);
 
   /* Manipulation of lines must take the mutex. */
@@ -34,8 +46,12 @@ void ECExtentCache::Object::request(OpRef &op)
 
   bool read_required = false;
 
-  /* else add to read */
-  if (op->reads) {
+  /* Deal with reads if there are any.
+   * If any cache invalidation ops have been added, there is no point adding any
+   * reads as they are all going to be thrown away before any of the
+   * post-invalidate ops are honoured.
+   */
+  if (op->reads && !cache_invalidate_expected) {
     for (auto &&[shard, eset]: *(op->reads)) {
       extent_set request = eset;
       if (do_not_read.contains(shard)) {
@@ -71,15 +87,6 @@ void ECExtentCache::Object::request(OpRef &op)
     op->invalidates_cache = true;
   }
 
-  /* After a cache invalidation, we allow through a single cache-invalidating
-   * IO.
-   */
-  if (op->invalidates_cache) {
-    if (cache_invalidated) {
-      op->invalidates_cache = false;
-    }
-  }
-  cache_invalidated = false;
   projected_size = op->projected_size;
 
   if (read_required) send_reads();
@@ -187,6 +194,7 @@ void ECExtentCache::Object::invalidate(OpRef &invalidating_op)
   invalidating_op->invalidates_cache = false;
 
   cache_invalidated = true;
+  cache_invalidate_expected = false;
 
   /* We now need to reply all outstanding ops, so as to regenerate the read */
   for (auto &op : pg.waiting_ops) {
@@ -197,25 +205,28 @@ void ECExtentCache::Object::invalidate(OpRef &invalidating_op)
   }
 }
 
-void ECExtentCache::cache_maybe_ready() const
+void ECExtentCache::cache_maybe_ready()
 {
+
   while (!waiting_ops.empty()) {
     OpRef op = waiting_ops.front();
     if (op->invalidates_cache) {
       op->object.invalidate(op);
       ceph_assert(!op->invalidates_cache);
     }
-    /* If reads_done finds all reads a recomplete it will call the completion
+    /* If reads_done finds all reads complete it will call the completion
      * callback. Typically, this will cause the client to execute the
      * transaction and pop the front of waiting_ops.  So we abort if either
      * reads are not ready, or the client chooses not to complete the op
      */
-    if (!op->complete_if_reads_cached() || op == waiting_ops.front())
+    if (!op->complete_if_reads_cached(op))
       return;
+
+    waiting_ops.pop_front();
   }
 }
 
-ECExtentCache::OpRef ECExtentCache::prepare(GenContextURef<shard_extent_map_t &> && ctx,
+ECExtentCache::OpRef ECExtentCache::prepare(GenContextURef<OpRef &> && ctx,
   hobject_t const &oid,
   std::optional<shard_extent_set_t> const &to_read,
   shard_extent_set_t const &write,
@@ -241,8 +252,6 @@ void ECExtentCache::read_done(hobject_t const& oid, shard_extent_map_t const&& u
 
 void ECExtentCache::write_done(OpRef const &op, shard_extent_map_t const && update)
 {
-  ceph_assert(op == waiting_ops.front());
-  waiting_ops.pop_front();
   op->write_done(std::move(update));
 }
 
@@ -285,9 +294,11 @@ void ECExtentCache::on_change2()
   ceph_assert(idle());
 }
 
-void ECExtentCache::execute(OpRef &op) {
-  op->object.request(op);
-  waiting_ops.emplace_back(op);
+void ECExtentCache::execute(list<OpRef> &op_list) {
+  for (auto &op : op_list) {
+    op->object.request(op);
+  }
+  waiting_ops.insert(waiting_ops.end(), op_list.begin(), op_list.end());
   counter++;
   cache_maybe_ready();
 }
@@ -381,7 +392,7 @@ extent_set ECExtentCache::Op::get_pin_eset(uint64_t alignment) const {
   return eset;
 }
 
-ECExtentCache::Op::Op(GenContextURef<shard_extent_map_t &> &&cache_ready_cb,
+ECExtentCache::Op::Op(GenContextURef<OpRef &> &&cache_ready_cb,
   Object &object,
   std::optional<shard_extent_set_t> const &to_read,
   shard_extent_set_t const &write,
@@ -390,6 +401,7 @@ ECExtentCache::Op::Op(GenContextURef<shard_extent_map_t &> &&cache_ready_cb,
   object(object),
   reads(to_read),
   writes(write),
+  result(&object.sinfo),
   invalidates_cache(invalidates_cache),
   projected_size(projected_size),
   cache_ready_cb(std::move(cache_ready_cb))
