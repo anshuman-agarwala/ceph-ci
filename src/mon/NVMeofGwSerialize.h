@@ -453,6 +453,9 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
   if (HAVE_FEATURE(features, NVMEOFHA)) {
     version = 2;
   }
+  if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
+    version = 3;
+  }
   ENCODE_START(version, version, bl);
   encode ((uint32_t)gws.size(), bl); // number of gws in the group
   for (auto& gw : gws) {
@@ -496,7 +499,10 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
       }
     }
     encode(gw.second.nonce_map, bl, features);
-    gw.second.addr_vect.encode(bl, CEPH_FEATURES_ALL);
+    if(version >= 3) {
+      dout(10) << "encode addr_vect" << dendl;
+      gw.second.addr_vect.encode(bl, CEPH_FEATURES_ALL);
+    }
     encode(gw.second.beacon_index, bl);
   }
   ENCODE_FINISH(bl);
@@ -506,8 +512,8 @@ inline void decode(
   NvmeGwMonStates& gws, ceph::buffer::list::const_iterator &bl) {
   gws.clear();
   uint32_t num_created_gws;
-  DECODE_START(2, bl);
-  dout(20) << "decode NvmeGwMonStates. struct_v: " << struct_v << dendl;
+  DECODE_START(3, bl);
+  dout(10) << "decode NvmeGwMonStates. struct_v: " << struct_v << dendl;
   decode(num_created_gws, bl);
   dout(20) << "decode NvmeGwMonStates. num gws  " << num_created_gws << dendl;
   std::set<uint32_t> created_anagrps;
@@ -579,7 +585,9 @@ inline void decode(
       }
     }
     decode(gw_created.nonce_map, bl);
-    gw_created.addr_vect.decode(bl);
+    if (struct_v >= 3) {
+      gw_created.addr_vect.decode(bl);
+    }
     decode(gw_created.beacon_index, bl);
     gws[gw_name] = gw_created;
   }

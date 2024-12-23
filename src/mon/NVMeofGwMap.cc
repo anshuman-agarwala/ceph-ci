@@ -83,11 +83,13 @@ int NVMeofGwMap::cfg_add_gw(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key)
 {
   std::set<NvmeAnaGrpId> allocated;
-  auto  gw_epoch_it = gw_epoch.find(group_key);
-  if (gw_epoch_it == gw_epoch.end()) {
-      gw_epoch[group_key] = 0;
+  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {
+    auto  gw_epoch_it = gw_epoch.find(group_key);
+    if (gw_epoch_it == gw_epoch.end()) {
+      gw_epoch[group_key] = epoch;
       dout(4) << "Allocated first gw_epoch : group_key "
-        << group_key << " epoch " << gw_epoch[group_key] << dendl;
+          << group_key << " epoch " << gw_epoch[group_key] << dendl;
+    }
   }
   for (auto& itr: created_gws[group_key]) {
     allocated.insert(itr.second.ana_grp_id);
@@ -237,9 +239,11 @@ void  NVMeofGwMap::gw_performed_startup(const NvmeGwId &gw_id,
 
 void NVMeofGwMap::increment_gw_epoch( const NvmeGroupKey& group_key)
 {
-  gw_epoch[group_key] ++ ;
-  dout(4) << "incremented epoch of " << group_key
-       << " " << gw_epoch[group_key] << dendl;
+  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {
+    gw_epoch[group_key] ++ ;
+    dout(4) << "incremented epoch of " << group_key
+           << " " << gw_epoch[group_key] << dendl;
+  }
 }
 
 int NVMeofGwMap::get_num_namespaces(const NvmeGwId &gw_id,
