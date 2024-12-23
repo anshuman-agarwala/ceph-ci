@@ -145,23 +145,30 @@ public:
 
   void encode(ceph::buffer::list &bl, uint64_t features) const {
     using ceph::encode;
-    ENCODE_START(1, 1, bl);
+    uint8_t version = 1;//ENCODE_START(1, 1, bl);
+    if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
+       version = 2;
+    }
+    ENCODE_START(version, version, bl);
     encode(epoch, bl);// global map epoch
-
     encode(created_gws, bl, features); //Encode created GWs
     encode(fsm_timers, bl, features);
-    encode(gw_epoch, bl);
+    if (version >= 2) {
+      encode(gw_epoch, bl);
+    }
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
+    //dout(10) << "decode start(Root) struct_v: " << struct_v << dendl;
     decode(epoch, bl);
-
     decode(created_gws, bl);
     decode(fsm_timers, bl);
-    decode(gw_epoch, bl);
+    if (struct_v >= 2) {
+      decode(gw_epoch, bl);
+    }
     DECODE_FINISH(bl);
   }
 
