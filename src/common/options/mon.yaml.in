@@ -94,8 +94,7 @@ options:
 - name: mon_nvmeofgw_delete_grace
   type: secs
   level: advanced
-  desc: Period in seconds after NVMeoF gateway is in deleting state to raising health
-    check warning 
+  desc: Issue NVMEOF_GATEWAY_DELETING health warning after this amount of time has elapsed 
   default: 20_min
   services:
   - mon

@@ -902,6 +902,7 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const
   list<string> singleGatewayDetail;
   list<string> gatewayDownDetail;
   list<string> gatewayInDeletingDetail;
+  dout(2) << "VALLARI_TEST: " << g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_delete_grace").count() << dendl;
   for (const auto& created_map_pair: created_gws) {
     const auto& group_key = created_map_pair.first;
     auto& group = group_key.second;
@@ -920,6 +921,10 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const
         gatewayDownDetail.push_back(ss.str());
       } else if (gw_created.availability == gw_availability_t::GW_DELETING) {
         utime_t now = ceph_clock_now();
+        dout(2) << "VALLARI_TEST: mon_nvmeofgw_delete_grace " << g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_delete_grace").count() << dendl;
+        dout(2) << "VALLARI_TEST: now " << now << dendl;;
+        dout(2) << "VALLARI_TEST: gw_created.delete_gateway_time " << gw_created.delete_gateway_time << dendl;
+        dout(2) << "VALLARI_TEST: diff " << (now - gw_created.delete_gateway_time) << dendl;
         if ((now - gw_created.delete_gateway_time) > g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_delete_grace").count()) {
           ostringstream ss;
           ss << "NVMeoF Gateway '" << gw_id << "' is in deleting state." ;
