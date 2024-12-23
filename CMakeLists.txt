@@ -19,9 +19,19 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
         STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
   else()
-    message(WARNING "CMAKE_BUILD_TYPE not specified, leaving unset because .git does NOT exist.")
-  endif()
+    message(WARNING "CMAKE_BUILD_TYPE not specified, setting to Release because .git does NOT exist.")
+    set(default_build_type "Release")
+    set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+        STRING "BUILD_TYPE is Release" FORCE)
+    endif()
+else()
+    message(WARNING "CMAKE_BUILD_TYPE was specified, setting to empty string")
+    set(default_build_type "")
+    set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+        STRING "BUILD_TYPE is empty" FORCE)
+    endif()
 endif()
+message(STATUS "CMAKE_BUILD_TYPE selected: ${CMAKE_BUILD_TYPE}")
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
