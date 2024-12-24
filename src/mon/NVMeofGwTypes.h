@@ -123,9 +123,7 @@ struct NvmeGwMonState {
   bool performed_full_startup;
   // gateway susbsystem and their state machine states
   BeaconSubsystems subsystems;
-  NvmeAnaNonceMap nonce_map;
-
-  utime_t delete_gateway_time;
+  NvmeAnaNonceMap nonce_map; 
 
   // state machine states per ANA group
   SmState sm_state;

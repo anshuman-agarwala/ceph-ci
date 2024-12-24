@@ -71,6 +71,7 @@ public:
   void handle_gw_performing_fast_reboot(const NvmeGwId &gw_id,
        const NvmeGroupKey& group_key, bool &map_modified);
 private:
+  std::map<NvmeGroupKey, std::map<NvmeGwId, utime_t>> gateways_delete_time;
   int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   int  do_erase_gw_id(const NvmeGwId &gw_id,
       const NvmeGroupKey& group_key);
@@ -144,7 +145,7 @@ public:
     DECODE_FINISH(bl);
   }
 
-  void get_health_checks(health_check_map_t *checks) const;
+  void get_health_checks(health_check_map_t *checks);
 };
 
 #include "NVMeofGwSerialize.h"
