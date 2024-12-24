@@ -921,17 +921,20 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks)
         ss << "NVMeoF Gateway '" << gw_id << "' is unavailable." ;
         gatewayDownDetail.push_back(ss.str());
       } else if (gw_created.availability == gw_availability_t::GW_DELETING) {
+        dout(2) << "VALLARI_TEST: GW_DELETING gateway. group_key: " << group_key << ", gw_id: " << gw_id << dendl;
+        dout(2) << "VALLARI_TEST: gateways_delete_time " << gateways_delete_time << dendl;
         deleting_gateways++;
+        dout(2) << "VALLARI_TEST: deleting_gateways " << deleting_gateways << dendl;
         utime_t now = ceph_clock_now();
         dout(2) << "VALLARI_TEST: mon_nvmeofgw_delete_grace " << g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_delete_grace").count() << dendl;
         dout(2) << "VALLARI_TEST: now " << now << dendl;
         auto group_it = gateways_delete_time.find(group_key);
         if (group_it != gateways_delete_time.end()) {
-          dout(2) << "VALLARI_TEST: found the group!" << dendl;
+          dout(2) << "VALLARI_TEST: found the group! " << dendl;
           auto& gw_map = group_it->second;
           auto gw_it = gw_map.find(gw_id);
           if (gw_it != gw_map.end()) {
-            dout(2) << "VALLARI_TEST: found the gw!" << dendl;
+            dout(2) << "VALLARI_TEST: found the gw! " << dendl;
             utime_t delete_time = gw_it->second;
             dout(2) << "VALLARI_TEST: delete_time " << delete_time << dendl;
             dout(2) << "VALLARI_TEST: diff " << (now - delete_time) << dendl;
@@ -946,7 +949,9 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks)
     }
   }
   if (deleting_gateways == 0) {
-    // no gateway in GW_DELETING state, flush gateways_delete_time 
+    // no gateway in GW_DELETING state, flush gateways_delete_time
+    dout(2) << "VALLARI_TEST: deleting_gateways " << deleting_gateways << dendl;
+    dout(2) << "VALLARI_TEST: clearing gateways_delete_time " << gateways_delete_time << dendl; 
     gateways_delete_time.clear();
   }
 
