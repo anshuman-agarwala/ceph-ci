@@ -132,6 +132,7 @@ public:
 
     encode(created_gws, bl, features); //Encode created GWs
     encode(fsm_timers, bl, features);
+    encode(gateways_delete_time, bl, features);
     ENCODE_FINISH(bl);
   }
 
@@ -142,6 +143,7 @@ public:
 
     decode(created_gws, bl);
     decode(fsm_timers, bl);
+    decode(gateways_delete_time, bl);
     DECODE_FINISH(bl);
   }
 
