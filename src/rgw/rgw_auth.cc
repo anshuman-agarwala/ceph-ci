@@ -296,7 +296,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
 
     auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override {
       // noop, this user info was passed in on construction
-      return nullptr;
+      return std::unique_ptr<rgw::sal::User>();
     }
 
     void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const {
