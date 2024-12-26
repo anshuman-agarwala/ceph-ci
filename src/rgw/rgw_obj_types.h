@@ -18,6 +18,7 @@
  * contexts (e.g., rgw_sal.h, rgw_common.h) */
 
 #pragma once
+#pragma clang diagnostic ignored "-Wvla-cxx-extension"
 
 #include <fmt/format.h>
 
