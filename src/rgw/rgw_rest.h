@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #pragma once
+#pragma clang diagnostic ignored "-Wvla-cxx-extension"
 
 #define TIME_BUF_SIZE 128
 

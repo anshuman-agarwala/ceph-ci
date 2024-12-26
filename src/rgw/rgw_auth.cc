@@ -188,7 +188,8 @@ int load_account_and_policies(const DoutPrefixProvider* dpp,
 
 static auto transform_old_authinfo(const RGWUserInfo& user,
                                    std::optional<RGWAccountInfo> account,
-                                   std::vector<IAM::Policy> policies)
+                                   std::vector<IAM::Policy> policies,
+                                   sal::Driver* driver)
   -> std::unique_ptr<rgw::auth::Identity>
 {
   /* This class is not intended for public use. Should be removed altogether
@@ -198,6 +199,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
     /* For this particular case it's OK to use rgw_user structure to convey
      * the identity info as this was the policy for doing that before the
      * new auth. */
+    sal::Driver* driver;
     const rgw_user id;
     const std::string display_name;
     const std::string path;
@@ -208,14 +210,16 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
   public:
     DummyIdentityApplier(const RGWUserInfo& user,
                          std::optional<RGWAccountInfo> account,
-                         std::vector<IAM::Policy> policies)
+                         std::vector<IAM::Policy> policies,
+                         sal::Driver* driver)
       : id(user.user_id),
         display_name(user.display_name),
         path(user.path),
         is_admin(user.admin),
         type(user.type),
         account(std::move(account)),
-        policies(std::move(policies))
+        policies(std::move(policies)),
+        driver(driver)
     {}
 
     ACLOwner get_aclowner() const {
@@ -296,7 +300,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
 
     auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override {
       // noop, this user info was passed in on construction
-      return nullptr;
+      return driver->get_user(id);
     }
 
     void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const {
@@ -307,7 +311,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
   };
 
   return std::make_unique<DummyIdentityApplier>(
-      user, std::move(account), std::move(policies));
+      user, std::move(account), std::move(policies), driver);
 }
 
 auto transform_old_authinfo(const DoutPrefixProvider* dpp,
@@ -328,7 +332,7 @@ auto transform_old_authinfo(const DoutPrefixProvider* dpp,
     return tl::unexpected(r);
   }
 
-  return transform_old_authinfo(info, std::move(account), std::move(policies));
+  return transform_old_authinfo(info, std::move(account), std::move(policies), driver);
 }
 
 } /* namespace auth */
@@ -523,7 +527,7 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
 
       /* Account used by a given RGWOp is decoupled from identity employed
        * in the authorization phase (RGWOp::verify_permissions). */
-      s->user = applier->load_acct_info(dpp)->clone();
+      s->user = applier->load_acct_info(dpp);
       s->perm_mask = applier->get_perm_mask();
 
       /* This is the single place where we pass req_state as a pointer
@@ -1124,14 +1128,14 @@ void rgw::auth::LocalApplier::write_ops_log_entry(rgw_log_entry& entry) const
 }
 
 rgw::auth::LocalApplier::LocalApplier(CephContext* const cct,
-                                      std::unique_ptr<rgw::sal::User>* user,
+                                      std::unique_ptr<rgw::sal::User> user,
                                       std::optional<RGWAccountInfo> account,
                                       std::vector<IAM::Policy> policies,
                                       std::string subuser,
                                       const std::optional<uint32_t>& perm_mask,
                                       const std::string access_key_id)
-  : user_info(user->get()->get_info()),
-    user(std::move(*user)),
+  : user_info(user->get_info()),
+    user(std::move(user)),
     account(std::move(account)),
     policies(std::move(policies)),
     subuser(std::move(subuser)),
@@ -1289,7 +1293,7 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     std::unique_ptr<rgw::sal::User> user = s->user->clone();
     user->get_info() = user_info;
     auto apl = \
-      apl_factory->create_apl_local(cct, s, &user, std::nullopt, {},
+      apl_factory->create_apl_local(cct, s, std::move(user), std::nullopt, {},
                                     rgw::auth::LocalApplier::NO_SUBUSER,
                                     std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
     return result_t::grant(std::move(apl));

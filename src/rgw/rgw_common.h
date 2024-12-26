@@ -15,6 +15,7 @@
  */
 
 #pragma once
+#pragma clang diagnostic ignored "-Wvla-cxx-extension"
 
 #include <array>
 #include <cstdint>
