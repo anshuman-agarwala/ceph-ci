@@ -706,7 +706,7 @@ public:
   static const std::string NO_ACCESS_KEY;
 
   LocalApplier(CephContext* const cct,
-               std::unique_ptr<rgw::sal::User>* user,
+               std::unique_ptr<rgw::sal::User> user,
                std::optional<RGWAccountInfo> account,
                std::vector<IAM::Policy> policies,
                std::string subuser,
@@ -744,7 +744,7 @@ public:
     virtual ~Factory() {}
     virtual aplptr_t create_apl_local(CephContext* cct,
                                       const req_state* s,
-                                      std::unique_ptr<rgw::sal::User>* user,
+                                      std::unique_ptr<rgw::sal::User> user,
                                       std::optional<RGWAccountInfo> account,
                                       std::vector<IAM::Policy> policies,
                                       const std::string& subuser,
