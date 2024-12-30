@@ -917,11 +917,15 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks) const
         ss << "NVMeoF Gateway '" << gw_id << "' is unavailable." ;
         gatewayDownDetail.push_back(ss.str());
       } else if (gw_created.availability == gw_availability_t::GW_CREATED) {
+        dout(2) << "VALLARI_TEST: created state gateway: " << gw_id << dendl;
         const BeaconSubsystems& subsystems = gw_created.subsystems;
         if (subsystems.size() != 0) {
+          dout(2) << "VALLARI_TEST: subsystems detected, this many: " << subsystems.size() << dendl;
           for (auto &subsys: subsystems) {
+            dout(2) << "VALLARI_TEST: subsystems ns count: " << subsys.listeners.size() << dendl;
             if (subsys.listeners.size()) {
-              // subsystems and listener exists 
+              // subsystems and listener exists
+              dout(2) << "VALLARI_TEST: subsystems and listener exists! " << dendl; 
               ostringstream ss;
               ss << "NVMeoF Gateway '" << gw_id << "' is in unexpected CREATED state." ;
               gatewayCreatedWrnDetail.push_back(ss.str());
