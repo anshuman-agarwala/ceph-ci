@@ -83,6 +83,7 @@ public:
   void check_sub(Subscription *sub);
 
 private:
+  std::map<NvmeGroupKey, std::map<NvmeGwId, utime_t>> gws_deleting_time;
   void synchronize_last_beacon();
   void process_gw_down(const NvmeGwId &gw_id,
      const NvmeGroupKey& group_key, bool &propose_pending,

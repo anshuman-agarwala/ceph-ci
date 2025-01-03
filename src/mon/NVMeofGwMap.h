@@ -70,8 +70,7 @@ public:
     NvmeAnaGrpId anagrpid, uint8_t value);
   void handle_gw_performing_fast_reboot(const NvmeGwId &gw_id,
        const NvmeGroupKey& group_key, bool &map_modified);
-private:
-  std::map<NvmeGroupKey, std::map<NvmeGwId, utime_t>> deleting_gws_time;
+private: 
   int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   int  do_erase_gw_id(const NvmeGwId &gw_id,
       const NvmeGroupKey& group_key);
@@ -132,7 +131,6 @@ public:
 
     encode(created_gws, bl, features); //Encode created GWs
     encode(fsm_timers, bl, features);
-    encode(deleting_gws_time, bl, features);
     ENCODE_FINISH(bl);
   }
 
@@ -143,7 +141,6 @@ public:
 
     decode(created_gws, bl);
     decode(fsm_timers, bl);
-    decode(deleting_gws_time, bl);
     DECODE_FINISH(bl);
   }
 
