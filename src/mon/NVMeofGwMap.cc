@@ -172,7 +172,7 @@ int NVMeofGwMap::cfg_delete_gw(
             << state.availability  << dendl;
         state.subsystems.clear();//ignore subsystems of this GW
         utime_t now = ceph_clock_now();
-        gws_deleting_time[group_key][gw_id] = now;
+        mon->nvmegwmon()->gws_deleting_time[group_key][gw_id] = now;
         return 0;
       }
     }
@@ -923,6 +923,7 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks)
         deleting_gateways++;
         utime_t now = ceph_clock_now();
         bool found_deleting_time = false;
+        auto gws_deleting_time = mon->nvmegwmon()->gws_deleting_time;
         auto group_it = gws_deleting_time.find(group_key);
         if (group_it != gws_deleting_time.end()) {
           auto& gw_map = group_it->second;
@@ -939,7 +940,7 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks)
         }
         if (!found_deleting_time) {
           ostringstream ss;
-          dout(20) << "Gateway's deleting time not found, triggering NVMEOF_GATEWAY_DELETING now.";
+          dout(20) << "Gateway's deleting time not found, triggering NVMEOF_GATEWAY_DELETING now." << dendl;
           ss << "NVMeoF Gateway '" << gw_id << "' is in deleting state.";
           gatewayInDeletingDetail.push_back(ss.str());
         }
@@ -948,7 +949,7 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks)
   }
   if (deleting_gateways == 0) {
     // no gateway in GW_DELETING state currently, flush old gws_deleting_time
-    gws_deleting_time.clear();
+    mon->nvmegwmon()->gws_deleting_time.clear();
   }
 
   if (!singleGatewayDetail.empty()) {
