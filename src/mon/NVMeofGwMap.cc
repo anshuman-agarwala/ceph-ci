@@ -173,6 +173,7 @@ int NVMeofGwMap::cfg_delete_gw(
         state.subsystems.clear();//ignore subsystems of this GW
         utime_t now = ceph_clock_now();
         mon->nvmegwmon()->gws_deleting_time[group_key][gw_id] = now;
+        dout(2) << "VALLARI_TEST"<< gw_id  << " gws_deleting_time: " << mon->nvmegwmon()->gws_deleting_time << dendl;
         return 0;
       }
     }
@@ -925,12 +926,17 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks)
         bool found_deleting_time = false;
         auto gws_deleting_time = mon->nvmegwmon()->gws_deleting_time;
         auto group_it = gws_deleting_time.find(group_key);
+        dout(2) << "VALLARI_TEST: gateway in deleting state: gws_deleting_time " << gws_deleting_time << dendl;
         if (group_it != gws_deleting_time.end()) {
+          dout(2) << "VALLARI_TEST: found the group!" << dendl;
           auto& gw_map = group_it->second;
           auto gw_it = gw_map.find(gw_id);
           if (gw_it != gw_map.end()) {
+            dout(2) << "VALLARI_TEST: found the gw! " << dendl;
             found_deleting_time = true;
             utime_t delete_time = gw_it->second;
+            dout(2) << "VALLARI_TEST: delete_time " << delete_time << dendl;
+            dout(2) << "VALLARI_TEST: diff " << (now - delete_time) << dendl;
             if ((now - delete_time) > g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_delete_grace").count()) {
               ostringstream ss;
               ss << "NVMeoF Gateway '" << gw_id << "' is in deleting state.";
@@ -939,6 +945,7 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks)
           }
         }
         if (!found_deleting_time) {
+          dout(2) << "VALLARI_TEST: gateway not found " << found_deleting_time << dendl; 
           ostringstream ss;
           dout(20) << "Gateway's deleting time not found, triggering NVMEOF_GATEWAY_DELETING now." << dendl;
           ss << "NVMeoF Gateway '" << gw_id << "' is in deleting state.";
@@ -948,6 +955,8 @@ void NVMeofGwMap::get_health_checks(health_check_map_t *checks)
     }
   }
   if (deleting_gateways == 0) {
+    dout(2) << "VALLARI_TEST: flush gws_deleting_time " << mon->nvmegwmon()->gws_deleting_time << dendl;
+    dout(2) << "VALLARI_TEST: deleting_gateways " << deleting_gateways << dendl;
     // no gateway in GW_DELETING state currently, flush old gws_deleting_time
     mon->nvmegwmon()->gws_deleting_time.clear();
   }
