@@ -124,10 +124,7 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
   }
 
   hobject_t source;
-  if (op.has_source(&source) || op.is_delete()) {
-    // Note: truncate invaltations are handled by the cache itself.
-    invalidates_cache = true;
-  }
+  invalidates_cache = op.has_source(&source) || op.is_delete();
 
   /* If we are truncating, then we need to over-write the new end to
    * the end of that page with zeros. Everything after that will get
