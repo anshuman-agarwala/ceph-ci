@@ -232,7 +232,7 @@ int Dumper::undump(const char *dump_file, bool force)
     return r;
   } else if (r == 0) {
     //Empty file read
-    cout << "No-op since empty journal dump file " << dump_file << std::endl;
+    derr << "No-op since empty journal dump file: " << dump_file << dendl;
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return r;
   }
