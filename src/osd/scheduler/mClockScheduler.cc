@@ -129,7 +129,6 @@ mClockScheduler::mClockScheduler(CephContext *cct,
     is_rotational(is_rotational),
     cutoff_priority(cutoff_priority),
     monc(monc),
-    logger(nullptr),
     scheduler(
       std::bind(&mClockScheduler::ClientRegistry::get_info,
                 &client_registry,
@@ -143,7 +142,6 @@ mClockScheduler::mClockScheduler(CephContext *cct,
   set_config_defaults_from_profile();
   client_registry.update_from_config(
     cct->_conf, osd_bandwidth_capacity_per_shard);
-
   if (init_perfcounter) {
     _init_logger();
   }
@@ -699,7 +697,6 @@ mClockScheduler::~mClockScheduler()
 {
   cct->_conf.remove_observer(this);
   if (logger) {
-    cct->get_perfcounters_collection()->remove(logger);
     delete logger;
     logger = nullptr;
   }
