@@ -392,6 +392,8 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
+        @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof host list")
         @map_collection(
             model.Host,
             pick="hosts",
@@ -400,7 +402,6 @@ else:
             if i.allow_any_host
             else o,
         )
-        @handle_nvmeof_error
         def list(self, nqn: str, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.list_hosts(
                 NVMeoFClient.pb2.list_hosts_req(subsystem=nqn)
@@ -414,8 +415,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @empty_response
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof host add")
+        @empty_response
         def create(self, nqn: str, host_nqn: str, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.add_host(
                 NVMeoFClient.pb2.add_host_req(subsystem_nqn=nqn, host_nqn=host_nqn)
@@ -429,8 +431,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @empty_response
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof host delete")
+        @empty_response
         def delete(self, nqn: str, host_nqn: str, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.remove_host(
                 NVMeoFClient.pb2.remove_host_req(subsystem_nqn=nqn, host_nqn=host_nqn)
