@@ -449,8 +449,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @map_collection(model.Connection, pick="connections")
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof connection list")
+        @map_collection(model.Connection, pick="connections")
         def list(self, nqn: str, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.list_connections(
                 NVMeoFClient.pb2.list_connections_req(subsystem=nqn)
