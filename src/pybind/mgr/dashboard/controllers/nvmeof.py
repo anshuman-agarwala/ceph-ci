@@ -72,7 +72,7 @@ else:
             },
         )
         @handle_nvmeof_error
-        @NvmeofCLICommand("nvmeof subsystem list")
+        @NvmeofCLICommand("nvmeof subsystem get")
         @map_model(model.Subsystem, first="subsystems")
         def get(self, nqn: str, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.list_subsystems(

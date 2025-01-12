@@ -57,7 +57,7 @@ class NvmeofCLICommand(CLICommand):
              inbuf: Optional[str] = None) -> HandleCommandResult:
         try:
             ret = super().call(mgr, cmd_dict, inbuf)
-            if not ret:
+            if ret is None:
                 ret = ''
             format  = cmd_dict.get('format')
             if format == 'json' or not format:
