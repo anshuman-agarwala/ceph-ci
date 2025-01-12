@@ -12,6 +12,7 @@ from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, Param, ReadPermission, \
     RESTController, UIRouter
+from ..services.nvmeof_cli import NvmeofCLICommand
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ else:
         @EndpointDoc("List all NVMeoF subsystems")
         @map_collection(model.Subsystem, pick="subsystems")
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof subsystem list")
         def list(self, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.list_subsystems(
                 NVMeoFClient.pb2.list_subsystems_req()
