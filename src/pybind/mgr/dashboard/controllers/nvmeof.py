@@ -31,8 +31,9 @@ else:
     @APIDoc("NVMe-oF Gateway Management API", "NVMe-oF Gateway")
     class NVMeoFGateway(RESTController):
         @EndpointDoc("Get information about the NVMeoF gateway")
-        @map_model(model.GatewayInfo)
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof gw info")
+        @map_model(model.GatewayInfo)
         def list(self, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.get_gateway_info(
                 NVMeoFClient.pb2.get_gateway_info_req()
@@ -55,9 +56,9 @@ else:
     @APIDoc("NVMe-oF Subsystem Management API", "NVMe-oF Subsystem")
     class NVMeoFSubsystem(RESTController):
         @EndpointDoc("List all NVMeoF subsystems")
-        @map_collection(model.Subsystem, pick="subsystems")
         @handle_nvmeof_error
         @NvmeofCLICommand("nvmeof subsystem list")
+        @map_collection(model.Subsystem, pick="subsystems")
         def list(self, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.list_subsystems(
                 NVMeoFClient.pb2.list_subsystems_req()
@@ -70,8 +71,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @map_model(model.Subsystem, first="subsystems")
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof subsystem list")
+        @map_model(model.Subsystem, first="subsystems")
         def get(self, nqn: str, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.list_subsystems(
                 NVMeoFClient.pb2.list_subsystems_req(subsystem_nqn=nqn)
@@ -86,8 +88,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @empty_response
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof subsystem add")
+        @empty_response
         def create(self, nqn: str, enable_ha: bool, max_namespaces: int = 1024,
                    gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.create_subsystem(
@@ -104,8 +107,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @empty_response
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof subsystem delete")
+        @empty_response
         def delete(self, nqn: str, force: Optional[str] = "false", gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.delete_subsystem(
                 NVMeoFClient.pb2.delete_subsystem_req(
