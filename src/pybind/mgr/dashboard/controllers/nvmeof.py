@@ -213,8 +213,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @map_collection(model.Namespace, pick="namespaces")
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof ns list")
+        @map_collection(model.Namespace, pick="namespaces")
         def list(self, nqn: str, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.list_namespaces(
                 NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn)
@@ -228,8 +229,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @map_model(model.Namespace, first="namespaces")
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof ns get")
+        @map_model(model.Namespace, first="namespaces")
         def get(self, nqn: str, nsid: str, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.list_namespaces(
                 NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn, nsid=int(nsid))
@@ -245,8 +247,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @map_model(model.NamespaceIOStats)
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof ns get_io_stats")
+        @map_model(model.NamespaceIOStats)
         def io_stats(self, nqn: str, nsid: str, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.namespace_get_io_stats(
                 NVMeoFClient.pb2.namespace_get_io_stats_req(
@@ -266,8 +269,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @map_model(model.NamespaceCreation)
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof ns add")
+        @map_model(model.NamespaceCreation)
         def create(
             self,
             nqn: str,
@@ -369,8 +373,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @empty_response
         @handle_nvmeof_error
+        @NvmeofCLICommand("nvmeof ns delete")
+        @empty_response
         def delete(self, nqn: str, nsid: str, gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.namespace_delete(
                 NVMeoFClient.pb2.namespace_delete_req(subsystem_nqn=nqn, nsid=int(nsid))
