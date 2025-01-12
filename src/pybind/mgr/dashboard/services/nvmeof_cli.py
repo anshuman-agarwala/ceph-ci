@@ -57,9 +57,11 @@ class NvmeofCLICommand(CLICommand):
              inbuf: Optional[str] = None) -> HandleCommandResult:
         try:
             ret = super().call(mgr, cmd_dict, inbuf)
+            if not ret:
+                ret = ''
             format  = cmd_dict.get('format')
             if format == 'json' or not format:
-                out = json.dumps(ret)
+                out = json.dumps(ret)   
             elif format == 'yaml':
                 out = yaml.dump(json.loads(ret)) 
             else:
