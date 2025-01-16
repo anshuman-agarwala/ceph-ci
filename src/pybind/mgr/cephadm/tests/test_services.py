@@ -461,6 +461,7 @@ conn_retries = 10
 transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
+iobuf_options = {iobuf_options}
 
 [monitor]
 timeout = 1.0\n"""
