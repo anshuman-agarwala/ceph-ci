@@ -57,9 +57,9 @@ public:
    * check_sub for this logic.
    *
    * Map mutators generally need to invoke increment_gw_epoch(group_key) when
-   * updating the map with a change affeecting gws in group_key.
+   * updating the map with a change affecting gws in group_key.
    */
-  std::map<NvmeGroupKey, epoch_t>      gw_epoch;
+  std::map<NvmeGroupKey, epoch_t> gw_epoch;
   // epoch for synchronization of GWs belong to the same  Group & Pool
 
   void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
@@ -86,7 +86,7 @@ public:
     NvmeAnaGrpId anagrpid, uint8_t value);
   void handle_gw_performing_fast_reboot(const NvmeGwId &gw_id,
        const NvmeGroupKey& group_key, bool &map_modified);
-  void  gw_performed_startup(const NvmeGwId &gw_id,
+  void gw_performed_startup(const NvmeGwId &gw_id,
        const NvmeGroupKey& group_key, bool &propose_pending);
 private:
   int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
@@ -151,6 +151,7 @@ public:
     }
     ENCODE_START(version, version, bl);
     encode(epoch, bl);// global map epoch
+
     encode(created_gws, bl, features); //Encode created GWs
     encode(fsm_timers, bl, features);
     if (version >= 2) {

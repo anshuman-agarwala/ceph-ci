@@ -21,6 +21,7 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix *_dout << "nvmeofgw " << __PRETTY_FUNCTION__ << " "
+
 using std::string;
 
 void NVMeofGwMon::init()
@@ -43,10 +44,10 @@ void NVMeofGwMon::synchronize_last_beacon()
 	   << " active " << is_active()  << dendl;
   // Initialize last_beacon to identify transitions of available
   // GWs to unavailable state
-  for ( auto& created_map_pair: map.created_gws) {
-    const auto& group_key = created_map_pair.first;
+  for (auto &created_map_pair: map.created_gws) {
+    const auto &group_key = created_map_pair.first;
     NvmeGwMonStates& gw_created_map = created_map_pair.second;
-    for ( auto& gw_created_pair: gw_created_map) {
+    for (auto& gw_created_pair: gw_created_map) {
       auto& gw_id = gw_created_pair.first;
       if (gw_created_pair.second.availability ==
 	  gw_availability_t::GW_AVAILABLE) {
@@ -213,7 +214,7 @@ void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
 
   if (version != map.epoch) {
     dout(10) << " NVMeGW loading version " << version
-	     << " " << map.epoch << dendl;
+             << " " << map.epoch << dendl;
     bufferlist bl;
     int err = get_version(version, bl);
     ceph_assert(err == 0);
@@ -236,8 +237,8 @@ bool NVMeofGwMon::get_gw_by_addr(const entity_addr_t &sub_addr,
      NvmeGwMonStates& gw_created_map = created_map_pair.second;
      for (auto& gw_created_pair: gw_created_map) {
        gw_id = gw_created_pair.first;
-       if ( (gw_created_pair.second.availability !=
-          gw_availability_t::GW_CREATED ) &&
+       if ((gw_created_pair.second.availability !=
+          gw_availability_t::GW_CREATED) &&
           (gw_created_pair.second.addr_vect == entity_addrvec_t(sub_addr))) {
          dout(10) << "found gw-vect " << gw_created_pair.second.addr_vect
                << " GW " << gw_id << " group-key " << group_key <<  dendl;
@@ -248,14 +249,20 @@ bool NVMeofGwMon::get_gw_by_addr(const entity_addr_t &sub_addr,
   return false;
 }
 
-void NVMeofGwMon::check_sub_old(Subscription *sub)
+/**
+ * check_sub_unconditional
+ *
+ * Unconditionally sends the next map to the subscription without referring
+ * to the gw_epoch map.  Used until mon quorum supports NVMEOFHAMAP
+ */
+void NVMeofGwMon::check_sub_unconditional(Subscription *sub)
 {
   dout(10) << "sub->next , map-epoch " << sub->next
        << " " << map.epoch << dendl;
   if (sub->next <= map.epoch)
   {
     dout(10) << "Sending map to subscriber " << sub->session->con
-         << " " << sub->session->con->get_peer_addr() << dendl;
+             << " " << sub->session->con->get_peer_addr() << dendl;
     sub->session->con->send_message2(make_message<MNVMeofGwMap>(map));
 
     if (sub->onetime) {
@@ -268,10 +275,9 @@ void NVMeofGwMon::check_sub_old(Subscription *sub)
 
 void NVMeofGwMon::check_sub(Subscription *sub)
 {
-//  dout(10) << "sub->next , map-epoch " << sub->next   << " " << map.epoch << dendl;
   NvmeGwId gw_id;
   NvmeGroupKey group_key;
-  if(get_gw_by_addr(sub->session->con->get_peer_addr(),
+  if (get_gw_by_addr(sub->session->con->get_peer_addr(),
       gw_id, group_key)) {
     dout(10) << "sub->next(epoch) " << sub->next << " map.gw_epoch "
        << map.gw_epoch[group_key] << dendl;
@@ -306,7 +312,7 @@ void NVMeofGwMon::check_subs(bool t)
     if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHAMAP)) {
       check_sub(sub);
     } else {
-      check_sub_old(sub);
+      check_sub_unconditional(sub);
     }
   }
 }

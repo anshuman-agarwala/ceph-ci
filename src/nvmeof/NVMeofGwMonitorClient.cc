@@ -88,10 +88,9 @@ std::shared_ptr<grpc::ChannelCredentials> NVMeofGwMonitorClient::gw_creds()
 
 int NVMeofGwMonitorClient::init()
 {
-  dout(1) << dendl;
+  dout(10) << dendl;
   std::string val;
   auto args = argv_to_vec(orig_argc, orig_argv);
-  first_beacon = true;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;

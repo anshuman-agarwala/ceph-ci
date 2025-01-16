@@ -84,10 +84,10 @@ int NVMeofGwMap::cfg_add_gw(
 {
   std::set<NvmeAnaGrpId> allocated;
   if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {
-    auto  gw_epoch_it = gw_epoch.find(group_key);
+    auto gw_epoch_it = gw_epoch.find(group_key);
     if (gw_epoch_it == gw_epoch.end()) {
       gw_epoch[group_key] = epoch;
-      dout(4) << "Allocated first gw_epoch : group_key "
+      dout(10) << "Allocated first gw_epoch : group_key "
           << group_key << " epoch " << gw_epoch[group_key] << dendl;
     }
   }
@@ -230,17 +230,17 @@ int NVMeofGwMap::do_delete_gw(
 }
 
 void  NVMeofGwMap::gw_performed_startup(const NvmeGwId &gw_id,
-      const NvmeGroupKey& group_key,  bool &propose_pending)
+      const NvmeGroupKey& group_key, bool &propose_pending)
 {
   dout(4) << "GW  performed the full startup " << gw_id << dendl;
   propose_pending = true;
   increment_gw_epoch( group_key);
 }
 
-void NVMeofGwMap::increment_gw_epoch( const NvmeGroupKey& group_key)
+void NVMeofGwMap::increment_gw_epoch(const NvmeGroupKey& group_key)
 {
   if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {
-    gw_epoch[group_key] ++ ;
+    gw_epoch[group_key] ++;
     dout(4) << "incremented epoch of " << group_key
          << " " << gw_epoch[group_key] << dendl;
   }

@@ -129,8 +129,8 @@ void test_MNVMeofGwMap() {
   //dout(0) << "delete of wrong gw id" << dendl;
   //pending_map.cfg_delete_gw("wow" ,group_key);
 
-  //pending_map.cfg_delete_gw("GW3" ,group_key);
-  //dout(0) << "deleted GW3 . we should see the empty map " << pending_map << dendl;
+  pending_map.cfg_delete_gw("GW3" ,group_key);
+  dout(0) << "deleted GW3 . we should see the empty map " << pending_map << dendl;
 
 
 }
@@ -203,9 +203,9 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   // Run tests
-  //test_NVMeofGwMap();
+  test_NVMeofGwMap();
   test_MNVMeofGwMap();
   test_MNVMeofGwBeacon();
-  //test_NVMeofGwTimers();
+  test_NVMeofGwTimers();
 }
 

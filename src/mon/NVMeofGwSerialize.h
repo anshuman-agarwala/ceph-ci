@@ -499,9 +499,9 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
       }
     }
     encode(gw.second.nonce_map, bl, features);
-    if(version >= 3) {
-      dout(10) << "encode addr_vect and beacon_index" << dendl;
-      gw.second.addr_vect.encode(bl, CEPH_FEATURES_ALL);
+    if (version >= 3) {
+      dout(20) << "encode addr_vect and beacon_index" << dendl;
+      gw.second.addr_vect.encode(bl, features);
       encode(gw.second.beacon_index, bl);
     }
   }
@@ -513,7 +513,7 @@ inline void decode(
   gws.clear();
   uint32_t num_created_gws;
   DECODE_START(3, bl);
-  dout(10) << "decode NvmeGwMonStates. struct_v: " << struct_v << dendl;
+  dout(20) << "decode NvmeGwMonStates. struct_v: " << struct_v << dendl;
   decode(num_created_gws, bl);
   dout(20) << "decode NvmeGwMonStates. num gws  " << num_created_gws << dendl;
   std::set<uint32_t> created_anagrps;
@@ -586,7 +586,7 @@ inline void decode(
     }
     decode(gw_created.nonce_map, bl);
     if (struct_v >= 3) {
-      dout(10) << "decode addr_vect and beacon_index" << dendl;
+      dout(20) << "decode addr_vect and beacon_index" << dendl;
       gw_created.addr_vect.decode(bl);
       decode(gw_created.beacon_index, bl);
     }
