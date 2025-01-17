@@ -27,5 +27,9 @@ tasks:
     thrash: True
 - rbd-mirror-thrash:
     cluster: cluster1
+    min_thrash_delay: 300
+    max_thrash_delay: 600
 - rbd-mirror-thrash:
     cluster: cluster2
+    min_thrash_delay: 300
+    max_thrash_delay: 600
