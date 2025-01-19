@@ -2278,7 +2278,7 @@ void Server::early_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *trace
     if (tracedn)
       mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
 
-    set_trace_dist(reply, tracei, tracedn, mdr, true);
+    set_trace_dist(reply, tracei, tracedn, mdr);
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
@@ -2420,7 +2420,7 @@ void Server::reply_client_request(const MDRequestRef& mdr, const ref_t<MClientRe
  */
 void Server::set_trace_dist(const ref_t<MClientReply> &reply,
 			    CInode *in, CDentry *dn,
-			    const MDRequestRef& mdr, bool early_reply)
+			    const MDRequestRef& mdr)
 {
   // skip doing this for debugging purposes?
   if (g_conf()->mds_inject_traceless_reply_probability &&

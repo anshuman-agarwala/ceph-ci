@@ -3216,7 +3216,7 @@ snapid_t CInode::pick_old_inode(snapid_t snap) const
 
 void CInode::get_related_realms(std::vector<SnapRealm*>& related_realms)
 {
-  const std::vector<uint64_t>& referent_inodes = get_inode()->referent_inodes;
+  const std::vector<uint64_t>& referent_inodes = get_projected_inode()->referent_inodes;
   dout(20) << __func__ << " referent inodes of inode " << *this << " are " << std::hex << referent_inodes << dendl;
   for (const auto& ri : referent_inodes) {
     CInode *cur = mdcache->get_inode(ri);
