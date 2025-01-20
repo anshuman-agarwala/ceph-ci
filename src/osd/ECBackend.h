@@ -452,6 +452,6 @@ public:
       ScrubMap::object &o);
 
     uint64_t be_get_ondisk_size(uint64_t logical_size) const {
-    return sinfo.logical_to_next_chunk_offset(logical_size);
+    return sinfo.ro_offset_to_next_chunk_offset(logical_size);
   }
 };
