@@ -866,11 +866,12 @@ void NVMeofGwMap::fsm_handle_to_expired(
     }
   } else if (fbp_gw_state.sm_state[grpid] ==
 	     gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL) {
-    dout(4) << "Warning: Expired GW_WAIT_FAILOVER_PREPARED timer "
+    dout(4) << "Warning: Expired GW_WAIT_BLOCKLIST_CMPL timer "
 	    << "from GW, Force exit the GW " << gw_id
 	    << " ANA groupId: "<< grpid << dendl;
+    //another Trigger for GW down (failover)
+    process_gw_map_gw_down(gw_id, group_key, map_modified);
     fbp_gw_state.set_unavailable_state();
-    map_modified = true;
   }
   if (map_modified) validate_gw_map(group_key);
 }
