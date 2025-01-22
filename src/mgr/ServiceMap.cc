@@ -90,6 +90,7 @@ std::string ServiceMap::Service::get_summary() const
   //      rgw: 3 gateways active (3 hosts, 1 zone)
 
   std::map<std::string, std::set<std::string>> groupings;
+  std::map<std::string, int> groups_metadata;
   std::string type("daemon");
   int num = 0;
   for (auto& d : daemons) {
@@ -99,12 +100,17 @@ std::string ServiceMap::Service::get_summary() const
       type = p->second;
     }
     for (auto k : {std::make_pair("zone", "zone_id"),
-		   std::make_pair("host", "hostname")}) {
+		   std::make_pair("host", "hostname"),
+       std::make_pair("groups", "group") }) {
       auto p = d.second.metadata.find(k.second);
       if (p != d.second.metadata.end()) {
-	groupings[k.first].insert(p->second);
+	      groupings[k.first].insert(p->second);
+        if (k.first == "groups"){
+          groups_metadata[p->second] += 1; // p->second = group_name
+        }
       }
     }
+
   }
 
   std::ostringstream ss;
@@ -115,7 +121,19 @@ std::string ServiceMap::Service::get_summary() const
       if (i != groupings.begin()) {
 	ss << ", ";
       }
+      // TODO: if service == nvmeof and i == "host" -> skip
       ss << i->second.size() << " " << i->first << (i->second.size() ? "s" : "");
+
+      // nvmeof: 3 gateways active (2 groups: 3 in 'group_name', 3 in 'group_name')
+      if (i->first == "groups"){
+        ss << ": ";
+        for (auto grp = groups_metadata.begin(); grp != groups_metadata.end(); ++i){
+          ss << grp->second << " in '" << grp->first << "' "; 
+          if (i != groups_metadata.end()) {
+	          ss << ", ";
+          }
+        }
+      }
     }
     ss << ")";
   }
