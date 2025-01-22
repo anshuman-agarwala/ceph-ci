@@ -434,7 +434,7 @@ namespace ECUtil {
         std::set<int> shards;
         std::map<int, buffer::list> chunk_buffers;
         bufferlist bl;
-        bl.push_back(buffer::create_aligned(length, SIMD_ALIGN));
+        bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
         extent_maps[shard].insert(offset, length, bl);
       }
     }
@@ -547,8 +547,9 @@ namespace ECUtil {
    * erasure coding.  This generates all parity.
    */
   int shard_extent_map_t::encode(ErasureCodeInterfaceRef& ec_impl,
-    const HashInfoRef &hinfo,
-    uint64_t before_ro_size) {
+                                 const HashInfoRef &hinfo,
+                                 uint64_t before_ro_size,
+                                 DoutPrefixProvider *dpp) {
     std::set<int> shards;
     for (int shard : sinfo->get_parity_shards()) {
       shards.insert(shard);
@@ -559,8 +560,10 @@ namespace ECUtil {
     for (auto iter = begin_slice_iterator(); !iter.is_end(); ++iter) {
       if (!iter.is_page_aligned()) {
         rebuild_req = true;
+        if (dpp) ldpp_dout(dpp, 20) << __func__ << " Misaligned buffer: " << iter.get_bufferptrs() << dendl;
         break;
       }
+      if (dpp) ldpp_dout(dpp, 20) << __func__ << " slice: " << iter.get_bufferptrs() << dendl;
 
       int r = ec_impl->encode_chunks_ptr(shards, iter.get_bufferptrs());
       if (r) return r;
@@ -568,9 +571,8 @@ namespace ECUtil {
 
     if (rebuild_req) {
       pad_and_rebuild_to_page_align();
-      return encode(ec_impl, hinfo, before_ro_size);
+      return encode(ec_impl, hinfo, before_ro_size, dpp);
     }
-
     if (hinfo && ro_start >= before_ro_size) {
       /* NEEDS REVIEW:  The following calculates the new hinfo CRCs. This is
        *                 currently considering ALL the buffers, including the
