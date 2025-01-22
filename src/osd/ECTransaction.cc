@@ -59,7 +59,7 @@ static void encode_and_write(
   map<shard_id_t, ObjectStore::Transaction> *transactions,
   DoutPrefixProvider *dpp)
 {
-  int r = shard_extent_map.encode(ec_impl, plan.hinfo, plan.orig_size);
+  int r = shard_extent_map.encode(ec_impl, plan.hinfo, plan.orig_size, dpp);
   ceph_assert(r == 0);
 
   debug(oid, "parity", shard_extent_map, dpp);

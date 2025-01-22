@@ -630,7 +630,7 @@ public:
   void append_zeros_to_ro_offset( uint64_t ro_offset );
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
-  int encode(ErasureCodeInterfaceRef& ec_impl, const HashInfoRef &hinfo, uint64_t before_ro_size);
+  int encode(ErasureCodeInterfaceRef& ec_impl, const HashInfoRef &hinfo, uint64_t before_ro_size, DoutPrefixProvider *dpp);
   int decode(ErasureCodeInterfaceRef& ec_impl, ECUtil::shard_extent_set_t want);
   void get_buffer(int shard, uint64_t offset, uint64_t length, buffer::list &append_to) const;
   void get_shard_first_buffer(int shard, buffer::list &append_to) const;

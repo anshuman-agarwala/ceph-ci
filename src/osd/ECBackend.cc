@@ -405,7 +405,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   ceph_assert(r == 0);
   // We are never appending here, so we never need hinfo.
   op.returned_data->insert_parity_buffers();
-  r = op.returned_data->encode(ec_impl, NULL, 0);
+  r = op.returned_data->encode(ec_impl, NULL, 0, get_parent()->get_dpp());
   ceph_assert(r==0);
 
   for (auto && shard : op.missing_on_shards) {
