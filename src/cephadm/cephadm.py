@@ -69,6 +69,7 @@ from cephadmlib.context_getters import (
     get_parm,
     read_configuration_source,
 )
+from cephadmlib.coredumps import set_coredump_max_size
 from cephadmlib.exceptions import (
     ClusterAlreadyExists,
     Error,
@@ -3408,6 +3409,12 @@ def command_unit(ctx):
 ##################################
 
 
+def command_set_coredump_max_size(ctx: CephadmContext) -> None:
+    set_coredump_max_size(ctx, ctx.fsid, ctx.size)
+
+##################################
+
+
 @infer_fsid
 def command_logs(ctx):
     # type: (CephadmContext) -> None
@@ -5500,6 +5507,20 @@ def _get_parser():
         default='-',
         nargs='?',
         help='Configuration input source file',
+    )
+
+    parser_set_coredump_max_size = subparsers_orch.add_parser(
+        'set-coredump-max-size',
+        help='override coredumpctl max coredump process and external size'
+    )
+    parser_set_coredump_max_size.set_defaults(func=command_set_coredump_max_size)
+    parser_set_coredump_max_size.add_argument(
+        '--fsid',
+        help='cluster fsid'
+    )
+    parser_set_coredump_max_size.add_argument(
+        '--size',
+        help='custom max coredump size to set. Should be string including unit (e.g. 32G)'
     )
 
     parser_check_host = subparsers.add_parser(
