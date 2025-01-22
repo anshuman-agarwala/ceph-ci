@@ -762,6 +762,7 @@ class HostCache():
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_change = {}   # type: Dict[str, datetime.datetime]
         self.last_tuned_profile_update = {}  # type: Dict[str, datetime.datetime]
+        self.last_max_coredump_size_update = {}  # type: Dict[str, int]
         self.daemon_refresh_queue = []  # type: List[str]
         self.device_refresh_queue = []  # type: List[str]
         self.network_refresh_queue = []  # type: List[str]
@@ -829,6 +830,8 @@ class HostCache():
                 if 'last_tuned_profile_update' in j:
                     self.last_tuned_profile_update[host] = str_to_datetime(
                         j['last_tuned_profile_update'])
+                if 'last_max_coredump_size_update' in j:
+                    self.last_max_coredump_size_update[host] = int(j['last_max_coredump_size_update'])
                 self.registry_login_queue.add(host)
                 self.scheduled_daemon_actions[host] = j.get('scheduled_daemon_actions', {})
                 self.metadata_up_to_date[host] = j.get('metadata_up_to_date', False)
@@ -1026,6 +1029,8 @@ class HostCache():
             j['last_device_change'] = datetime_to_str(self.last_device_change[host])
         if host in self.last_tuned_profile_update:
             j['last_tuned_profile_update'] = datetime_to_str(self.last_tuned_profile_update[host])
+        if host in self.last_max_coredump_size_update:
+            j['last_max_coredump_size_update'] = self.last_max_coredump_size_update[host]
         if host in self.daemons:
             for name, dd in self.daemons[host].items():
                 j['daemons'][name] = dd.to_json()
@@ -1147,6 +1152,8 @@ class HostCache():
             del self.last_device_change[host]
         if host in self.last_tuned_profile_update:
             del self.last_tuned_profile_update[host]
+        if host in self.last_max_coredump_size_update:
+            del self.last_max_coredump_size_update[host]
         if host in self.daemon_config_deps:
             del self.daemon_config_deps[host]
         if host in self.scheduled_daemon_actions:
@@ -1423,6 +1430,25 @@ class HostCache():
         if self.last_tuned_profile_update[host] < last_profile_update:
             return True
         return False
+
+    def host_needs_max_coredump_size_update(self, host: str, size: int) -> bool:
+        # Unlike some of the other things we use this "host_needs..."
+        # setup for, we only store and check against the integer value
+        # we last set for the max size on this host. We don't care about when
+        if not self.mgr.set_coredump_max_size:
+            return False
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Cannot update max coredump size')
+            return False
+        if host not in self.last_max_coredump_size_update:
+            return True
+        if self.last_max_coredump_size_update[host] != size:
+            return True
+        return False
+
+    def update_last_max_coredump_size_last_update(self, host: str, size: int) -> None:
+        self.last_max_coredump_size_update[host] = size
+        self.save_host(host)
 
     def host_had_daemon_refresh(self, host: str) -> bool:
         """
