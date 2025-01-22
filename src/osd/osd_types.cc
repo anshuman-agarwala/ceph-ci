@@ -4940,7 +4940,7 @@ void pg_log_entry_t::decode_with_checksum(ceph::buffer::list::const_iterator& p)
 
 void pg_log_entry_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START((written_shards.empty()?14:15), 4, bl);
+  ENCODE_START((written_shards.empty()?14:15), 4, bl );
   encode(op, bl);
   encode(soid, bl);
   encode(version, bl);
