@@ -51,6 +51,27 @@ options:
   - startup
   min: 0
   max: 32
+- name: crimson_seastar_task_quota_ms
+  type: float
+  level: advanced
+  default: 0.5
+  desc: The option describes about max time (ms) between polls
+  flags:
+  - startup
+- name: crimson_seastar_idle_poll_time_us
+  type: uint
+  level: advanced
+  default: 200
+  desc: The option describes about idle polling time in microseconds
+  flags:
+  - startup
+- name: crimson_seastar_io_latency_goal_ms
+  type: float
+  level: advanced
+  default: 0.75
+  desc: The describes about max time(ms) taken by io operation
+  flags:
+  - startup
 - name: crimson_osd_stat_interval
   type: int
   level: advanced

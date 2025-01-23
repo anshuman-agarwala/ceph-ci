@@ -106,6 +106,7 @@ _get_early_config(int argc, const char *argv[])
   app_cfg.auto_handle_sigint_sigterm = false;
   seastar::app_template app(std::move(app_cfg));
   const char *bootstrap_args[] = { argv[0], "--smp", "1" };
+
   int r = app.run(
     sizeof(bootstrap_args) / sizeof(bootstrap_args[0]),
     const_cast<char**>(bootstrap_args),
@@ -131,6 +132,23 @@ _get_early_config(int argc, const char *argv[])
 	  populate_config_from_mon().get();
 	}
 
+        using OptionValue = std::variant<std::string, double, uint64_t>;
+        // Define a structure to represent each option
+        struct SeastarOption {
+          std::string option_name;                     // Command-line option name
+          std::string config_key;                      // Configuration key
+          std::optional<OptionValue> default_value;    // Optional default value
+        };
+
+        //Define a map of options with their corresponding configuration keys and default values (if applicable)
+        // In future to add an option introduce a new entry in this map with corresponding key name and value
+        const std::vector<SeastarOption> seastar_options = {
+        {"--cpuset", "crimson_seastar_cpu_cores", std::optional<OptionValue>("")},
+        {"--smp", "crimson_seastar_num_threads", std::optional<OptionValue>(static_cast<uint64_t>(0))},
+        {"--task-quota-ms", "crimson_seastar_task_quota_ms", std::optional<OptionValue>(0.5)},
+        {"--io-latency-goal-ms", "crimson_seastar_io_latency_goal_ms", std::optional<OptionValue>(0.75)},
+        {"--idle-poll-time-us", "crimson_seastar_idle_poll_time_us", std::optional<OptionValue>(static_cast<uint64_t>(200))}};
+
 	// get ceph configs
 	std::set_difference(
 	  argv, argv + argc,
@@ -143,43 +161,79 @@ _get_early_config(int argc, const char *argv[])
 	  std::begin(early_args),
 	  std::end(early_args));
 
-	if (auto found = std::find_if(
-	      std::begin(early_args),
-	      std::end(early_args),
-	      [](auto* arg) { return "--cpuset"sv == arg; });
-	    found == std::end(early_args)) {
-	  auto cpu_cores = crimson::common::get_conf<std::string>("crimson_seastar_cpu_cores");
-	  if (!cpu_cores.empty()) {
-	    // Set --cpuset based on crimson_seastar_cpu_cores config option
-	    // --smp default is one per CPU
-	    ret.early_args.emplace_back("--cpuset");
-	    ret.early_args.emplace_back(cpu_cores);
-	    ret.early_args.emplace_back("--thread-affinity");
-	    ret.early_args.emplace_back("1");
-	    logger().info("get_early_config: set --thread-affinity 1 --cpuset {}",
-	                  cpu_cores);
-	  } else {
-	    auto reactor_num = crimson::common::get_conf<uint64_t>("crimson_seastar_num_threads");
-	    if (!reactor_num) {
-	      logger().error("get_early_config: crimson_seastar_cpu_cores"
+        auto found = std::find_if(
+              std::begin(early_args),
+              std::end(early_args),
+              [](auto* arg) { return "--cpuset"sv == arg; });
+
+        bool cpuset_set = false;
+        bool smp_set = false;
+        std::optional<OptionValue> tmp_value;
+        for (const auto& option : seastar_options) {
+           std::optional<OptionValue> option_value;
+           if ((found == std::end(early_args)) && option.option_name == "--cpuset") {
+             tmp_value = crimson::common::get_conf<std::string>("crimson_seastar_cpu_cores");
+             if (std::holds_alternative<std::string>(tmp_value.value())) {
+               const std::string& str_value = std::get<std::string>(tmp_value.value());
+               if (str_value != "0-0") {
+                 cpuset_set = true;
+                 option_value = tmp_value;
+               }
+             }
+           }
+           if ((found == std::end(early_args)) && option.option_name == "--smp" && !cpuset_set) {
+             smp_set = true;
+             option_value = crimson::common::get_conf<uint64_t>("crimson_seastar_num_threads");
+             if (!option_value.has_value()) {
+               logger().error("get_early_config: crimson_seastar_cpu_cores"
                              " or crimson_seastar_num_threads"
                              " must be set");
-	      ceph_abort();
-	    }
-	    std::string smp = fmt::format("{}", reactor_num);
-	    ret.early_args.emplace_back("--smp");
-	    ret.early_args.emplace_back(smp);
-	    ret.early_args.emplace_back("--thread-affinity");
-	    ret.early_args.emplace_back("0");
-	    logger().info("get_early_config: set --thread-affinity 0 --smp {}",
-	                  smp);
+               ceph_abort();
+             }
+           }
+           if (option.option_name == "--task-quota-ms") {
+             option_value = crimson::common::get_conf<double>(option.config_key);
+           }
+           if(option.option_name == "--io-latency-goal-ms") {
+            option_value = crimson::common::get_conf<double>(option.config_key);
+           }
+           if (option.option_name == "--idle-poll-time-us") {
+            option_value = crimson::common::get_conf<uint64_t>(option.config_key);
+           }
+           if (!option_value) {
+             logger().info("get_early_config --option_name {} is skip to set "
+                           " either null or condition is not fullfill ", option.config_key);
+           } else {
+             logger().info(
+                "get_early_config --option_name {} with --option_value {} ",
+                option.config_key,
+                std::visit(
+                    [](auto&& val) -> std::string {
+                    return fmt::format("{}", val);
+                }, *option_value));
 
-	  }
-	} else {
-	  logger().error("get_early_config: --cpuset can be "
-	                 "set only using crimson_seastar_cpu_cores");
-	  ceph_abort();
-	}
+             ret.early_args.emplace_back(option.option_name);
+             std::visit([&ret](auto&& value) {
+                 using T = std::decay_t<decltype(value)>;
+                 if constexpr (std::is_same_v<T, std::string>) {
+                   // If the value is a string, add it directly
+                   ret.early_args.emplace_back(value);
+                 } else {
+                   // For other types, convert to string
+                   ret.early_args.emplace_back(std::to_string(value));
+                 }
+                }, *option_value);
+           }
+        }
+
+        if (cpuset_set) {
+          ret.early_args.emplace_back("--thread-affinity");
+          ret.early_args.emplace_back("1");
+        }
+        if (smp_set) {
+          ret.early_args.emplace_back("--thread-affinity");
+          ret.early_args.emplace_back("0");
+        }
 	return 0;
       });
     });
