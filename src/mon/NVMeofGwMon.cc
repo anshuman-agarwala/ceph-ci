@@ -518,7 +518,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 {
   auto m = op->get_req<MNVMeofGwBeacon>();
 
-  dout(10) << "availability " <<  m->get_availability()
+  dout(20) << "availability " <<  m->get_availability()
 	   << " GW : " << m->get_gw_id()
 	   << " osdmap_epoch " << m->get_last_osd_epoch()
 	   << " subsystems " << m->get_subsystems() << dendl;
@@ -572,30 +572,19 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     if (gw != group_gws.end()) {
       // it means it did not perform "exit" after failover was set by
       // NVMeofGWMon
-      /*
       if ((pending_map.created_gws[group_key][gw_id].availability ==
-	   gw_availability_t::GW_UNAVAILABLE)
-          &&
+	   gw_availability_t::GW_UNAVAILABLE) &&
 	  (pending_map.created_gws[group_key][gw_id].performed_full_startup ==
 	   false) &&
-	  avail == gw_availability_t::GW_AVAILABLE)*/ {
-	/*
-	pending_map.created_gws[group_key][gw_id].availability =
-	        gw_availability_t::GW_UNAVAILABLE;
+	  avail == gw_availability_t::GW_AVAILABLE) {
 	ack_map.created_gws[group_key][gw_id] =
 	  pending_map.created_gws[group_key][gw_id];
 	ack_map.epoch = map.epoch;
-
 	dout(4) << " Force gw to exit: Sending ack_map to GW: "
-		<< gw_id << ack_map << dendl;
-
+		<< gw_id << dendl;
 	auto msg = make_message<MNVMeofGwMap>(ack_map);
 	mon.send_reply(op, msg.detach());
 	goto false_return;
-	*/
-	dout(4) << " Force gw to exit: GW: " << gw_id << dendl;
-	process_gw_down(gw_id, group_key, propose, gw_availability_t::GW_UNAVAILABLE);
-	goto set_propose;
       }
     }
   }
