@@ -452,6 +452,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default='169.254.1.1',
             desc="Default address for RedFish API (oob management)."
         ),
+        Option(
+            'set_coredump_max_size',
+            type='bool',
+            default=True,
+            desc='Whether cephadm should use a systemd drop-in to modify the max coredump size on managed hosts'
+        ),
+        Option(
+            'coredump_max_size',
+            type='int',
+            default=32,
+            desc='Size cephadm should override the max coredump size to in Gigabytes'
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
@@ -546,6 +558,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.oob_default_addr = ''
             self.ssh_keepalive_interval = 0
             self.ssh_keepalive_count_max = 0
+            self.set_coredump_max_size = True
+            self.coredump_max_size = 0
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -2286,6 +2300,27 @@ Then run the following:
             self.log.warning(log_msg)
 
         return f'{msg}'
+
+    def set_host_coredump_max_size(self, host: str, size: int) -> None:
+        with self.async_timeout_handler(host, 'cephadm _orch set-coredump-max-size'):
+            # Note that the way we infer an fsid relies on daemons being on the
+            # host and as there may not be any present when running this we should
+            # pass this explicitly (handled by no_fsid parameter to _run_cephadm)
+            out, err, code = self.wait_async(
+                CephadmServe(self)._run_cephadm(
+                    host,
+                    cephadmNoImage,
+                    ['_orch', 'set-coredump-max-size'],
+                    ['--size', f'{str(size)}G'],
+                    no_fsid=False,
+                    error_ok=True
+                )
+            )
+        if code:
+            raise OrchestratorError(
+                f'Unable to set max coredump size on {host}\n rc: {code}\n out: {out}\n err: {err}'
+            )
+        self.cache.update_last_max_coredump_size_last_update(host, size)
 
     def get_minimal_ceph_conf(self) -> str:
         _, config, _ = self.check_mon_command({
