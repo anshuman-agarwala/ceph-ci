@@ -554,7 +554,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 		<< "database, performed full startup - Apply GW!"
 		<< gw_id << dendl;
 	 //pending_map.handle_gw_performing_fast_reboot(gw_id, group_key, propose);
-	 pending_map.created_gws[group_key][gw_id].subsystems.clear();
+	 // pending_map.created_gws[group_key][gw_id].subsystems.clear();
 	 process_gw_down(gw_id, group_key, propose, avail);
 	 LastBeacon lb = {gw_id, group_key};
 	 last_beacon[lb] = now; //Update last beacon
