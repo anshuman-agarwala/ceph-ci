@@ -362,10 +362,28 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     }
   }
 
+  // Combined subsystems
+  const auto initial_ana_state = std::make_pair(gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE, (epoch_t)0);
+  GwSubsystems combined_subsystems = new_gw_state.subsystems;
+  for (const auto& nqn_state_pair: old_gw_state.subsystems) {
+    const auto& nqn = nqn_state_pair.first;
+    auto& old_nqn_state = nqn_state_pair.second;
+
+    // The monitor might remove active subsystems from the new distributed GwSubsystems.
+    // In such cases, ensure an INACCESSIBLE state is generated for subsystems
+    // that were present in the old state but are now missing.
+    if (new_gw_state.subsystems.find(nqn) == new_gw_state.subsystems.end()) {
+      ana_state_t all_disabled(old_nqn_state.ana_state.size(), initial_ana_state);
+      NqnState    nqn_state(nqn, all_disabled);
+
+      combined_subsystems.insert({nqn, nqn_state});
+    }
+  }
+
   // Gather all state changes
   ana_info ai;
   epoch_t max_blocklist_epoch = 0;
-  for (const auto& nqn_state_pair: new_gw_state.subsystems) {
+  for (const auto& nqn_state_pair: combined_subsystems) {
     auto& sub = nqn_state_pair.second;
     const auto& nqn = nqn_state_pair.first;
     nqn_ana_states nas;
@@ -379,7 +397,6 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
        sub.ana_state.size();
 
     for (NvmeAnaGrpId  ana_grp_index = 0; ana_grp_index < ana_state_size; ana_grp_index++) {
-      const auto initial_ana_state = std::make_pair(gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE, (epoch_t)0);
       auto new_group_state = (ana_grp_index < sub.ana_state.size()) ?
 	sub.ana_state[ana_grp_index] :
 	initial_ana_state;
