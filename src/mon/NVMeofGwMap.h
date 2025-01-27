@@ -54,8 +54,9 @@ public:
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);
-  int process_gw_map_gw_down(
+  void process_gw_map_gw_down(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
+    NvmeGwMonState& fbp_gw_state,
     bool &propose_pending);
   int process_gw_map_gw_no_subsys_no_listeners(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,

@@ -111,7 +111,7 @@ void NVMeofGwMon::tick()
     auto last_beacon_time = itr.second;
     if (last_beacon_time < cutoff) {
       dout(10) << "beacon timeout for GW " << lb.gw_id << dendl;
-      pending_map.process_gw_map_gw_down(lb.gw_id, lb.group_key, propose);
+      pending_map.process_gw_map_gw_down(lb.gw_id, lb.group_key, pending_map.created_gws[lb.group_key][lb.gw_id], propose);
       _propose_pending |= propose;
       last_beacon.erase(lb);
     } else {
@@ -493,7 +493,7 @@ void NVMeofGwMon::process_gw_down(const NvmeGwId &gw_id,
   if (it != last_beacon.end()) {
     last_beacon.erase(it);
     if (avail == gw_availability_t::GW_UNAVAILABLE) {
-      pending_map.process_gw_map_gw_down(gw_id, group_key, propose_pending);
+      pending_map.process_gw_map_gw_down(gw_id, group_key, pending_map.created_gws[group_key][gw_id], propose_pending);
     } else {
       pending_map.process_gw_map_gw_no_subsys_no_listeners(gw_id, group_key, propose_pending);
     }

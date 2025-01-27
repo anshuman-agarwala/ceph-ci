@@ -282,30 +282,18 @@ int NVMeofGwMap::process_gw_map_gw_no_subsys_no_listeners(
   return rc;
 }
 
-int NVMeofGwMap::process_gw_map_gw_down(
-  const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending)
+void NVMeofGwMap::process_gw_map_gw_down(
+  const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
+  NvmeGwMonState& st, bool &propose_pending)
 {
-  int rc = 0;
-  auto& gws_states = created_gws[group_key];
-  auto  gw_state = gws_states.find(gw_id);
-  if (gw_state != gws_states.end()) {
-    dout(10) << "GW down " << gw_id << dendl;
-    auto& st = gw_state->second;
-    st.set_unavailable_state();
-    for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
-      fsm_handle_gw_down(
-	gw_id, group_key, state_itr.second,
-	state_itr.first, propose_pending);
-      state_itr.second = gw_states_per_group_t::GW_STANDBY_STATE;
-    }
-    propose_pending = true; // map should reflect that gw becames Unavailable
-    if (propose_pending) validate_gw_map(group_key);
-  } else {
-    dout(1)  << __FUNCTION__ << "ERROR GW-id was not found in the map "
-	     << gw_id << dendl;
-    rc = -EINVAL;
+  st.set_unavailable_state();
+  for (auto& state_itr: st.sm_state) {
+    fsm_handle_gw_down(
+      gw_id, group_key, state_itr.second,
+      state_itr.first, propose_pending);
+    state_itr.second = gw_states_per_group_t::GW_STANDBY_STATE;
   }
-  return rc;
+  propose_pending = true; // map should reflect that gw becames Unavailable
 }
 
 void NVMeofGwMap::process_gw_map_ka(
@@ -869,9 +857,8 @@ void NVMeofGwMap::fsm_handle_to_expired(
     dout(4) << "Warning: Expired GW_WAIT_BLOCKLIST_CMPL timer "
 	    << "from GW, Force exit the GW " << gw_id
 	    << " ANA groupId: "<< grpid << dendl;
-    //another Trigger for GW down (failover)
-    process_gw_map_gw_down(gw_id, group_key, map_modified);
-    fbp_gw_state.set_unavailable_state();
+    // another Trigger for GW down (failover)
+    process_gw_map_gw_down(gw_id, group_key, fbp_gw_state, map_modified);
   }
   if (map_modified) validate_gw_map(group_key);
 }
