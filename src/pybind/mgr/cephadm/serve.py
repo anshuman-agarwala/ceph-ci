@@ -329,6 +329,10 @@ class CephadmServe:
                 self.log.debug(f"autotuning memory for {host}")
                 self._autotune_host_memory(host)
 
+            coredump_max_size = self.mgr.coredump_max_size
+            if self.mgr.cache.host_needs_max_coredump_size_update(host, coredump_max_size):
+                self.mgr.set_host_coredump_max_size(host, coredump_max_size)
+
         refresh(self.mgr.cache.get_hosts())
 
         self._write_all_client_files()

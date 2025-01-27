@@ -23,6 +23,7 @@ ExecStart=/bin/bash {{ctx.data_dir}}/{{fsid}}/%i/unit.run
 ExecStop=-/bin/bash -c 'bash {{ctx.data_dir}}/{{fsid}}/%i/unit.stop'
 ExecStopPost=-/bin/bash {{ctx.data_dir}}/{{fsid}}/%i/unit.poststop
 KillMode=none
+LimitCORE=infinity
 Restart=on-failure
 RestartSec=10s
 TimeoutStartSec=200
