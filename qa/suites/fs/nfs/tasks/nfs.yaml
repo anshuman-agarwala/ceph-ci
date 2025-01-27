@@ -1,4 +1,9 @@
 overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 1
+        debug client: 20
   install:
     extra_system_packages:
       rpm:
