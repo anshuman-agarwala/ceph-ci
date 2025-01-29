@@ -289,6 +289,7 @@ public:
   }
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+  virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
 
   virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj,
 				 rgw::sal::Object* src_obj, struct req_state* s,
@@ -666,23 +667,32 @@ public:
       optional_yield y, const DoutPrefixProvider *dpp) override {
     return next->remove_topics(objv_tracker, y, dpp);
   }
-  int get_logging_object_name(std::string& obj_name, 
-      const std::string& prefix, 
-      optional_yield y, 
+  int get_logging_object_name(std::string& obj_name,
+      const std::string& prefix,
+      optional_yield y,
       const DoutPrefixProvider *dpp,
       RGWObjVersionTracker* objv_tracker) override {
     return next->get_logging_object_name(obj_name, prefix, y, dpp, objv_tracker);
   }
-  int set_logging_object_name(const std::string& obj_name, 
-      const std::string& prefix, 
-      optional_yield y, 
-      const DoutPrefixProvider *dpp, 
+  int set_logging_object_name(const std::string& obj_name,
+      const std::string& prefix,
+      optional_yield y,
+      const DoutPrefixProvider *dpp,
       bool new_obj,
       RGWObjVersionTracker* objv_track) override {
-    return next->set_logging_object_name(obj_name, prefix, y, dpp, new_obj, objv_track); 
+    return next->set_logging_object_name(obj_name, prefix, y, dpp, new_obj, objv_track);
+  }
+  int remove_logging_object_name(const std::string& prefix,
+      optional_yield y,
+      const DoutPrefixProvider *dpp,
+      RGWObjVersionTracker* objv_tracker) override {
+    return next->remove_logging_object_name(prefix, y, dpp, objv_tracker);
   }
   int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp)override {
     return next->commit_logging_object(obj_name, y, dpp);
+  }
+  int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override {
+    return next->remove_logging_object(obj_name, y, dpp);
   }
   int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
     return next->write_logging_object(obj_name, record, y, dpp, async_completion);

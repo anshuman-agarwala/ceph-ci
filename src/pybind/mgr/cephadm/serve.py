@@ -1129,8 +1129,8 @@ class CephadmServe:
                     dd.name()))
                 action = 'reconfig'
             elif last_deps != deps:
-                self.log.debug(f'{dd.name()} deps {last_deps} -> {deps}')
-                self.log.info(f'Reconfiguring {dd.name()} (dependencies changed)...')
+                sym_diff = set(deps).symmetric_difference(last_deps)
+                self.log.info(f'Reconfiguring {dd.name()} deps {last_deps} -> {deps} (diff {sym_diff})')
                 action = 'reconfig'
                 # we need only redeploy if secure_monitoring_stack or mgmt-gateway value has changed:
                 # TODO(redo): check if we should just go always with redeploy (it's fast enough)
@@ -1551,10 +1551,14 @@ class CephadmServe:
         """
         Remove a daemon
         """
-        (daemon_type, daemon_id) = name.split('.', 1)
+        dd = self.mgr.cache.get_daemon(name)
+        daemon_type = dd.daemon_type
+        daemon_id = dd.daemon_id
+        assert (daemon_type is not None and daemon_id is not None)
         daemon = orchestrator.DaemonDescription(
             daemon_type=daemon_type,
             daemon_id=daemon_id,
+            service_name=dd.service_name(),
             hostname=host)
 
         with set_exception_subject('service', daemon.service_id(), overwrite=True):
@@ -1562,7 +1566,6 @@ class CephadmServe:
             self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].pre_remove(daemon)
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
-            dd = self.mgr.cache.get_daemon(daemon.daemon_name)
             if dd.ports:
                 args = ['--name', name, '--force', '--tcp-ports', ' '.join(map(str, dd.ports))]
             else:
@@ -1712,7 +1715,12 @@ class CephadmServe:
                 self.log.debug('stdin: %s' % stdin)
 
             cmd = ssh.RemoteCommand(WHICH, ['python3'])
-            python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
+            try:
+                # when connection was broken/closed, retrying resets the connection
+                python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
+            except ssh.HostConnectionError:
+                python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
+
             # N.B. because the python3 executable is based on the results of the
             # which command we can not know it ahead of time and must be converted
             # into a RemoteExecutable.

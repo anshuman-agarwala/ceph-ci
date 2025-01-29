@@ -466,6 +466,8 @@ class Driver {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
+    /** Reset the temporarily restored objects which are expired */
+    virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) = 0;
 
      /** Get a @a Notification object.  Used to communicate with non-RGW daemons, such as
       * management/tracking software */
@@ -1006,20 +1008,27 @@ class Bucket {
         optional_yield y, const DoutPrefixProvider *dpp) = 0;
 
     /** Read the name of the pending bucket logging object name */
-    virtual int get_logging_object_name(std::string& obj_name, 
-        const std::string& prefix, 
-        optional_yield y, 
+    virtual int get_logging_object_name(std::string& obj_name,
+        const std::string& prefix,
+        optional_yield y,
         const DoutPrefixProvider *dpp,
         RGWObjVersionTracker* objv_tracker) = 0;
     /** Update the name of the pending bucket logging object name */
-    virtual int set_logging_object_name(const std::string& obj_name, 
-        const std::string& prefix, 
-        optional_yield y, 
-        const DoutPrefixProvider *dpp, 
+    virtual int set_logging_object_name(const std::string& obj_name,
+        const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
         bool new_obj,
+        RGWObjVersionTracker* objv_tracker) = 0;
+    /** Remove the object holding the name of the pending bucket logging object */
+    virtual int remove_logging_object_name(const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
         RGWObjVersionTracker* objv_tracker) = 0;
     /** Move the pending bucket logging object into the bucket */
     virtual int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    //** Remove the pending bucket logging object */
+    virtual int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) = 0;
     /** Write a record to the pending bucket logging object */
     virtual int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) = 0;
 

@@ -15,7 +15,7 @@ from dashboard.exceptions import DashboardException
 
 from .. import mgr
 from ..security import Scope
-from . import APIDoc, APIRouter, ReadPermission, RESTController
+from . import APIDoc, APIRouter, Endpoint, ReadPermission, RESTController, UIRouter
 
 logger = logging.getLogger('controllers.smb')
 
@@ -137,6 +137,24 @@ class SMBCluster(RESTController):
         except RuntimeError as e:
             raise DashboardException(e, component='smb')
 
+    @DeletePermission
+    @EndpointDoc("Remove an smb cluster",
+                 parameters={
+                     'cluster_id': (str, 'Unique identifier for the cluster')},
+                 responses={204: None})
+    def delete(self, cluster_id: str):
+        """
+        Remove an smb cluster
+
+        :param cluster_id: Cluster identifier
+        :return: None.
+        """
+        resource = {}
+        resource['resource_type'] = self._resource
+        resource['cluster_id'] = cluster_id
+        resource['intent'] = Intent.REMOVED
+        return mgr.remote('smb', 'apply_resources', json.dumps(resource)).one().to_simplified()
+
 
 @APIRouter('/smb/share', Scope.SMB)
 @APIDoc("SMB Share Management API", "SMB")
@@ -184,3 +202,18 @@ class SMBShare(RESTController):
         resource['share_id'] = share_id
         resource['intent'] = Intent.REMOVED
         return mgr.remote('smb', 'apply_resources', json.dumps(resource)).one().to_simplified()
+
+
+@UIRouter('/smb')
+class SMBStatus(RESTController):
+    @EndpointDoc("Get SMB feature status")
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        status = {'available': False, 'message': None}
+        try:
+            mgr.remote('smb', 'show', ['ceph.smb.cluster'])
+            status['available'] = True
+        except (ImportError, RuntimeError):
+            status['message'] = 'SMB module is not enabled'
+        return status
