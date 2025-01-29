@@ -1122,3 +1122,13 @@
    fun:_ZN8neorados5RADOS12lookup_pool_ENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEN5boost4asio22any_completion_handlerIJFvNS7_6system10error_codeElEEEE
    ...
 }
+{
+   Spurious leak in start_tick
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:_Znam
+   fun:_ZN8Objecter10start_tickEv
+   ...
+   fun:_ZN8neorados5RADOS14make_with_cct_EPN4ceph6common11CephContextERN5boost4asio10io_contextENS6_22any_completion_handlerIJFvNS5_6system10error_codeES0_EEEE
+   ...
+}
