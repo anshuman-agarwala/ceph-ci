@@ -1115,3 +1115,10 @@
    fun:_dl_init
    ...
 }
+{
+   co_compose bug fixed in Boost 1.86
+   Memcheck:Free
+   fun:_ZdaPvm
+   fun:_ZN8neorados5RADOS12lookup_pool_ENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEN5boost4asio22any_completion_handlerIJFvNS7_6system10error_codeElEEEE
+   ...
+}
