@@ -1197,6 +1197,39 @@ int PeerReplayer::pre_sync_check_and_open_handles(
   return 0;
 }
 
+// Determines if the source is the local (previous) snapshot or the remote dir_root
+int PeerReplayer::validate_source_snap(const std::string &dir_root,
+                                       boost::optional<Snapshot> prev,
+                                       FHandles *fh) {
+  MountRef mnt = m_local_mount;
+  auto prev_snap_path = snapshot_path(m_cct, dir_root, (*prev).first);
+  auto fd = open_dir(mnt, prev_snap_path, (*prev).second);
+
+  if (fd < 0) {
+    if (!prev || fd != -ENOENT) {
+      ceph_close(m_local_mount, fh->c_fd);
+      return fd;
+    }
+
+    // ENOENT of previous snap, switching to remote dir_root
+    dout(5) << ": previous snapshot=" << *prev << " missing" << dendl;
+    mnt = m_remote_mount;
+    fd = open_dir(mnt, dir_root, boost::none);
+    if (fd < 0) {
+      ceph_close(m_local_mount, fh->c_fd);
+      return fd;
+    }
+  }
+
+  // "previous" snapshot or dir_root file descriptor
+  fh->p_fd = fd;
+  fh->p_mnt = mnt;
+
+  dout(5) << ": using " << ((fh->p_mnt == m_local_mount) ? "local (previous) snapshot" : "remote dir_root")
+          << " for incremental transfer" << dendl;
+  return 0;
+}
+
 // sync the mode of the remote dir_root with that of the local dir_root
 int PeerReplayer::sync_perms(const std::string& path) {
   int r = 0;
@@ -1449,6 +1482,11 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
       break;
     }
 
+    r = validate_source_snap(dir_root, prev, &fh);
+    if (r < 0) {
+      dout(5) << ": cannot proceed with sync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
     dout(20) << ": " << sync_queue.size() << " entries in queue" << dendl;
     const auto &queue_entry = sync_queue.front();
     epath = queue_entry.epath;
@@ -1476,7 +1514,7 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
         continue;
       // create path for the newly found entry
       npath = entry_path(epath, nname);
-      r = ceph_statxat(sd_info.cmount, fh.c_fd, npath.c_str(), &cstx,
+      r = ceph_statxat(m_local_mount, fh.c_fd, npath.c_str(), &cstx,
                        CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                        CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
                        AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
