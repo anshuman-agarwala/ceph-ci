@@ -400,7 +400,26 @@ else:
             w_mbytes_per_second: Optional[int] = None,
             gw_group: Optional[str] = None
         ):
-            if rbd_image_size:
+            resize = bool(rbd_image_size) 
+            chg_lb_group = bool(load_balancing_group)
+            set_qos = bool(rw_ios_per_second or rw_mbytes_per_second or r_mbytes_per_second or w_mbytes_per_second)            
+            opeartion_count = [resize, chg_lb_group, set_qos].count(True)
+            if opeartion_count < 1:
+                raise DashboardException(
+                    msg="no operation requested, aborting.",
+                    code='no_update_operations',
+                    http_status_code=400,
+                    component="nvmeof",
+                )
+            if opeartion_count > 1:
+                raise DashboardException(
+                    msg="More than 1 operation requested, aborting.",
+                    code='multiple_update_operations',
+                    http_status_code=400,
+                    component="nvmeof",
+                )
+            
+            if resize:
                 mib = 1024 * 1024
                 new_size_mib = int((rbd_image_size + mib - 1) / mib)
 
@@ -409,24 +428,17 @@ else:
                         subsystem_nqn=nqn, nsid=int(nsid), new_size=new_size_mib
                     )
                 )
-                if response.status != 0:
-                    return response
+                return response
 
-            if load_balancing_group:
+            if chg_lb_group:
                 response = NVMeoFClient().stub.namespace_change_load_balancing_group(
                     NVMeoFClient.pb2.namespace_change_load_balancing_group_req(
                         subsystem_nqn=nqn, nsid=int(nsid), anagrpid=load_balancing_group
                     )
                 )
-                if response.status != 0:
-                    return response
+                return response
 
-            if (
-                rw_ios_per_second
-                or rw_mbytes_per_second
-                or r_mbytes_per_second
-                or w_mbytes_per_second
-            ):
+            if set_qos:
                 response = NVMeoFClient().stub.namespace_set_qos_limits(
                     NVMeoFClient.pb2.namespace_set_qos_req(
                         subsystem_nqn=nqn,
@@ -437,8 +449,7 @@ else:
                         w_mbytes_per_second=w_mbytes_per_second,
                     )
                 )
-                if response.status != 0:
-                    return response
+                return response
 
             return response
 
