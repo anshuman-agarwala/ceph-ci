@@ -197,6 +197,11 @@ class HostAssignment(object):
             known_hosts = self.get_hostnames() + [h.hostname for h in self.draining_hosts]
             unknown_hosts = explicit_hostnames.difference(set(known_hosts))
             if unknown_hosts:
+                logger.debug(f'self.spec.placement.hosts: {self.spec.placement.hosts}')
+                logger.debug(f'explicit_hostnames: {explicit_hostnames}')
+                logger.debug(f'self.draining_hosts: {[h.hostname for h in self.draining_hosts]}')
+                logger.debug(f'known_hosts: {known_hosts}')
+                logger.debug(f'unknown_hosts: {unknown_hosts}')
                 raise OrchestratorValidationError(
                     f'Cannot place {self.spec.one_line_str()} on {", ".join(sorted(unknown_hosts))}: Unknown hosts')
 
