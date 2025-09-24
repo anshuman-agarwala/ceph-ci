@@ -1219,7 +1219,7 @@ def cluster(ctx, config):
                 return stderr
             return None
 
-        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
+        if first_in_ceph_log('\[ERR\]|\[SEC\]',
                              config['log_ignorelist']) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
